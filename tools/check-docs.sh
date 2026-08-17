@@ -21,7 +21,11 @@ say() { printf '  %-6s %s\n' "$1" "$2"; }
 bad() { say "BAD" "$1"; fail=1; }
 ok()  { say "ok" "$1"; }
 
-DOCS=(README.md MANUAL.md CLAUDE.md MISSION.md API.md)
+# LANDING.md is in here for a reason worth stating: it is the document read by people who have
+# never seen this software, so a claim that has gone stale there is more expensive than the same
+# claim in the manual, not less. It quotes a test count, names flags somebody is meant to type, and
+# links to the other five -- all of which this script already knows how to check.
+DOCS=(README.md MANUAL.md CLAUDE.md MISSION.md API.md LANDING.md)
 
 echo
 echo "  documents"

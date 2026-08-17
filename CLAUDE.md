@@ -30,8 +30,13 @@ further, take the simple one and say why in a comment.
   with a test that fails before and passes after, and say in the comment what the wrong version did.
 - **What has never been verified is listed under [Not verified](#not-verified) below**, because that
   is different from a defect and gets a different kind of attention.
-- This repository is **Hearth**. Edit `CLAUDE.md`, `README.md`, `MANUAL.md`, `API.md` and
-  `MISSION.md` here as things change. `API.md` is a *contract with somebody else's code*: changing
+- This repository is **Hearth**. Edit `CLAUDE.md`, `README.md`, `MANUAL.md`, `API.md`,
+  `LANDING.md` and
+  `MISSION.md` here as things change. `LANDING.md` is the source copy for the public site, written
+  for somebody who has never seen this software: it is checked by `just docs` like the rest, and a
+  feature described there in the present tense had better be one that exists, because the roadmap
+  in the present tense is the one mistake that would cost this project its audience.
+  `API.md` is a *contract with somebody else's code*: changing
   an endpoint, an error code or the bundle format means changing it in the same commit, because the
   reader is a tool that is already relying on it. `MANUAL.md` is the operator's guide: any new config key, admin page, or failure
   mode an operator can hit belongs in it, and it is where the troubleshooting answers live. See
