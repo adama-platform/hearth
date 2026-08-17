@@ -1,0 +1,90 @@
+{{<shell}}{{$content}}
+<p class="crumb"><a href="{{backUrl}}">&larr; Templates</a></p>
+<h1>{{heading}}</h1>
+<form class="editor" method="post" action="{{backUrl}}" data-template-editor>
+  <input type="hidden" name="csrf" value="{{csrf}}">
+  <input type="hidden" name="action" value="save">
+  <div class="row">
+    <div><label for="t-name">name</label><input id="t-name" type="text" name="name" value="{{form_name}}" placeholder="page" required{{#editing}} readonly{{/editing}}></div>
+  </div>
+
+  <h2>Fields this template needs</h2>
+  <p class="hint">Every field here becomes a box in the page editor, and its value is available to the template by name.</p>
+  <div class="fields" data-fields>
+    {{#fields}}
+    <div class="field" data-field>
+      <div class="row">
+        <div><label>name</label><input type="text" name="p_name_{{index}}" value="{{name}}"></div>
+        <div><label>type</label><select name="p_type_{{index}}">{{#types}}<option value="{{value}}"{{#selected}} selected{{/selected}}>{{label}}</option>{{/types}}</select></div>
+        <div><label>label</label><input type="text" name="p_label_{{index}}" value="{{label}}"></div>
+      </div>
+      <div class="row">
+        <div><label>help</label><input type="text" name="p_help_{{index}}" value="{{help}}"></div>
+        <div><label class="check"><input type="checkbox" name="p_required_{{index}}"{{#required}} checked{{/required}}> required</label></div>
+        <div class="drop"><button type="button" class="quiet" data-drop>remove</button></div>
+      </div>
+    </div>
+    {{/fields}}
+  </div>
+  <p><button type="button" class="quiet" data-add data-next="{{nextIndex}}" data-types="{{#fieldTypes}}{{value}}|{{/fieldTypes}}">Add a field</button></p>
+
+  <h2>A directory index</h2>
+  <p class="hint">{{#form_directory}}This template publishes one{{#form_directory_path}} at
+    <code>{{.}}</code>{{/form_directory_path}}.{{/form_directory}}{{^form_directory}}This template
+    does not publish one.{{/form_directory}} A directory is a second template with a second job
+    &mdash; a list with pagination rather than a document &mdash; so it has its own screen and its
+    own markup.</p>
+  {{#directoriesUrl}}<p class="hint"><a href="{{.}}">Set up the index &rarr;</a></p>{{/directoriesUrl}}
+  {{^editing}}<p class="hint">Save this first, and the index is one press away.</p>{{/editing}}
+
+  <div><label for="t-body">template</label><textarea id="t-body" name="body">{{form_body}}</textarea></div>
+  <button type="submit">Save</button>
+  <a href="{{backUrl}}" class="hint">cancel</a>
+</form>
+<script nonce="{{nonce}}">
+// Adding and removing field rows. The next free index and the list of types come from data
+// attributes rather than from interpolation, for the same reason as everywhere else in this admin:
+// a script block does not decode the entities mustache writes.
+(function () {
+  var form = document.querySelector('[data-template-editor]');
+  if (!form) { return; }
+  // the directory settings are meaningless with the box unticked, and a form that shows fields
+  // nothing will read is a form people fill in and then wonder about
+  var directory = form.querySelector('[data-directory]');
+  var settings = form.querySelector('[data-directory-settings]');
+  if (directory && settings) {
+    directory.addEventListener('change', function () { settings.hidden = !directory.checked; });
+  }
+  var slot = form.querySelector('[data-fields]');
+  var add = form.querySelector('[data-add]');
+  var next = parseInt(add.getAttribute('data-next'), 10) || 0;
+  var types = (add.getAttribute('data-types') || '').split('|').filter(function (t) { return t; });
+
+  slot.addEventListener('click', function (e) {
+    if (e.target && e.target.hasAttribute('data-drop')) {
+      var field = e.target.closest('[data-field]');
+      if (field) { field.remove(); }
+    }
+  });
+
+  add.addEventListener('click', function () {
+    var k = next++;
+    var options = types.map(function (t) { return '<option value="' + t + '">' + t + '</option>'; }).join('');
+    var box = document.createElement('div');
+    box.className = 'field';
+    box.setAttribute('data-field', '');
+    box.innerHTML =
+      '<div class="row">'
+      + '<div><label>name</label><input type="text" name="p_name_' + k + '" placeholder="headline"></div>'
+      + '<div><label>type</label><select name="p_type_' + k + '">' + options + '</select></div>'
+      + '<div><label>label</label><input type="text" name="p_label_' + k + '"></div>'
+      + '</div><div class="row">'
+      + '<div><label>help</label><input type="text" name="p_help_' + k + '"></div>'
+      + '<div><label class="check"><input type="checkbox" name="p_required_' + k + '"> required</label></div>'
+      + '<div class="drop"><button type="button" class="quiet" data-drop>remove</button></div>'
+      + '</div>';
+    slot.appendChild(box);
+  });
+})();
+</script>
+{{/content}}{{/shell}}

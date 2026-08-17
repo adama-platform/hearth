@@ -1,0 +1,30 @@
+{{<layout}}{{$body}}
+<h1>Connect {{client}}</h1>
+<p class="lead">{{who}} is asking to act on {{community}} as <strong>{{me}}</strong>.</p>
+
+<div class="consent">
+  <h2>What it will be able to do</h2>
+  <ul class="powers">
+    {{#powers}}
+      {{#granted}}<li class="yes">{{what}}</li>{{/granted}}
+      {{#denied}}<li class="no">{{what}}</li>{{/denied}}
+    {{/powers}}
+  </ul>
+  {{#readOnly}}<p class="note">This site is connected <strong>read only</strong>, so it can look but not change anything.</p>{{/readOnly}}
+  <p class="note">Everything it does is written to the AI log, under your name and its own. You can
+    disconnect it at any time from <a href="{{adminUrl}}/system/ai">the admin</a>.</p>
+  <p class="fine">It will be sent back to <code>{{redirectUri}}</code>.</p>
+</div>
+
+<form method="post" action="{{action}}" class="consent-form">
+  <input type="hidden" name="csrf" value="{{csrf}}">
+  <input type="hidden" name="client_id" value="{{clientId}}">
+  <input type="hidden" name="redirect_uri" value="{{redirectUri}}">
+  <input type="hidden" name="state" value="{{state}}">
+  <input type="hidden" name="code_challenge" value="{{challenge}}">
+  <input type="hidden" name="code_challenge_method" value="S256">
+  <input type="hidden" name="scope" value="{{scope}}">
+  <button type="submit" name="approve" value="1">Connect {{client}}</button>
+  <a href="{{selfUrl}}" class="cancel">No thanks</a>
+</form>
+{{/body}}{{/layout}}

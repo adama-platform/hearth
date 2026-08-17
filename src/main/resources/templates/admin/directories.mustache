@@ -1,0 +1,24 @@
+{{<shell}}{{$content}}
+<h1>Directories</h1>
+<p class="hint">A template that publishes a <strong>directory index</strong> gets an address of its
+  own, and every published page using that template becomes an entry in a paginated listing there.
+  That is what turns the content table into a blog without anybody building one.</p>
+<p class="hint"><strong>A directory is two templates.</strong> The page template renders one thing;
+  the index renders a list with pagination. Asking one file to be both means opening it with a
+  branch on <code>{{lbrace}}#directory{{rbrace}}</code>, which is a shape somebody writes once and
+  nobody can edit six months later &mdash; so the index has its own markup, seeded with a working
+  listing the moment the box is ticked.</p>
+<div class="scroller"><table>
+  <thead><tr><th>template</th><th>publishes at</th><th>per page</th><th>order</th><th>entries</th><th></th></tr></thead>
+  <tbody>{{#directories}}<tr>
+    <td><a href="{{editUrl}}">{{name}}</a>{{#ownIndex}} <span class="pill blue">its own index</span>{{/ownIndex}}</td>
+    <td class="mono">{{#publishes}}{{path}}{{/publishes}}{{^publishes}}<span class="dim">no</span>{{/publishes}}</td>
+    <td class="dim">{{#publishes}}{{size}}{{/publishes}}</td>
+    <td class="dim">{{#publishes}}{{order}}{{/publishes}}</td>
+    <td class="dim">{{entries}}</td>
+    <td class="actions"><a href="{{editUrl}}">edit</a></td>
+  </tr>{{/directories}}</tbody>
+</table></div>
+{{^anyDirectories}}<p class="hint">No templates yet. <a href="{{templatesUrl}}">Write one</a>
+  first.</p>{{/anyDirectories}}
+{{/content}}{{/shell}}

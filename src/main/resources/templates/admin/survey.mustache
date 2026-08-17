@@ -1,0 +1,15 @@
+{{<shell}}{{$content}}
+<h1>Survey</h1>
+<p class="hint">Questions are how a community says what it cares about. Every member sees the published ones on their own page, and the count of what is left drives the bubble.</p>
+<form class="tools" method="get" action="{{action}}" data-filters>
+  <div class="search">{{{searchIcon}}}
+    <input type="search" name="q" value="{{q}}" placeholder="Search questions" aria-label="search questions">
+  </div>
+  <div class="chips" role="group" aria-label="kind">
+    {{#kinds}}<label class="chip"><input type="radio" name="kind" value="{{value}}"{{#selected}} checked{{/selected}}>{{label}}</label>{{/kinds}}
+  </div>
+  <noscript><button type="submit" class="quiet">Filter</button></noscript>
+</form>
+<div class="doing"><a class="btn" href="{{newUrl}}">{{{plusIcon}}}Ask a question</a>{{#anyRetired}}<a class="btn secondary" href="{{retiredUrl}}">{{retiredCount}} retired, waiting for cleanup</a>{{/anyRetired}}</div>
+<div class="panel" data-panel="{{panelUrl}}">{{{panel}}}</div>
+{{/content}}{{/shell}}

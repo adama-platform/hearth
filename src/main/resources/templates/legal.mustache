@@ -1,0 +1,37 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="icon" href="{{favicon}}"><title>{{title}}</title><style>
+{{{palette}}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.65 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+header{border-bottom:1px solid var(--line)}
+header .bar{max-width:46rem;margin:0 auto;padding:.9rem 1.5rem;display:flex;gap:1.25rem;align-items:baseline;flex-wrap:wrap}
+header .brand{font-weight:600;color:var(--fg);text-decoration:none;margin-right:auto}
+header a{color:var(--dim);text-decoration:none;font-size:.9375rem}
+header a:hover,header a.on{color:var(--fg)}
+main{max-width:46rem;margin:0 auto;padding:2.5rem 1.5rem 4rem}
+h1{font-size:1.8rem;font-weight:600;margin:0 0 1.5rem;letter-spacing:-.01em}
+h2{font-size:1.15rem;font-weight:600;margin:2.25rem 0 .6rem}
+h3{font-size:1rem;font-weight:600;margin:1.5rem 0 .4rem}
+p{margin:0 0 1rem}
+ul,ol{margin:0 0 1rem;padding-left:1.4rem}
+li{margin:.25rem 0}
+a{color:var(--accent)}
+strong{font-weight:600}
+hr{border:0;border-top:1px solid var(--line);margin:2rem 0}
+blockquote{margin:1rem 0;padding:.1rem 0 .1rem 1rem;border-left:3px solid var(--line);color:var(--dim)}
+code{font:.875rem ui-monospace,SFMono-Regular,Menlo,monospace}
+table{width:100%;border-collapse:collapse;margin:0 0 1.25rem;font-size:.9375rem;display:block;overflow-x:auto}
+th{text-align:left;font-size:.75rem;text-transform:uppercase;letter-spacing:.04em;color:var(--dim);font-weight:500;padding:.4rem .6rem .4rem 0;border-bottom:1px solid var(--line)}
+td{padding:.5rem .6rem .5rem 0;border-bottom:1px solid var(--line);vertical-align:top}
+footer{max-width:46rem;margin:0 auto;padding:1.5rem;border-top:1px solid var(--line);color:var(--dim);font-size:.8125rem}
+footer a{color:var(--dim)}
+</style></head><body>
+<header><div class="bar">
+<a class="brand" href="{{home}}">{{community}}</a>
+{{#docs}}<a href="{{href}}"{{#on}} class="on"{{/on}}>{{title}}</a>{{/docs}}
+</div></header>
+<main>
+<h1>{{heading}}</h1>
+{{{bodyHtml}}}
+</main>
+<footer>{{community}} &middot; <a href="{{home}}">back to the community</a></footer>
+</body></html>

@@ -1,0 +1,387 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="icon" href="{{favicon}}"><title>{{title}}</title><script src="/~theme.js"></script><style>
+{{{palette}}}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;background:var(--bg);color:var(--fg);font:15px/1.55 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+a{color:var(--accent)}
+.top{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:1rem;padding:.7rem 1.25rem;background:var(--panel);border-bottom:1px solid var(--line)}
+.top .brand{font-weight:600}
+.top .tag{font-size:.6875rem;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);border:1px solid var(--line);border-radius:3px;padding:0 .35rem}
+.top .spacer{margin-left:auto}
+.top .who{color:var(--dim);font-size:.875rem}
+.top form{display:inline;margin:0}
+.top button{margin:0;padding:.3rem .7rem;font:inherit;font-size:.8125rem;color:var(--fg);background:transparent;border:1px solid var(--line);border-radius:5px;cursor:pointer}
+.top button:hover{border-color:var(--fg)}
+.wrap{display:flex;align-items:flex-start;min-height:calc(100vh - 3rem)}
+/* One nav, two shapes.
+   On a wide screen it is a column down the left, which is what it always was. On a phone the same
+   list was a wrapped strip of thirty links above every page -- a screenful of chips to get past
+   before reading anything, and impossible to hit accurately. It is now a menu, and the same one:
+   the markup does not change, only whether the <details> around it is open. */
+.sidemenu{flex:0 0 13rem;position:sticky;top:3rem}
+.sidemenu>summary{display:none}
+.side{padding:1rem .75rem;border-right:1px solid var(--line)}
+.side a{display:flex;align-items:center;gap:.5rem;padding:.4rem .6rem;border-radius:5px;color:var(--dim);text-decoration:none;font-size:.9375rem}
+.icon{width:1.05rem;height:1.05rem;flex:0 0 auto}
+.side a:hover{background:color-mix(in srgb,var(--fg) 6%,transparent);color:var(--fg)}
+.side a.on{background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--fg);font-weight:600}
+.side .group{margin:1rem 0 .3rem;padding:0 .6rem;font-size:.6875rem;text-transform:uppercase;letter-spacing:.06em;color:var(--dim)}
+.side a.kid{padding-left:2.1rem;font-size:.875rem}
+.side a.kid .icon{width:.9rem;height:.9rem}
+.bell{position:relative;display:inline-flex;align-items:center;gap:.25rem;text-decoration:none}
+.bell .glyph{font-size:.95rem;line-height:1;filter:grayscale(1);opacity:.5}
+.bell.lit .glyph{filter:none;opacity:1}
+.bell .count{display:none;background:var(--accent);color:var(--bg);border-radius:999px;font-size:.6rem;font-weight:700;padding:0 .28rem;min-width:.95rem;text-align:center;line-height:1.3}
+.bell.lit .count{display:inline-block}
+.pill{display:inline-block;font-size:.6875rem;font-weight:600;text-transform:uppercase;letter-spacing:.04em;border-radius:3px;padding:.05rem .35rem;border:1px solid}
+.pill.blue{color:var(--accent);border-color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent)}
+table.palette td{vertical-align:middle}
+table.palette input[type=color]{width:2.6rem;height:1.9rem;padding:0;border:1px solid var(--line);border-radius:5px;background:transparent;cursor:pointer;vertical-align:middle}
+table.palette .hex{font:.75rem ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--dim);margin-left:.45rem}
+
+.pill.red{color:var(--bad);border-color:var(--bad);background:color-mix(in srgb,var(--bad) 12%,transparent)}
+.pill.purple{color:var(--purple);border-color:var(--purple);background:color-mix(in srgb,var(--purple) 14%,transparent)}
+.pill.warn{color:var(--warn);border-color:var(--warn);background:color-mix(in srgb,var(--warn) 14%,transparent)}
+.pill.good{color:var(--good);border-color:var(--good)}
+.pill.dim{color:var(--dim);border-color:var(--line)}
+.panel[data-busy]{opacity:.55;transition:opacity .12s}
+.tools .live{margin-left:auto}
+.fields{margin:0 0 1rem}
+.field{background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:.7rem .75rem;margin:0 0 .85rem}
+.field .row{margin-bottom:.4rem}
+.field .drop{text-align:right}
+.hide{display:none}
+.crumb{font-size:.8125rem;color:var(--dim);margin:0 0 .5rem}
+.crumb a{color:var(--dim)}
+.count{color:var(--dim);font-size:.8125rem}
+.history td{vertical-align:middle}
+.warnkind{border-left:3px solid var(--warn);padding-left:.7rem}
+.explain{margin:.6rem 0 1rem;border:1px solid var(--line);border-radius:8px;padding:.5rem .9rem;background:color-mix(in srgb,var(--accent) 4%,transparent)}
+.explain summary{cursor:pointer;font-size:.85rem;font-weight:500}
+.explain p,.explain ul{font-size:.85rem;line-height:1.5}
+.explain li{margin:.25rem 0}
+.suggestbox{margin:1rem 0;padding:.8rem 1rem;border:1px dashed var(--line);border-radius:8px}
+.editorbar{display:flex;justify-content:flex-end;margin:.2rem 0}
+.richeditor{border:1px solid var(--line);border-radius:8px;min-height:18rem;background:var(--panel)}
+.richeditor .milkdown{padding:.5rem .9rem}
+.perms{border:1px solid var(--line);border-radius:8px;padding:.7rem .9rem;margin:.6rem 0}
+.perms legend{font-size:.72rem;text-transform:uppercase;letter-spacing:.05em;color:var(--dim);padding:0 .35rem}
+.perms .check{display:block;margin:.25rem 0;font-weight:400}
+.history .actions{white-space:nowrap;display:flex;gap:.35rem;align-items:center;justify-content:flex-end}
+.diff{width:100%;border-collapse:collapse;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.75rem;margin:.6rem 0}
+.diff td{padding:.1rem .45rem;vertical-align:top;border:0}
+.diff .num{width:2.5rem;text-align:right;color:var(--dim);user-select:none}
+.diff .sign{width:1rem;text-align:center;user-select:none}
+.diff .line{white-space:pre-wrap;word-break:break-word}
+.diff tr.added{background:color-mix(in srgb,var(--good) 14%,transparent)}
+.diff tr.removed{background:color-mix(in srgb,var(--bad) 14%,transparent)}
+.diff tr.same{color:var(--dim)}
+.preview{width:min(56rem,92vw);max-height:88vh;padding:0;border:1px solid var(--line);border-radius:9px;background:var(--panel);color:var(--fg)}
+.preview::backdrop{background:rgba(0,0,0,.45)}
+.preview-head{position:sticky;top:0;display:flex;align-items:center;gap:1rem;padding:.7rem 1rem;border-bottom:1px solid var(--line);background:var(--panel)}
+.preview-head strong{font-size:.95rem}
+.preview-head button{margin-left:auto}
+.preview-body{padding:1rem;overflow:auto;max-height:calc(88vh - 3.2rem)}
+.preview-body h3{font-size:.6875rem;text-transform:uppercase;letter-spacing:.05em;color:var(--dim);margin:1.1rem 0 .4rem;font-weight:500}
+.preview-frame{width:100%;height:22rem;border:1px solid var(--line);border-radius:6px;background:#fff}
+.source{margin:0;padding:.6rem .75rem;background:var(--bg);border:1px solid var(--line);border-radius:6px;overflow-x:auto;white-space:pre-wrap;font:.8125rem/1.5 ui-monospace,SFMono-Regular,Menlo,monospace}
+.facets{display:grid;grid-template-columns:repeat(auto-fit,minmax(11rem,1fr));gap:.5rem;margin:0}
+.facets dt{font-size:.6875rem;text-transform:uppercase;letter-spacing:.05em;color:var(--dim)}
+.facets dd{margin:0;font-size:.875rem}
+.action{border:1px solid var(--line);border-radius:6px;padding:.45rem .65rem;margin:0 0 .4rem;background:var(--panel)}
+.action summary{cursor:pointer;display:flex;flex-wrap:wrap;gap:.5rem;align-items:baseline;font-size:.875rem}
+.action summary::-webkit-details-marker{display:none}
+.action .tool{font-weight:600}
+.action .who{margin-left:auto;font-size:.8125rem}
+.action.refused{border-left:3px solid var(--warn)}
+.action.failed{border-left:3px solid var(--bad)}
+.action h3{font-size:.6875rem;text-transform:uppercase;letter-spacing:.05em;color:var(--dim);margin:.7rem 0 .25rem;font-weight:500}
+.action pre{margin:0;padding:.55rem .7rem;background:var(--bg);border:1px solid var(--line);border-radius:5px;overflow-x:auto;font:.8125rem/1.45 ui-monospace,SFMono-Regular,Menlo,monospace}
+.main{flex:1;min-width:0;padding:1.5rem 1.75rem 4rem}
+h1{font-size:1.25rem;font-weight:600;margin:0 0 1.25rem}
+h2{font-size:.95rem;font-weight:600;margin:1.75rem 0 .6rem}
+p{margin:0 0 .7rem}
+.hint,.dim{color:var(--dim)}
+code{font:.8125rem ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-all}
+.btn{display:inline-flex;align-items:center;gap:.4rem;padding:.5rem .9rem;font:inherit;font-size:.9rem;font-weight:600;color:var(--bg);background:var(--fg);border:0;border-radius:8px;text-decoration:none;cursor:pointer;line-height:1.2}
+.btn:hover{opacity:.88}
+.btn .icon{width:.95rem;height:.95rem}
+.btn.secondary{color:var(--fg);background:transparent;border:1px solid var(--line);font-weight:500}
+.btn.secondary:hover{border-color:var(--accent);color:var(--accent);opacity:1}
+.doing{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin:0 0 1.1rem}
+.preview{border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:1rem 1.2rem;max-width:34rem;margin:0 0 .6rem}
+.preview .from{font-weight:600;font-size:1.05rem}
+.preview .tagline{color:var(--dim);font-size:.85rem;margin:.1rem 0 .6rem}
+.preview .lead{margin:.6rem 0}
+.preview .fakebtn{display:inline-block;background:var(--accent);color:var(--panel);border-radius:8px;padding:.5rem 1rem;font-weight:600;font-size:.9rem}
+.suggestion{border:1px solid var(--line);border-radius:10px;background:var(--panel);padding:.9rem 1.1rem;margin:0 0 .8rem}
+.suggestion h3{margin:0 0 .2rem;font-size:1.02rem}
+.suggestion .said{margin:.5rem 0;white-space:pre-wrap}
+.suggestion .decline{margin:0}
+.suggestion .decline summary{cursor:pointer;color:var(--dim);font-size:.85rem;padding:.5rem .4rem}
+.rules{list-style:none;counter-reset:rule;margin:.5rem 0 1.5rem;padding:0}
+.rules li{counter-increment:rule;position:relative;padding:0 0 .2rem 2.2rem;margin:0 0 1.1rem}
+.rules li::before{content:counter(rule);position:absolute;left:0;top:.1rem;width:1.6rem;height:1.6rem;border-radius:50%;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:.75rem;font-weight:700;color:var(--dim)}
+.rules h3{margin:0 0 .25rem;font-size:1rem}
+.rules p{margin:0 0 .4rem}
+.here{margin:0 0 1.5rem}
+.whoshere{list-style:none;margin:.5rem 0 .6rem;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(15rem,1fr));gap:.3rem}
+.whoshere a{display:flex;align-items:baseline;gap:.5rem;padding:.4rem .6rem;border:1px solid var(--line);border-radius:8px;text-decoration:none;color:var(--fg);background:var(--panel)}
+.whoshere a:hover{border-color:var(--accent)}
+.whoshere .who{font-weight:600}
+.whoshere .addr{color:var(--dim);font-size:.78rem;margin-left:auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dot{width:.5rem;height:.5rem;border-radius:50%;background:var(--line);flex:0 0 auto}
+.dot.on{background:var(--good);box-shadow:0 0 0 2px color-mix(in srgb,var(--good) 25%,transparent)}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(8.5rem,1fr));gap:.75rem;margin:0 0 .5rem}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:.7rem .85rem}
+.card .n{font-size:1.5rem;font-weight:600;line-height:1.2}
+.card .l{font-size:.75rem;text-transform:uppercase;letter-spacing:.04em;color:var(--dim)}
+table{width:100%;border-collapse:collapse;font-size:.875rem}
+th{text-align:left;font-size:.6875rem;text-transform:uppercase;letter-spacing:.05em;color:var(--dim);font-weight:500;padding:.3rem .5rem .3rem 0;border-bottom:1px solid var(--line)}
+td{padding:.35rem .5rem .35rem 0;border-bottom:1px solid var(--line);vertical-align:top}
+td.dim{color:var(--dim)}
+td.actions{text-align:right;white-space:nowrap}
+td.num{text-align:right;font-variant-numeric:tabular-nums}
+tr.err td{color:var(--bad)}
+.mono{font:.8125rem ui-monospace,SFMono-Regular,Menlo,monospace}
+.graph{display:flex;align-items:flex-end;gap:1px;height:9rem;padding:.5rem;background:var(--panel);border:1px solid var(--line);border-radius:7px;overflow:hidden}
+.graph .col{position:relative;flex:1;min-width:2px;height:100%;display:flex;align-items:flex-end;gap:1px}
+.graph .col b{flex:1;border-radius:1px 1px 0 0;min-height:1px}
+.graph .cpu,.key.cpu{background:var(--accent)}
+.graph .host,.key.host{background:var(--purple)}
+.graph .heap,.key.heap{background:var(--dim)}
+.key{display:inline-block;width:.7rem;height:.7rem;border-radius:2px;vertical-align:middle}
+.filegrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(15rem,1fr));gap:.75rem;margin:0 0 1rem}
+.file .preview{display:flex;align-items:center;justify-content:center;min-height:7rem;margin:0 0 .5rem;background:color-mix(in srgb,var(--fg) 4%,transparent);border-radius:5px;overflow:hidden}
+.file .preview img,.file .preview video{max-width:100%;max-height:11rem;object-fit:contain}
+.file .preview audio{width:100%}
+.file .meta{margin:0 0 .35rem;font-size:.85rem;word-break:break-word}
+.file .hint{word-break:break-all}
+dialog.picker{width:min(52rem,92vw);max-height:80vh;overflow:auto;background:var(--bg);color:var(--fg);border:1px solid var(--line);border-radius:9px;padding:1rem}
+dialog.picker::backdrop{background:rgba(0,0,0,.45)}
+.bar{position:relative;background:color-mix(in srgb,var(--accent) 16%,transparent);height:1.1rem;border-radius:3px}
+.bars td{border-bottom:0;padding:.15rem .5rem .15rem 0}
+form{margin:0}
+.editor{background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:1.15rem;margin:0 0 1.5rem}
+.editor>div{margin:0 0 .85rem}
+.editor>div:last-of-type{margin-bottom:0}
+.editor input[type=email],.editor input[type=text],.editor input[type=number],.editor input[type=date],.editor input[type=time]{padding:.5rem .6rem}
+.editor .doing{margin-top:1.1rem}
+.row{display:flex;gap:.75rem;flex-wrap:wrap;margin:0 0 .7rem}
+.row>div{flex:1;min-width:11rem}
+label{display:block;font-size:.6875rem;text-transform:uppercase;letter-spacing:.05em;color:var(--dim);margin:0 0 .25rem}
+input[type=text],input[type=search],select,textarea{width:100%;padding:.4rem .55rem;font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:5px}
+textarea{min-height:18rem;font:.8125rem/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;resize:vertical}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--accent);outline-offset:1px}
+button{padding:.4rem .85rem;font:inherit;font-size:.875rem;font-weight:600;color:var(--bg);background:var(--fg);border:0;border-radius:5px;cursor:pointer}
+button.quiet{color:var(--fg);background:transparent;border:1px solid var(--line);font-weight:400}
+button:hover{opacity:.88}
+.inline{display:inline}
+.inline button{margin-left:.3rem;padding:.15rem .5rem;font-size:.75rem;font-weight:400;color:var(--fg);background:transparent;border:1px solid var(--line);border-radius:4px}
+.check{display:flex;align-items:center;gap:.4rem;font-size:.875rem;color:var(--fg)}
+.check input{width:auto}
+.tag{font-size:.6875rem;text-transform:uppercase;letter-spacing:.04em;color:var(--dim);border:1px solid var(--line);border-radius:3px;padding:0 .3rem}
+.done{margin:0 0 1rem;padding:.55rem .75rem;border-left:3px solid var(--good);background:color-mix(in srgb,var(--good) 10%,transparent)}
+.problem{margin:0 0 1rem;padding:.55rem .75rem;border-left:3px solid var(--bad);background:color-mix(in srgb,var(--bad) 10%,transparent)}
+.tools{display:flex;gap:.6rem .75rem;align-items:center;margin:0 0 1rem;flex-wrap:wrap}
+.tools .search{position:relative;flex:1 1 18rem;min-width:12rem;max-width:34rem}
+.tools .search input[type=search]{width:100%;padding:.55rem .7rem .55rem 2.1rem;font:inherit;font-size:.95rem;color:var(--fg);background:var(--panel);border:1px solid var(--line);border-radius:9px;-webkit-appearance:none;appearance:none}
+.tools .search input[type=search]::-webkit-search-cancel-button{cursor:pointer}
+.tools .search input:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent)}
+.tools .search .icon{position:absolute;left:.65rem;top:50%;transform:translateY(-50%);width:1rem;height:1rem;color:var(--dim);pointer-events:none}
+.chips{display:flex;gap:.25rem;flex-wrap:wrap;background:color-mix(in srgb,var(--fg) 5%,transparent);border-radius:9px;padding:.15rem}
+.chips .chip{display:inline-flex;align-items:center;margin:0;padding:.34rem .7rem;border-radius:7px;font-size:.85rem;color:var(--dim);cursor:pointer;white-space:nowrap;user-select:none;text-transform:none;letter-spacing:0}
+.chips .chip:hover{color:var(--fg)}
+.chips .chip input{position:absolute;opacity:0;width:1px;height:1px}
+.chips .chip:has(input:checked){background:var(--panel);color:var(--fg);font-weight:600;box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.chips .chip:has(input:focus-visible){outline:2px solid var(--accent);outline-offset:1px}
+.tools .count{color:var(--dim);font-size:.8rem;margin-left:auto}
+.review{background:var(--panel);border:1px solid var(--line);border-radius:7px;padding:1rem 1.15rem;margin:0 0 1.5rem}
+.review h2{margin-top:0}
+.review .meta{color:var(--dim);font-size:.875rem;margin:0 0 .75rem}
+.review .qa{margin:0 0 .6rem;padding-left:.7rem;border-left:2px solid var(--line)}
+.review .qa .q{color:var(--dim);font-size:.8125rem}
+.review .empty{color:var(--dim);font-style:italic}
+.scroll{max-height:32rem;overflow:auto;border:1px solid var(--line);border-radius:7px}
+.scroll table{font-size:.8125rem}
+.scroll th{position:sticky;top:0;background:var(--panel);padding:.4rem .5rem}
+.scroll td{padding:.25rem .5rem}
+@media (max-width:48rem){
+.wrap{flex-direction:column}
+.sidemenu{flex:none;width:100%;position:static;border-bottom:1px solid var(--line);background:var(--panel)}
+.sidemenu>summary{display:flex;align-items:center;gap:.55rem;min-height:44px;padding:.5rem 1.25rem;cursor:pointer;list-style:none;font-weight:600;user-select:none}
+.sidemenu>summary::-webkit-details-marker{display:none}
+.sidemenu>summary .bars{display:inline-flex;flex-direction:column;gap:3px;width:1.05rem}
+.sidemenu>summary .bars i{display:block;height:2px;border-radius:2px;background:currentColor}
+.sidemenu>summary .here{color:var(--dim);font-weight:400;font-size:.875rem;margin-left:auto}
+.side{border-right:0;padding:.35rem .75rem 1rem}
+.side a{min-height:44px}
+.main{padding:1rem 1.1rem 3rem}
+.top{gap:.6rem;padding:.6rem .9rem;flex-wrap:wrap}
+}
+/* the travel chart on the event form: counts, and nothing that could name anybody */
+.travel{margin:.9rem 0 0;padding:.8rem .9rem;border:1px solid var(--line);border-radius:7px;background:var(--bg)}
+.travel h3{margin:0 0 .5rem;font-size:.95rem}
+.travel .bars th{width:8rem;font-weight:400;color:var(--dim);text-transform:none;letter-spacing:0}
+.travel .bars .w{width:auto}
+.travel .bars .n{width:3rem;text-align:right;font-variant-numeric:tabular-nums}
+.bars .w{min-width:6rem}
+.bars .bar{display:block;min-width:1px}
+.themer{background:none;border:0;margin:0;padding:.4rem;color:var(--dim);cursor:pointer;display:inline-flex;align-items:center;border-radius:8px;min-height:36px}
+.themer:hover{color:var(--fg)}
+.themer .moon{display:none}
+:root[data-theme="dark"] .themer .moon{display:inline}
+:root[data-theme="dark"] .themer .sun{display:none}
+</style></head><body>
+<header class="top">
+  <span class="brand">{{community}}</span><span class="tag">admin</span>
+  <span class="spacer"></span>
+  <span class="who">{{me}}</span>
+  <a href="{{selfUrl}}" class="who">your page</a>
+  {{#live}}<a href="{{bellUrl}}" class="bell" data-bell data-count="0" aria-label="nothing new"><span class="glyph" aria-hidden="true">&#128276;</span><span class="count" data-bell-count>0</span></a>{{/live}}
+  <a href="{{siteUrl}}" class="who">view site</a>
+  <button type="button" class="themer" data-theme-toggle aria-pressed="false" aria-label="light or dark" title="Switch to dark"><span class="sun">{{{sunIcon}}}</span><span class="moon">{{{moonIcon}}}</span></button>
+  <form method="post" action="{{logoutUrl}}"><input type="hidden" name="csrf" value="{{csrf}}"><button type="submit">Sign out</button></form>
+</header>
+<div class="wrap">
+  {{! open in the markup, closed by the script when the screen is narrow. That way a phone with no
+      JavaScript gets the full list expanded -- exactly what it had before -- rather than a menu
+      button that does nothing, and a wide screen never has a collapsed sidebar to notice. }}
+  <details class="sidemenu" data-sidemenu open>
+    <summary aria-label="sections"><span class="bars" aria-hidden="true"><i></i><i></i><i></i></span><span>Menu</span><span class="here">{{sectionLabel}}</span></summary>
+    <nav class="side">
+      <div class="group">{{domain}}</div>
+      {{#sidebar}}<a href="{{href}}" class="{{#active}}on{{/active}}{{#child}} kid{{/child}}">{{{icon}}}<span>{{label}}</span></a>{{/sidebar}}
+    </nav>
+  </details>
+  <main class="main">
+    {{#flash}}{{#good}}<p class="done">{{text}}</p>{{/good}}{{#bad}}<p class="problem">{{text}}</p>{{/bad}}{{/flash}}
+    {{$content}}{{/content}}
+  </main>
+</div>
+<script src="/~menu.js" defer></script>
+<script nonce="{{nonce}}">
+// One behaviour, used by every section that has a panel: swap the panel's HTML in place.
+//
+// The panel's URL lives in a data attribute rather than interpolated into this script. Mustache
+// escapes for HTML, and HTML entities are NOT decoded inside a script block -- so an interpolated
+// "/admin/events?fragment=1" arrived here as "?fragment&#61;1", the flag never parsed, and the whole
+// page rendered inside the panel. An attribute is decoded by the parser on the way in, so it
+// survives. Nothing below reads a template value.
+(function () {
+  var panel = document.querySelector('[data-panel]');
+  if (!panel) { return; }
+  var base = panel.getAttribute('data-panel');
+  var form = document.querySelector('[data-filters]');
+  var live = document.querySelector('[data-live]');
+  var timer = null, ticker = null;
+
+  function query() {
+    if (!form) { return ''; }
+    var parts = [];
+    Array.prototype.forEach.call(form.elements, function (el) {
+      if (!el.name) { return; }
+      if (el.type === 'checkbox' && !el.checked) { return; }
+      var value = el.type === 'checkbox' ? '1' : el.value;
+      if (value === '') { return; }
+      parts.push(encodeURIComponent(el.name) + '=' + encodeURIComponent(value));
+    });
+    return parts.length ? '?' + parts.join('&') : '';
+  }
+
+  function refresh() {
+    var url = base + query();
+    panel.setAttribute('data-busy', '1');
+    fetch(url, {headers: {'X-Panel': '1'}, credentials: 'same-origin'})
+      .then(function (r) { return r.ok ? r.text() : null; })
+      .then(function (html) {
+        if (html !== null) { panel.innerHTML = html; }
+        panel.removeAttribute('data-busy');
+        // the address bar follows the panel, so a filtered view is a link somebody can send
+        if (form && window.history && window.history.replaceState) {
+          window.history.replaceState(null, '', location.pathname + query());
+        }
+      })
+      .catch(function () { panel.removeAttribute('data-busy'); });
+  }
+
+  if (form) {
+    form.addEventListener('submit', function (e) { e.preventDefault(); refresh(); });
+    form.addEventListener('input', function () {
+      clearTimeout(timer);
+      timer = setTimeout(refresh, 200);
+    });
+    form.addEventListener('change', refresh);
+  }
+  if (live) {
+    live.addEventListener('click', function () {
+      if (ticker) {
+        clearInterval(ticker);
+        ticker = null;
+        live.textContent = live.getAttribute('data-live');
+      } else {
+        ticker = setInterval(refresh, 2000);
+        live.textContent = live.getAttribute('data-live-on');
+        refresh();
+      }
+    });
+  }
+})();
+
+// Anything with data-modal opens the dialog it names, and anything with data-close shuts it.
+// One line of behaviour, no template values read -- see the note above.
+(function () {
+  document.addEventListener('click', function (event) {
+    var opener = event.target.closest('[data-modal]');
+    if (opener) {
+      var dialog = document.getElementById(opener.getAttribute('data-modal'));
+      if (dialog && dialog.showModal) { dialog.showModal(); }
+      return;
+    }
+    var closer = event.target.closest('dialog [data-close]');
+    if (closer) { closer.closest('dialog').close(); }
+  });
+})();
+
+// The file picker on the page editor.
+//
+// Everything it needs is on the button: the panel to fetch and the textarea to write into. Nothing
+// here reads a template value -- see the note above, and invariant 22.
+(function () {
+  var opener = document.querySelector('[data-pick]');
+  if (!opener || !window.HTMLDialogElement) { return; }
+  var into = document.getElementById(opener.getAttribute('data-pick-into'));
+  if (!into) { return; }
+  var dialog = document.createElement('dialog');
+  dialog.className = 'picker';
+  document.body.appendChild(dialog);
+
+  opener.addEventListener('click', function () {
+    dialog.innerHTML = '<p class="hint">Loading...</p>';
+    dialog.showModal();
+    fetch(opener.getAttribute('data-pick'), { headers: { 'X-Panel': '1' } })
+      .then(function (r) { return r.text(); })
+      .then(function (html) {
+        var close = '<div class="doing"><button type="button" data-close>Close</button></div>';
+        dialog.innerHTML = close + html;
+      })
+      .catch(function () { dialog.innerHTML = '<p class="problem">That did not load.</p>'; });
+  });
+
+  dialog.addEventListener('click', function (event) {
+    if (event.target.hasAttribute('data-close')) { dialog.close(); return; }
+    var button = event.target.closest('[data-insert]');
+    if (!button) { return; }
+    // at the caret, because somebody who put their cursor in the middle of a paragraph meant it
+    var text = button.getAttribute('data-insert');
+    var at = into.selectionStart === undefined ? into.value.length : into.selectionStart;
+    var end = into.selectionEnd === undefined ? at : into.selectionEnd;
+    into.value = into.value.slice(0, at) + text + into.value.slice(end);
+    into.selectionStart = into.selectionEnd = at + text.length;
+    into.dispatchEvent(new Event('input', { bubbles: true }));
+    dialog.close();
+    into.focus();
+  });
+})();
+</script>
+{{#live}}<script src="{{liveUrl}}/live.js" data-live="{{liveUrl}}" data-me="{{meId}}" defer></script>{{/live}}
+</body></html>

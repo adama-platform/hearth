@@ -1,0 +1,161 @@
+{{<shell}}{{$content}}
+<p class="crumb"><a href="{{backUrl}}">&larr; Places</a></p>
+<h1>{{heading}}</h1>
+{{^anyKinds}}<p class="problem">There are no kinds of place yet.
+  <a href="{{kindsUrl}}">Add one first &rarr;</a></p>{{/anyKinds}}
+{{#anyKinds}}
+<form method="post" action="{{backUrl}}">
+  <input type="hidden" name="csrf" value="{{csrf}}">
+  <input type="hidden" name="action" value="save">
+  {{#editing}}<input type="hidden" name="id" value="{{form_id}}">{{/editing}}
+  <div><label for="p-kind">what kind of place</label>
+    <select id="p-kind" name="type_slug" data-kind data-current="{{form_kind}}">{{#kinds}}<option value="{{slug}}" {{#selected}}selected{{/selected}}>{{label}}</option>{{/kinds}}</select>
+    <p class="hint">The questions below are the ones this kind asks, and they change as soon as you
+      pick a different one. Nothing you have typed is lost when they do &mdash; switch back and it
+      is still there.</p>
+    {{#editing}}
+    <p class="hint warnkind" data-kind-warning hidden>Saving with a different kind will
+      <strong>take this off the listing</strong>, because what was recorded about it belonged to
+      the old kind. Publish it again once the new questions are answered.</p>
+    {{/editing}}</div>
+  <div><label for="p-name">name</label><input id="p-name" type="text" name="name" maxlength="256" value="{{form_name}}" required></div>
+  <div><label for="p-slug">short name for the URL <span class="dim">&mdash; leave empty to make one from the name</span></label>
+    <input id="p-slug" type="text" name="slug" maxlength="128" value="{{form_slug}}"></div>
+
+  <h2>Where</h2>
+  <div><label for="p-address">address</label><textarea id="p-address" name="address" rows="2">{{form_address}}</textarea></div>
+  <div class="row">
+    <div><label for="p-locality">town or city</label><input id="p-locality" type="text" name="locality" value="{{form_locality}}"></div>
+    <div><label for="p-region">state or county</label><input id="p-region" type="text" name="region" value="{{form_region}}"></div>
+  </div>
+  <div class="row">
+    <div><label for="p-postcode">postcode</label><input id="p-postcode" type="text" name="postcode" value="{{form_postcode}}"></div>
+    <div><label for="p-country">country</label><input id="p-country" type="text" name="country" value="{{form_country}}"></div>
+  </div>
+  <div class="row">
+    <div><label for="p-lat">latitude <span class="dim">&mdash; optional; makes a map link</span></label><input id="p-lat" type="text" name="latitude" value="{{form_latitude}}"></div>
+    <div><label for="p-lon">longitude</label><input id="p-lon" type="text" name="longitude" value="{{form_longitude}}"></div>
+  </div>
+
+  <h2>How to reach them</h2>
+  <div class="row">
+    <div><label for="p-url">website</label><input id="p-url" type="text" name="url" value="{{form_url}}"></div>
+    <div><label for="p-phone">phone</label><input id="p-phone" type="text" name="phone" value="{{form_phone}}"></div>
+  </div>
+  <div><label for="p-email">email</label><input id="p-email" type="text" name="email" value="{{form_email}}"></div>
+
+  <h2 data-extras-heading{{^anyExtras}} hidden{{/anyExtras}}>About this <span data-kind-label>{{kindLabel}}</span></h2>
+  <div data-extras data-shapes="{{kindShapes}}" data-values="{{kindValues}}">
+    {{#extras}}
+    <div><label for="x-{{field}}">{{label}}{{#required}} <span class="tag">required</span>{{/required}}</label>
+      {{#longText}}<textarea id="x-{{field}}" name="{{field}}" rows="3">{{value}}</textarea>{{/longText}}
+      {{^longText}}<input id="x-{{field}}" type="text" name="{{field}}" value="{{value}}">{{/longText}}
+      {{#help}}<p class="hint">{{.}}</p>{{/help}}</div>
+    {{/extras}}
+  </div>
+  <input type="hidden" name="fields_json" data-carry value="">
+
+  <h2>The page</h2>
+  <div><label for="p-body">anything worth saying</label><textarea id="p-body" name="body" rows="8">{{form_body}}</textarea>
+    <p class="hint">Markdown.</p></div>
+  <label class="check"><input type="checkbox" name="published" {{#form_published}}checked{{/form_published}}> listed &mdash; members can see it</label>
+  <label class="check"><input type="checkbox" name="human_only" {{#form_human_only}}checked{{/form_human_only}}> human only &mdash; invisible to any connected model, and it cannot edit this</label>
+  <button type="submit">Save</button>
+</form>
+{{/anyKinds}}
+<script nonce="{{nonce}}">
+// Changing the kind swaps the questions in place. The point is that nothing is lost doing it: this
+// holds one object of every answer this address has, whichever kind asked for it, harvests the
+// boxes on screen into that object before rewriting them, and ships the whole thing in a hidden
+// field. So typing an answer under one kind, switching, and saving keeps the first answer -- which
+// is not in the database yet and would otherwise exist only in a form that has been replaced.
+//
+// The shapes and the values arrive in data attributes rather than interpolated into this script:
+// mustache escapes for HTML and a script block does not decode entities, so a value here would
+// arrive mangled. The parser decodes an attribute on the way in.
+//
+// Progressive rather than required. Without this the server-rendered boxes for the current kind
+// are already correct, the hidden field stays empty, and the save merges against what is stored.
+(function () {
+  var select = document.querySelector('[data-kind]');
+  var host = document.querySelector('[data-extras]');
+  var carry = document.querySelector('[data-carry]');
+  var heading = document.querySelector('[data-extras-heading]');
+  var kindLabel = document.querySelector('[data-kind-label]');
+  var warning = document.querySelector('[data-kind-warning]');
+  if (!select || !host || !carry) { return; }
+
+  var shapes = {};
+  var values = {};
+  try { shapes = JSON.parse(host.getAttribute('data-shapes') || '{}'); } catch (e) { return; }
+  try { values = JSON.parse(host.getAttribute('data-values') || '{}'); } catch (e) { values = {}; }
+  var started = select.getAttribute('data-current');
+  var labels = {};
+  for (var i = 0; i < select.options.length; i++) {
+    labels[select.options[i].value] = select.options[i].text;
+  }
+
+  function harvest() {
+    var inputs = host.querySelectorAll('[data-field-name]');
+    for (var i = 0; i < inputs.length; i++) {
+      values[inputs[i].getAttribute('data-field-name')] = inputs[i].value;
+    }
+    carry.value = JSON.stringify(values);
+  }
+
+  function render(kind) {
+    var fields = shapes[kind] || [];
+    host.textContent = '';
+    for (var i = 0; i < fields.length; i++) {
+      var field = fields[i];
+      var wrap = document.createElement('div');
+      var label = document.createElement('label');
+      label.setAttribute('for', 'x-field_' + field.name);
+      label.textContent = field.label;
+      if (field.required) {
+        var tag = document.createElement('span');
+        tag.className = 'tag';
+        tag.textContent = 'required';
+        label.appendChild(document.createTextNode(' '));
+        label.appendChild(tag);
+      }
+      var box = document.createElement(field.multiline ? 'textarea' : 'input');
+      if (field.multiline) { box.setAttribute('rows', '3'); } else { box.type = 'text'; }
+      box.id = 'x-field_' + field.name;
+      box.name = 'field_' + field.name;
+      box.setAttribute('data-field-name', field.name);
+      box.value = values[field.name] === undefined ? '' : values[field.name];
+      if (field.required) { box.required = true; }
+      wrap.appendChild(label);
+      wrap.appendChild(box);
+      if (field.help) {
+        var help = document.createElement('p');
+        help.className = 'hint';
+        help.textContent = field.help;
+        wrap.appendChild(help);
+      }
+      host.appendChild(wrap);
+    }
+    if (heading) { heading.hidden = fields.length === 0; }
+    if (kindLabel) { kindLabel.textContent = labels[kind] || kind; }
+  }
+
+  // take over from the server-rendered boxes, reading what they hold first
+  var initial = host.querySelectorAll('input[name^="field_"], textarea[name^="field_"]');
+  for (var k = 0; k < initial.length; k++) {
+    values[initial[k].name.substring(6)] = initial[k].value;
+  }
+  render(select.value);
+  harvest();
+
+  host.addEventListener('input', harvest);
+  select.addEventListener('change', function () {
+    harvest();
+    render(select.value);
+    harvest();
+    if (warning) { warning.hidden = select.value === started; }
+  });
+  select.form.addEventListener('submit', harvest);
+})();
+</script>
+{{/content}}{{/shell}}

@@ -1,0 +1,73 @@
+{{^hasQueue}}<p class="hint">This server has no queue running.</p>{{/hasQueue}}
+{{#hasQueue}}
+<h2>Addresses</h2>
+<table>
+  <thead><tr><th>state</th><th class="num">members</th><th class="num">places</th></tr></thead>
+  <tbody>{{#states}}<tr class="{{#stuck}}warn{{/stuck}}">
+    <td>{{label}}</td><td class="num">{{members}}</td><td class="num">{{places}}</td>
+  </tr>{{/states}}</tbody>
+</table>
+{{#retrying}}<p class="hint">{{.}} could not be looked up because the service did not answer.
+  Nothing is wrong with those addresses and nobody needs to do anything: they are tried again on
+  their own, 15 minutes after the first failure and then an hour, four hours and a day.</p>{{/retrying}}
+{{#stuck}}<p class="hint warn">{{.}} address(es) came back as <strong>no such place</strong>
+  from {{service}}. Those are not retried on their own &mdash; asking the same service the same
+  question tomorrow gets the same answer, every day, forever. They are looked at again when the
+  address is edited, when this server is pointed at a different geocoding service, or when somebody
+  presses <em>try the given-up-on ones again</em>.</p>{{/stuck}}
+
+<table class="bars">
+  <tr><th>waiting</th>
+    <td class="w"><span class="bar" style="width:{{share}}%"></span></td>
+    <td class="n">{{depth}} of {{capacity}}</td></tr>
+</table>
+{{#full}}<p class="problem">The queue is full. Anything asked for now is refused rather than
+  queued &mdash; which is recorded below, so nothing disappears quietly.</p>{{/full}}
+
+<table>
+  <tbody>
+    <tr><th>geocoding</th><td>{{geocoding}}</td></tr>
+    <tr><th>pace</th><td>one every {{gap}} seconds, across everything this machine asks</td></tr>
+    <tr><th>next</th><td>{{#inFlight}}asking now: <span class="mono">{{.}}</span>{{/inFlight}}{{^inFlight}}{{#nextIn}}in about {{.}} second(s){{/nextIn}}{{^nextIn}}ready{{/nextIn}}{{/inFlight}}</td></tr>
+    {{#backoff}}<tr><th>backing off</th><td class="warn">waiting {{backoffFor}} more second(s) before asking anything else. {{lastProblem}}</td></tr>{{/backoff}}
+    {{^backoff}}<tr><th>backoff</th><td class="dim">none. A failure would cost {{backoffNext}} second(s), doubling each time.</td></tr>{{/backoff}}
+    <tr><th>running</th><td>{{#running}}yes{{/running}}{{^running}}<span class="warn">no</span>{{/running}}</td></tr>
+  </tbody>
+</table>
+
+<table>
+  <thead><tr><th>asked</th><th class="num">placed</th><th class="num">no answer</th><th class="num">failed</th><th class="num">given up</th><th class="num">refused</th></tr></thead>
+  <tbody><tr>
+    <td class="num">{{accepted}}</td>
+    <td class="num">{{answered}}</td>
+    <td class="num dim">{{nothing}}</td>
+    <td class="num dim">{{failed}}</td>
+    <td class="num">{{abandoned}}</td>
+    <td class="num">{{refused}}</td>
+  </tr></tbody>
+</table>
+<p class="hint"><strong>No answer</strong> is the service saying it has never heard of that address,
+  which is a correct answer and costs nothing. <strong>Failed</strong> is the service not answering
+  at all, which is what starts a backoff; a job is tried {{attempts}} times before it is given up
+  on.</p>
+{{#wantsContact}}<p class="hint warn">Nominatim's policy asks for a way to reach whoever runs this
+  server, and this one has not been told. Set <span class="mono">gps.contact</span> in
+  <span class="mono">config.cfg</span> &mdash; an email address is enough. A client that cannot be
+  reached can be blocked without warning, and from in here that looks exactly like geocoding
+  quietly stopping.</p>{{/wantsContact}}
+
+<h2>Lately</h2>
+{{^anyRecent}}<p class="hint">Nothing has been asked for this community yet.</p>{{/anyRecent}}
+{{#anyRecent}}
+<table>
+  <thead><tr><th>what</th><th>how it went</th><th class="num">tries</th><th class="num">took</th><th>when</th></tr></thead>
+  <tbody>{{#recent}}<tr>
+    <td class="mono">{{label}}</td>
+    <td class="{{#good}}good{{/good}}{{#bad}}bad{{/bad}}">{{outcome}}{{#detail}} <span class="dim">&mdash; {{.}}</span>{{/detail}}</td>
+    <td class="num dim">{{attempts}}</td>
+    <td class="num dim">{{millis}}ms</td>
+    <td class="dim">{{ago}} ago</td>
+  </tr>{{/recent}}</tbody>
+</table>
+{{/anyRecent}}
+{{/hasQueue}}

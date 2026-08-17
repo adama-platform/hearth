@@ -1,0 +1,8 @@
+{{<shell}}{{$content}}
+<h1>Events</h1>
+<p class="hint">Every write in this process, newest last. The ring holds {{capacity}}; {{emitted}} have been emitted since boot. Caches invalidate off this stream, so what you see here is what they saw.</p>
+<div class="tools">
+  <button type="button" class="quiet live" data-live="Go live" data-live-on="Stop">Go live</button>
+</div>
+<div class="scroll panel" data-panel="{{panelUrl}}">{{{panel}}}</div>
+{{/content}}{{/shell}}

@@ -1,0 +1,103 @@
+// {{community}} -- service worker.
+//
+// It caches nothing. An offline cache that serves a stale members list is worse than a page saying
+// it cannot reach the server, and every page here is one request against a database on the same
+// machine. What this is for is push, and being somewhere for a notification to be clicked.
+
+self.addEventListener('install', function (event) {
+  // take over immediately rather than waiting for every tab to close; there is no cached asset
+  // whose version could disagree with another tab's
+  self.skipWaiting();
+});
+
+self.addEventListener('activate', function (event) {
+  event.waitUntil(self.clients.claim());
+});
+
+// A fetch handler, and the smallest honest one there is.
+//
+// A browser will not offer to install an app whose worker cannot answer a navigation with the
+// network down -- and this worker caches nothing on purpose, for the reason at the top of the file.
+// So every request goes straight through, and the *only* thing built here is the page somebody sees
+// when a navigation fails outright. Nothing is stored, so nothing can go stale, and the install
+// criteria are met by the one page for which a stale answer is impossible.
+var OFFLINE = '<!doctype html><meta charset="utf-8">'
+  + '<meta name="viewport" content="width=device-width,initial-scale=1">'
+  + '<title>No connection</title>'
+  + '<style>body{margin:0;display:grid;place-items:center;min-height:100vh;'
+  + 'font:16px/1.6 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#1a1a1a;background:#fbfbfa}'
+  + 'div{max-width:22rem;padding:2rem;text-align:center}h1{font-size:1.2rem;margin:0 0 .5rem}'
+  + 'p{margin:0 0 1.2rem;color:#6b6b6b}button{font:inherit;min-height:44px;padding:.6rem 1.2rem;'
+  + 'border:1px solid #d8d8d4;border-radius:8px;background:#fff;cursor:pointer}</style>'
+  + '<div><h1>No connection</h1><p>This page needs the network, and there is not one right now. '
+  + 'Nothing has been lost &mdash; try again when you are back.</p>'
+  + '<button onclick="location.reload()">Try again</button></div>';
+
+self.addEventListener('fetch', function (event) {
+  // only navigations: an image or a stylesheet that fails should fail, and wrapping every request
+  // in a handler that adds nothing is latency on every one of them
+  if (event.request.mode !== 'navigate') { return; }
+  event.respondWith(fetch(event.request).catch(function () {
+    return new Response(OFFLINE, {
+      status: 503,
+      headers: {'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store'}
+    });
+  }));
+});
+
+self.addEventListener('push', function (event) {
+  var data = {};
+  try { data = event.data ? event.data.json() : {}; } catch (e) { data = {}; }
+  var title = data.title || '{{community}}';
+  // Tell whatever is open that one arrived.
+  //
+  // This is what makes the self-test worth having: "the server accepted it" and "this device
+  // showed it" are different facts and every push problem lives in the gap between them. Nothing
+  // but the tag travels -- invariant 74 does not stop applying because the recipient is a page.
+  self.clients.matchAll({type: 'window', includeUncontrolled: true}).then(function (windows) {
+    for (var i = 0; i < windows.length; i++) {
+      windows[i].postMessage({hearth: 'push-arrived', tag: data.tag || 'hearth'});
+    }
+  });
+  event.waitUntil(self.registration.showNotification(title, {
+    body: data.body || '',
+    // the tag is what makes three replies in one thread replace each other rather than stack
+    tag: data.tag || 'hearth',
+    renotify: false,
+    data: {url: data.url || '{{shell}}', who: data['for'] || 0},
+    badge: undefined,
+    requireInteraction: false
+  }));
+});
+
+// Clicking comes back into the app rather than opening another copy of it. If a window is already
+// open -- the installed app sitting in the background, or a tab -- it is focused and told where to
+// go; only when there is nothing open at all does this start one.
+self.addEventListener('notificationclick', function (event) {
+  event.notification.close();
+  var target = (event.notification.data && event.notification.data.url) || '{{shell}}';
+  // who it was for rides along: a shared browser can hold two people's subscriptions, and the
+  // shell is the only thing that can tell whether the person signed in now is the one it was sent
+  // to.
+  var who = (event.notification.data && event.notification.data.who) || 0;
+  var url = '{{shell}}?to=' + encodeURIComponent(target) + (who ? '&who=' + who : '');
+  event.waitUntil(
+    self.clients.matchAll({type: 'window', includeUncontrolled: true}).then(function (windows) {
+      for (var i = 0; i < windows.length; i++) {
+        var open = windows[i];
+        if (open.url.indexOf(self.registration.scope) === 0 && 'focus' in open) {
+          if ('navigate' in open) { open.navigate(url); }
+          return open.focus();
+        }
+      }
+      return self.clients.openWindow(url);
+    })
+  );
+});
+
+// A push service can tell a browser its subscription has been rotated. Nothing can be done from
+// here without the application server key, so the shell repairs it on the next visit -- this exists
+// so that the event is handled rather than logged as an error in somebody's console.
+self.addEventListener('pushsubscriptionchange', function (event) {
+  event.waitUntil(Promise.resolve());
+});

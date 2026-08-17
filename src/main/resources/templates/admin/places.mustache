@@ -1,0 +1,16 @@
+{{<shell}}{{$content}}
+<h1>Places</h1>
+<p class="hint">The address book: the places this community cares about. What each kind of place
+  records is up to you &mdash; a ranch has different things worth writing down than a vendor or a
+  venue &mdash; and that is set under <a href="{{kindsUrl}}">Kinds</a>.</p>
+{{^anyKinds}}<p class="problem">There are no kinds of place yet.
+  <a href="{{kindsUrl}}">Add one first &rarr;</a></p>{{/anyKinds}}
+{{#anyKinds}}<div class="doing"><a class="btn" href="{{newUrl}}">{{{plusIcon}}}New address</a>
+  <a class="btn secondary" href="{{kindsUrl}}">Kinds</a>
+  <a class="btn secondary" href="{{publicUrl}}">See what members see</a></div>{{/anyKinds}}
+<form class="filters" data-filters method="get" action="{{panelUrl}}">
+  <input type="search" name="q" value="{{q}}" placeholder="name, address or kind">
+  <button type="submit">Search</button>
+</form>
+<div class="panel" data-panel="{{panelUrl}}">{{{panel}}}</div>
+{{/content}}{{/shell}}

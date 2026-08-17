@@ -1,0 +1,36 @@
+{{<shell}}{{$content}}
+<p class="crumb"><a href="{{backUrl}}">&larr; Roles</a></p>
+<h1>{{heading}}</h1>
+{{#builtin}}<p class="problem">This role is built in. It holds every permission and cannot be
+  changed here.</p>{{/builtin}}
+{{^builtin}}
+<form method="post" action="{{backUrl}}">
+  <input type="hidden" name="csrf" value="{{csrf}}">
+  <input type="hidden" name="action" value="save">
+  <div><label for="r-name">short name <span class="dim">&mdash; lowercase, used in grants and urls</span></label>
+    <input id="r-name" type="text" name="name" maxlength="64" value="{{form_name}}" required {{#editing}}readonly{{/editing}}></div>
+  <div><label for="r-label">what to call it</label><input id="r-label" type="text" name="label" maxlength="64" value="{{form_label}}"></div>
+  <div><label for="r-desc">what it is for</label><textarea id="r-desc" name="description" rows="2">{{form_description}}</textarea></div>
+  <div><label for="r-color">colour in listings</label>
+    <select id="r-color" name="color">
+      <option value="blue" {{#form_color}}{{/form_color}}>blue</option>
+      <option value="green">green</option>
+      <option value="purple">purple</option>
+      <option value="warn">amber</option>
+    </select></div>
+
+  <h2>What it allows</h2>
+  <p class="hint">Anything ticked here also lets somebody reach the admin section &mdash; a role
+    with powers nobody can get to is a role that does nothing.</p>
+  {{#groups}}
+  <fieldset class="perms">
+    <legend>{{group}}</legend>
+    {{#items}}
+    <label class="check"><input type="checkbox" name="{{field}}" {{#checked}}checked{{/checked}}> {{label}}</label>
+    {{/items}}
+  </fieldset>
+  {{/groups}}
+  <button type="submit">Save</button>
+</form>
+{{/builtin}}
+{{/content}}{{/shell}}

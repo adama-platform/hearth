@@ -1,0 +1,20 @@
+{{<shell}}{{$content}}
+<h1>Messages</h1>
+<p class="hint">Every message this server sends, in your words. A message you have not touched uses
+  the wording that ships &mdash; and keeps improving when the software does, which is why nothing is
+  copied into the database until you change it.</p>
+<p class="hint"><strong>The words are yours; the shape is not.</strong> The subject, the opening line
+  and the paragraph under it are here. The layout around them &mdash; the button, the plain-text
+  half, the line saying why the message arrived &mdash; stays in the software, because a community
+  one paste away from a message that renders as markup in Outlook has not been given control of
+  anything useful.</p>
+<div class="scroller"><table>
+  <thead><tr><th>message</th><th>subject</th><th></th><th></th></tr></thead>
+  <tbody>{{#messages}}<tr>
+    <td><a href="{{editUrl}}">{{label}}</a></td>
+    <td class="dim">{{subject}}</td>
+    <td class="dim mono">{{updated}}</td>
+    <td class="actions">{{#overridden}}<span class="pill blue">yours</span>{{/overridden}}{{^overridden}}<span class="pill dim">as shipped</span>{{/overridden}}</td>
+  </tr>{{/messages}}</tbody>
+</table></div>
+{{/content}}{{/shell}}

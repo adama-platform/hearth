@@ -1,0 +1,52 @@
+{{<shell}}{{$content}}
+<h1>Appearance</h1>
+<p class="hint">Six colours, twice: once for a light screen and once for a dark one. Half the people
+  reading this community are on one and half on the other, and a palette that only works in one gets
+  inverted by somebody's browser into something nobody chose.</p>
+
+{{#scopes}}
+<h2>{{title}}</h2>
+<p class="hint">{{about}} {{^custom}}<span class="pill">using the defaults</span>{{/custom}}{{#custom}}<span class="pill blue">edited</span>{{/custom}}</p>
+<form method="post" action="{{action}}">
+  <input type="hidden" name="csrf" value="{{csrf}}">
+  <input type="hidden" name="action" value="save">
+  <input type="hidden" name="scope" value="{{scope}}">
+  <p class="hint">Every picker takes a hex code, so a brand colour can be pasted straight in.</p>
+  <table class="palette">
+    <thead><tr><th>colour</th><th>light</th><th>dark</th><th></th></tr></thead>
+    <tbody>
+    {{#rows}}
+    <tr>
+      <td><strong>{{label}}</strong></td>
+      <td><input type="color" name="light_{{slot}}" value="{{light}}" aria-label="{{label}}, light"><span class="hex">{{light}}</span></td>
+      <td><input type="color" name="dark_{{slot}}" value="{{dark}}" aria-label="{{label}}, dark"><span class="hex">{{dark}}</span></td>
+      <td class="dim">{{hint}}</td>
+    </tr>
+    {{/rows}}
+    </tbody>
+  </table>
+  <div class="rowactions">
+    <button type="submit">Save {{title}}</button>
+  </div>
+</form>
+{{#custom}}
+<form method="post" action="{{action}}" class="inline">
+  <input type="hidden" name="csrf" value="{{csrf}}">
+  <input type="hidden" name="action" value="reset">
+  <input type="hidden" name="scope" value="{{scope}}">
+  <button type="submit" class="quiet">Put {{title}} back to the defaults</button>
+</form>
+{{/custom}}
+{{/scopes}}
+
+<h2>Where these are used</h2>
+<ul class="cando">
+  <li><span class="dim">site</span> every page a member sees, and every email this community sends</li>
+  <li><span class="dim">admin</span> this section, and the <a href="/legal/terms-of-service">terms</a> and <a href="/legal/privacy-policy">privacy policy</a></li>
+</ul>
+<p class="hint">Red, green and amber are not on this list. They mean refused, worked and careful, and
+  a community that could recolour them could end up with a red &ldquo;approved&rdquo;.</p>
+<p class="hint">Email clients ignore most of what a browser does with colour, so a message uses the
+  light palette whatever the reader's screen is set to. That is the one place a dark background is
+  more likely to arrive as a black box than as a design.</p>
+{{/content}}{{/shell}}

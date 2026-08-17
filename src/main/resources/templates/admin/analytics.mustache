@@ -1,0 +1,30 @@
+{{<shell}}{{$content}}
+<h1>Analytics</h1>
+<p class="hint">The last {{capacity}} requests to this domain, held in memory. Covering the last
+{{windowMinutes}} minutes.</p>
+<div class="cards">
+  <div class="card"><div class="n">{{total}}</div><div class="l">requests</div></div>
+  <div class="card"><div class="n">{{people}}</div><div class="l">from browsers</div></div>
+  <div class="card"><div class="n">{{signedIn}}</div><div class="l">signed in</div></div>
+  <div class="card"><div class="n">{{errors}}</div><div class="l">errors ({{errorRate}}%)</div></div>
+  <div class="card"><div class="n">{{medianMillis}}ms</div><div class="l">mean time</div></div>
+</div>
+<h2>Top pages</h2>
+<table class="bars"><tbody>{{#topPaths}}<tr><td style="width:40%"><code>{{label}}</code></td><td class="num dim" style="width:4rem">{{count}}</td><td><div class="bar" style="width:{{width}}%"></div></td></tr>{{/topPaths}}</tbody></table>
+<h2>Common IPs</h2>
+<table class="bars"><tbody>{{#topIps}}<tr><td style="width:40%"><code>{{label}}</code></td><td class="num dim" style="width:4rem">{{count}}</td><td><div class="bar" style="width:{{width}}%"></div></td></tr>{{/topIps}}</tbody></table>
+<h2>Common members</h2>
+{{#topUsers}}<table class="bars"><tbody><tr><td style="width:40%">user {{label}}</td><td class="num dim" style="width:4rem">{{count}}</td><td><div class="bar" style="width:{{width}}%"></div></td></tr></tbody></table>{{/topUsers}}
+{{^topUsers}}<p class="hint">Nobody signed in has made a request yet.</p>{{/topUsers}}
+<h2>Browsers and bots</h2>
+<table class="bars"><tbody>{{#topAgents}}<tr><td style="width:40%">{{label}}</td><td class="num dim" style="width:4rem">{{count}}</td><td><div class="bar" style="width:{{width}}%"></div></td></tr>{{/topAgents}}</tbody></table>
+<h2>Status codes</h2>
+<table class="bars"><tbody>{{#statuses}}<tr><td style="width:40%">{{label}}</td><td class="num dim" style="width:4rem">{{count}}</td><td><div class="bar" style="width:{{width}}%"></div></td></tr>{{/statuses}}</tbody></table>
+{{#anyUnknowns}}
+<h2>Unrecognised user agents ({{unknownAgents}})</h2>
+<p class="hint">Registered verbatim so a rule can be added deliberately rather than guessed at.</p>
+<table><thead><tr><th>agent</th><th class="num">seen</th></tr></thead>
+<tbody>{{#unknowns}}<tr><td class="mono">{{label}}</td><td class="num dim">{{count}}</td></tr>{{/unknowns}}</tbody></table>
+{{/anyUnknowns}}
+<div class="doing" style="margin-top:1.5rem"><a class="btn secondary" href="{{logUrl}}">Open the full log</a></div>
+{{/content}}{{/shell}}

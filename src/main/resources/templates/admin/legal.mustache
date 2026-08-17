@@ -1,0 +1,36 @@
+{{<shell}}{{$content}}
+<h1>Legal</h1>
+<p class="hint">Every community has these two whether or not anybody has thought about them, so this
+  server ships a considered version of each and publishes it from the first day. They say plainly
+  that the people who wrote this software and whoever provides the machine are not parties to
+  anything that happens here &mdash; which in a self-hosted community is the fact somebody has to
+  be told.</p>
+<p class="problem">These are a starting point written by people who are not lawyers, and they cannot
+  know which country you are in. Read them. If this community carries real risk &mdash; money,
+  children, medical advice, an organisation with something to lose &mdash; have somebody qualified
+  read them too.</p>
+
+<table>
+  <thead><tr><th>document</th><th>state</th><th>address</th><th class="actions"></th></tr></thead>
+  <tbody>
+  {{#docs}}
+  <tr>
+    <td><strong>{{title}}</strong><div class="dim">{{summary}}</div></td>
+    <td>{{#overridden}}<span class="pill blue">yours</span>{{/overridden}}{{^overridden}}<span class="pill">as shipped</span>{{/overridden}}
+      {{#overridden}}<div class="dim">{{updated}}</div>{{/overridden}}</td>
+    <td class="mono"><a href="{{publicUrl}}">{{publicUrl}}</a></td>
+    <td class="actions"><a href="{{editUrl}}">Edit</a></td>
+  </tr>
+  {{/docs}}
+  </tbody>
+</table>
+
+<h2>Two things they assume</h2>
+<ul class="cando">
+  <li><span class="dim">everywhere</span> every email this community sends links to the terms and says that using the community accepts them</li>
+  <li><span class="dim">open</span> both pages are readable without signing in, because most of the people receiving that link do not have an account yet</li>
+</ul>
+<p class="hint">Inside the text, <code>{{lbrace}}community{{rbrace}}</code> becomes this community's
+  name and <code>{{lbrace}}domain{{rbrace}}</code> becomes its address, so a document written once is
+  right after somebody renames the community.</p>
+{{/content}}{{/shell}}

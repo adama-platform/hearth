@@ -1,0 +1,28 @@
+<div class="comment" data-key="c{{id}}">
+  <div class="meta">{{#phase}}<span class="pill">{{.}}</span>{{/phase}}<span>{{author}}</span><span class="sep">&middot;</span><span>{{when}}</span>{{#edited}}<span class="pill">edited</span>{{/edited}}</div>
+  <div class="comment-body">{{{bodyHtml}}}</div>
+  <div class="rowactions">
+    {{#mine}}{{^removed}}
+    <details class="reply">
+      <summary>edit</summary>
+      <form method="post" action="{{commentAction}}">
+        <input type="hidden" name="csrf" value="{{csrf}}">
+        <input type="hidden" name="{{commentSubjectField}}" value="{{commentSubjectId}}">
+        <input type="hidden" name="action" value="edit_comment">
+        <input type="hidden" name="comment" value="{{id}}">
+        <textarea name="body" rows="3" required>{{body}}</textarea>
+        <div class="doing"><button type="submit">Save</button></div>
+      </form>
+    </details>
+    {{/removed}}{{/mine}}
+    {{#canRemove}}
+    <form method="post" action="{{commentAction}}" class="inline" onsubmit="return confirm('Take this comment down?')">
+      <input type="hidden" name="csrf" value="{{csrf}}">
+      <input type="hidden" name="{{commentSubjectField}}" value="{{commentSubjectId}}">
+      <input type="hidden" name="action" value="remove_comment">
+      <input type="hidden" name="comment" value="{{id}}">
+      <button type="submit" class="quiet">remove</button>
+    </form>
+    {{/canRemove}}
+  </div>
+</div>

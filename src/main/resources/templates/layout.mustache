@@ -1,0 +1,347 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="icon" href="{{favicon}}">{{! The manifest goes on every page, not only on the shell. A browser offers to install what the page it is looking at declares, and it was declared on /~app alone -- an address nobody reaches without already knowing about it, which is why the install button never appeared for anybody. iOS reads the touch icon from the page as well, and takes no notice of the manifest. }}<link rel="manifest" href="/manifest.webmanifest"><link rel="apple-touch-icon" href="/~app/icon-192.png"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="{{community}}"><meta name="theme-color" content="{{themeColor}}"><title>{{title}}</title><script src="/~theme.js"></script><style>
+{{{palette}}}
+/* ------------------------------------------------------------------------------------------------
+   Mobile first, and not as a slogan: everything below is written for a phone held in one hand, and
+   the only thing that changes on a wide screen is that the column stops growing. A community that
+   meets in person is read on the way to the thing it is about.
+
+   Three rules the whole sheet obeys:
+     - nothing smaller than 16px for anything somebody types into, because iOS zooms the page when
+       a font is smaller than that and never zooms back out;
+     - nothing you can press is under 44px tall, which is the width of a thumb;
+     - every focusable thing has a visible focus ring, in the accent colour, at 2px. Keyboard and
+       screen-reader users are members too, and a community's own site is the last place to be
+       clever about it.
+   ------------------------------------------------------------------------------------------------ */
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;min-height:100svh;display:flex;flex-direction:column;background:var(--bg);color:var(--fg);font:16px/1.6 ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;overflow-wrap:break-word}
+:where(a,button,input,select,textarea,summary,[tabindex]):focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:4px}
+.skip{position:absolute;left:-9999px;top:0;background:var(--accent);color:var(--bg);padding:.7rem 1rem;z-index:20;border-radius:0 0 8px 0}
+.skip:focus{left:0}
+
+/* the bar. On a phone it scrolls sideways rather than wrapping into three lines of links. */
+header{position:sticky;top:0;z-index:10;background:color-mix(in srgb,var(--bg) 92%,transparent);backdrop-filter:saturate(180%) blur(8px);border-bottom:1px solid var(--line)}
+/* No overflow on the bar. It used to scroll sideways, which was right when it held a row of links
+   and is fatal now that it holds a menu: an overflow container clips its absolutely positioned
+   descendants, so the panel opened and was invisible. That was the bug. */
+nav{max-width:52rem;margin:0 auto;padding:.5rem .9rem;display:flex;gap:.15rem;align-items:center}
+nav .brand{font-weight:650;margin-right:auto;padding:.55rem .35rem;white-space:nowrap;font-size:1.02rem}
+/* One menu, on every screen.
+   A row of links is a row that grows every time the community gains a section, and it grows
+   fastest for the people with the most to do. A phone got a scrolling strip nobody scrolled; a
+   laptop got a line that wrapped. One button, the same everywhere, is a thing people learn once. */
+.menu{position:relative;margin:0}
+.menu summary{display:flex;list-style:none;cursor:pointer;display:inline-flex;align-items:center;gap:.45rem;padding:.55rem .7rem;min-height:44px;border-radius:8px;color:var(--dim);font-size:.9375rem;user-select:none}
+.menu summary::-webkit-details-marker{display:none}
+.menu summary:hover,.menu[open] summary{color:var(--fg);background:color-mix(in srgb,var(--fg) 6%,transparent)}
+.menu summary:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.menu .bars{display:inline-flex;flex-direction:column;gap:3px;width:1.05rem}
+.menu .bars i{display:block;height:2px;border-radius:2px;background:currentColor}
+.menu .sheet{position:absolute;right:0;top:calc(100% + .35rem);z-index:20;min-width:13rem;display:flex;flex-direction:column;gap:.1rem;padding:.4rem;background:var(--panel);border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.14)}
+.menu .sheet a,.menu .sheet .navform button{width:100%;justify-content:flex-start;text-align:left}
+nav a{color:var(--dim);text-decoration:none;font-size:.9375rem;display:inline-flex;align-items:center;gap:.35rem;padding:.55rem .6rem;border-radius:8px;white-space:nowrap;min-height:44px}
+nav a:hover{color:var(--fg);background:color-mix(in srgb,var(--fg) 6%,transparent)}
+.navform{margin:0;display:inline}
+.navform button{margin:0;padding:.55rem .6rem;min-height:44px;font:inherit;font-size:.9375rem;font-weight:400;color:var(--dim);background:none;border:0;border-radius:8px;cursor:pointer}
+.navform button:hover{color:var(--fg);background:color-mix(in srgb,var(--fg) 6%,transparent);opacity:1}
+.bell{position:relative}
+.bell .glyph{font-size:1.05rem;line-height:1;filter:grayscale(1);opacity:.5}
+.bell.lit .glyph{filter:none;opacity:1}
+.bell .count{display:none;background:var(--accent);color:var(--bg);border-radius:999px;font-size:.625rem;font-weight:700;padding:0 .3rem;min-width:1.05rem;text-align:center;line-height:1.35}
+.bell.lit .count{display:inline-block}
+/* the light/dark switch. Both glyphs ship and CSS picks, so the button is the same markup on a
+   server-rendered page whatever the browser is about to decide. */
+.themer{background:none;border:0;margin:0;padding:.55rem .5rem;min-height:44px;color:var(--dim);cursor:pointer;display:inline-flex;align-items:center;border-radius:8px}
+.themer:hover{color:var(--fg);background:color-mix(in srgb,var(--fg) 6%,transparent)}
+.themer .moon{display:none}
+:root[data-theme="dark"] .themer .moon{display:inline}
+:root[data-theme="dark"] .themer .sun{display:none}
+.bubble{display:inline-flex;align-items:center;justify-content:center;min-width:1.15rem;height:1.15rem;padding:0 .3rem;border-radius:999px;background:var(--accent);color:var(--bg);font-size:.6875rem;font-weight:700;line-height:1}
+
+/* the one line the community gets to put above everything, and only when it is waiting on you */
+.asking{background:color-mix(in srgb,var(--accent) 10%,transparent);border-bottom:1px solid var(--line);font-size:.9375rem}
+.asking{display:flex;gap:.75rem;align-items:center;justify-content:center;flex-wrap:wrap;padding:.6rem 1rem;min-height:44px}
+.asking a{font-weight:600}
+main{flex:1;width:100%;max-width:38rem;margin:0 auto;padding:1.5rem 1rem 3rem}
+main.wide{max-width:60rem}
+@media (min-width:40rem){main{padding:2.25rem 1.5rem 4rem}}
+
+h1{font-size:1.55rem;font-weight:650;letter-spacing:-.015em;margin:0 0 .75rem;line-height:1.25}
+h2{font-size:1.1rem;font-weight:650;margin:2rem 0 .6rem}
+p{margin:0 0 .8rem}
+a{color:var(--accent)}
+.lead{font-size:1.05rem}
+.hint,.dim{color:var(--dim)}
+.hint{font-size:.9375rem}
+.crumb{font-size:.875rem;color:var(--dim);margin:0 0 .5rem}
+.crumb a{color:var(--dim);text-decoration:none}
+.crumb a:hover{color:var(--fg)}
+code{font:.875rem ui-monospace,SFMono-Regular,Menlo,monospace;word-break:break-all}
+.face{font:650 3.25rem/1 ui-monospace,SFMono-Regular,Menlo,monospace;margin:0 0 1rem}
+
+/* anything you can press looks like it. A link that performs an action is a button. */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:.4rem;min-height:44px;padding:.6rem 1.05rem;font:inherit;font-size:.9375rem;font-weight:600;color:var(--bg);background:var(--fg);border:0;border-radius:10px;text-decoration:none;cursor:pointer;line-height:1.2}
+.btn:hover{opacity:.88}
+.btn.secondary{color:var(--fg);background:transparent;border:1px solid var(--line);font-weight:500}
+.btn.secondary:hover{border-color:var(--accent);color:var(--accent);opacity:1}
+.btn.small{min-height:36px;padding:.35rem .75rem;font-size:.85rem}
+button{margin-top:1.1rem;min-height:44px;padding:.65rem 1.15rem;font:inherit;font-weight:600;color:var(--bg);background:var(--fg);border:0;border-radius:10px;cursor:pointer}
+button:hover{opacity:.88}
+.doing{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center;margin:0 0 1.25rem}
+.doing button{margin-top:0}
+
+/* forms. 16px minimum on every field, or the phone zooms and never comes back. */
+form{margin:1.5rem 0 0}
+label{display:block;font-size:.8125rem;color:var(--dim);text-transform:uppercase;letter-spacing:.04em;margin:0 0 .35rem}
+input[type=email],input[type=password],input[type=text],input[type=search],input[type=date],input[type=number],select,textarea{width:100%;min-height:44px;padding:.65rem .75rem;font:inherit;font-size:16px;color:var(--fg);background:var(--panel);border:1px solid var(--line);border-radius:10px;-webkit-appearance:none;appearance:none}
+select{background-image:linear-gradient(45deg,transparent 50%,var(--dim) 50%),linear-gradient(135deg,var(--dim) 50%,transparent 50%);background-position:calc(100% - 18px) 50%,calc(100% - 13px) 50%;background-size:5px 5px,5px 5px;background-repeat:no-repeat;padding-right:2.2rem}
+textarea{min-height:6rem;resize:vertical;line-height:1.55}
+input.code{font:650 1.6rem/1.2 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.35em;text-align:center}
+.field{margin:0 0 1rem}
+.check{display:flex;align-items:center;gap:.5rem;text-transform:none;letter-spacing:0;font-size:.9375rem;color:var(--fg);min-height:44px;margin:0}
+.check input{width:auto;min-height:0;margin:0}
+
+/* the two ways this server talks back */
+.done{margin:0 0 1.25rem;padding:.75rem .9rem;border-left:3px solid var(--accent);border-radius:0 8px 8px 0;background:color-mix(in srgb,var(--accent) 8%,transparent)}
+.problem{margin:0 0 1.25rem;padding:.75rem .9rem;border-left:3px solid var(--bad);border-radius:0 8px 8px 0;background:color-mix(in srgb,var(--bad) 8%,transparent);color:var(--fg)}
+.alldone{padding:.7rem .9rem;border-left:3px solid var(--good);border-radius:0 8px 8px 0;background:color-mix(in srgb,var(--good) 8%,transparent)}
+
+/* a card is the unit of everything a member reads: a thread, an event, a place. */
+.card{display:block;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:.9rem 1rem;margin:0 0 .7rem;text-decoration:none;color:inherit}
+a.card:hover{border-color:var(--accent)}
+.card h3{margin:0;font-size:1.05rem;font-weight:650;line-height:1.3}
+.meta{color:var(--dim);font-size:.8125rem;margin:.2rem 0 0;display:flex;gap:.4rem;flex-wrap:wrap;align-items:center}
+.meta .sep{opacity:.5}
+.pill{display:inline-block;font-size:.7rem;padding:.1rem .5rem;border-radius:999px;border:1px solid var(--line);color:var(--dim);line-height:1.6;white-space:nowrap}
+.pill.good,.pill.green{color:var(--good);border-color:var(--good);background:color-mix(in srgb,var(--good) 12%,transparent)}
+.pill.warn{color:var(--warn);border-color:var(--warn);background:color-mix(in srgb,var(--warn) 12%,transparent)}
+.pill.red{color:var(--bad);border-color:var(--bad);background:color-mix(in srgb,var(--bad) 12%,transparent)}
+.pill.purple{color:var(--purple);border-color:var(--purple);background:color-mix(in srgb,var(--purple) 12%,transparent)}
+.pill.blue{color:var(--accent);border-color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent)}
+.tag{font-size:.6875rem;text-transform:uppercase;letter-spacing:.04em;color:var(--dim);border:1px solid var(--line);border-radius:4px;padding:0 .3rem}
+.empty{text-align:center;color:var(--dim);padding:2.5rem 1rem;border:1px dashed var(--line);border-radius:14px;margin:1rem 0}
+.empty strong{display:block;color:var(--fg);margin-bottom:.3rem}
+
+/* comments, wherever they are: the board, an event, a place */
+.comments{margin:2rem 0 0}
+.clump{margin:0 0 .5rem}
+.clump.open{border:0;padding:0}
+details.clump{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:0 1rem}
+details.clump summary{cursor:pointer;color:var(--dim);font-size:.9rem;padding:.85rem 0;min-height:44px;display:flex;align-items:center}
+details.clump summary:hover{color:var(--fg)}
+details.clump[open]{padding-bottom:.5rem}
+.when{font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);margin:1.25rem 0 .2rem;font-weight:600}
+
+/* votes and flags: small, quiet, and never the loudest thing on a row */
+.signals{display:inline-flex;gap:.15rem;align-items:center;vertical-align:middle}
+.signals .vote{margin:0;padding:.2rem .45rem;min-height:32px;font-size:.8125rem;font-weight:500;color:var(--dim);background:transparent;border:1px solid var(--line);border-radius:8px;line-height:1}
+.signals .vote:hover{color:var(--fg);border-color:var(--fg);opacity:1}
+.signals .vote.on{color:var(--accent);border-color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent)}
+.flagbox{display:inline-block}
+.flagbox summary{list-style:none;cursor:pointer;color:var(--dim);padding:.2rem .45rem;min-height:32px;display:inline-flex;align-items:center;border:1px solid transparent;border-radius:8px;font-size:.8125rem}
+.flagbox summary::-webkit-details-marker{display:none}
+.flagbox summary:hover{color:var(--warn);border-color:var(--line)}
+.flagbox[open] summary{color:var(--warn)}
+.flagbox form{margin:.5rem 0 0;padding:.75rem;border:1px solid var(--line);border-radius:12px;background:var(--panel);position:absolute;z-index:5;max-width:22rem}
+.flagbox{position:relative}
+
+/* the board */
+.feed{list-style:none;margin:1.25rem 0;padding:0}
+.feed li{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:.85rem 1rem;margin:0 0 .7rem}
+.feed .subject{font-size:1.05rem;font-weight:650;text-decoration:none;color:var(--fg);display:block;line-height:1.3}
+.feed .subject:hover{color:var(--accent)}
+.watching{color:var(--accent)}
+.expiring{color:var(--warn)}
+.newpost{margin:1.25rem 0;border:1px solid var(--line);border-radius:14px;padding:.2rem 1rem;background:var(--panel)}
+.newpost summary{cursor:pointer;font-weight:600;padding:.85rem 0;min-height:44px;display:flex;align-items:center}
+.newpost form{margin:0 0 1rem}
+.newpost label,.newcomment label{display:block;font-size:.6875rem;text-transform:uppercase;letter-spacing:.05em;color:var(--dim);margin:.8rem 0 .3rem}
+.post-body{margin:1rem 0 1.5rem;font-size:1.02rem}
+.post-body p{margin:0 0 .85rem}
+.comment{padding:.85rem 0;border-top:1px solid var(--line)}
+.comment-body p{margin:.25rem 0}
+.comment .gone{color:var(--dim);font-style:italic}
+.rowactions{display:flex;gap:.75rem;align-items:center;flex-wrap:wrap;margin:.4rem 0 0}
+.reply summary,.revise summary{cursor:pointer;color:var(--dim);font-size:.875rem;min-height:44px;display:flex;align-items:center}
+.reply summary:hover,.revise summary:hover{color:var(--fg)}
+.reply textarea,.newcomment textarea{width:100%;margin-top:.35rem}
+.newcomment{margin:1.5rem 0 0}
+.inline{display:inline;margin:0}
+.inline button{margin:0;padding:.35rem .7rem;min-height:36px;font-size:.8125rem;background:transparent;color:var(--dim);border:1px solid var(--line)}
+.inline button:hover{color:var(--fg);border-color:var(--fg);opacity:1}
+
+/* events */
+.events{list-style:none;margin:1.25rem 0;padding:0}
+.events li{display:flex;gap:.85rem;align-items:flex-start;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:.85rem 1rem;margin:0 0 .7rem}
+.events li.off .subject{text-decoration:line-through;opacity:.6}
+.events li.now{border-color:var(--accent);box-shadow:inset 3px 0 0 var(--accent)}
+.events .date{flex:0 0 3.1rem;text-align:center;border:1px solid var(--line);border-radius:10px;padding:.35rem 0;line-height:1.1;background:var(--bg)}
+.events .date .d{display:block;font-size:1.25rem;font-weight:650}
+.events .date .m{display:block;font-size:.65rem;text-transform:uppercase;letter-spacing:.06em;color:var(--dim)}
+.events .what{flex:1 1 auto;min-width:0}
+.events .subject{font-size:1.02rem;font-weight:650;text-decoration:none;color:var(--fg);display:block;line-height:1.3}
+.events .subject:hover{color:var(--accent)}
+.events.past{opacity:.7}
+.where{display:inline-flex;align-items:center;gap:.3rem}
+.rsvp{margin:1.5rem 0 .4rem;padding:1rem;border:1px solid var(--line);border-radius:14px;background:var(--panel)}
+.rsvp h2{margin-top:0}
+.guests{list-style:none;margin:.5rem 0 1rem;padding:0}
+.guests li{padding:.4rem 0;border-bottom:1px solid var(--line)}
+.facets{display:grid;grid-template-columns:repeat(auto-fit,minmax(9rem,1fr));gap:.75rem;margin:1rem 0}
+.facets dt{font-size:.68rem;text-transform:uppercase;letter-spacing:.05em;color:var(--dim)}
+.facets dd{margin:.1rem 0 0}
+
+/* the directory, and one person */
+.visually-hidden{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.finder{display:flex;gap:.5rem;margin:0 0 1.25rem;flex-wrap:wrap}
+.finder input[type=search]{flex:1 1 14rem}
+.members{list-style:none;margin:1rem 0;padding:0;display:grid;gap:.7rem}
+@media (min-width:46rem){.members{grid-template-columns:1fr 1fr}}
+.members .card{height:100%}
+.who{display:flex;gap:.7rem;align-items:center}
+.named{min-width:0}
+.avatar{flex:0 0 auto;width:2.4rem;height:2.4rem;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent);font-weight:700;font-size:1.05rem}
+.avatar.big{width:3.5rem;height:3.5rem;font-size:1.5rem}
+.blurb{margin:.6rem 0 0;font-size:.9375rem;color:var(--dim)}
+.profile{display:flex;gap:1rem;align-items:center;margin:0 0 1rem}
+.profile h1{margin:0}
+.profile .tagline{margin:.15rem 0 0;font-size:1.02rem}
+.links{list-style:none;margin:.5rem 0;padding:0}
+.links li{padding:.35rem 0;border-bottom:1px solid var(--line);word-break:break-all;font-size:.9375rem}
+
+/* places */
+.places{list-style:none;margin:1.1rem 0;padding:0}
+.places li{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:.85rem 1rem;margin:0 0 .7rem}
+.places .facets{margin:.5rem 0 0;grid-template-columns:repeat(auto-fit,minmax(8rem,1fr));gap:.4rem .8rem}
+.places dt{font-size:.66rem;text-transform:uppercase;letter-spacing:.05em;color:var(--dim)}
+.places dd{margin:0;font-size:.9rem}
+.kinds{list-style:none;margin:1.25rem 0;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(13rem,1fr));gap:.7rem}
+
+/* your page */
+.mecard{display:flex;gap:1rem;align-items:flex-start;flex-wrap:wrap;justify-content:space-between;padding:.5rem 0 .8rem;border-bottom:1px solid var(--line);margin-bottom:.6rem}
+.mecard h1{margin:0 0 .15rem}
+.mecard .tagline{margin:.35rem 0 0;font-size:1.02rem}
+.mestate{display:flex;gap:.4rem;flex-wrap:wrap;align-items:center}
+.capabilities{margin:2rem 0 0;padding:1rem;border:1px solid var(--line);border-radius:14px;background:var(--panel)}
+.capabilities h2{margin-top:0;font-size:1rem}
+.rolecard{display:flex;gap:.6rem;align-items:baseline;margin:.35rem 0;flex-wrap:wrap}
+.cando{list-style:none;margin:.7rem 0 .4rem;padding:0;display:grid;grid-template-columns:repeat(auto-fit,minmax(14rem,1fr));gap:.25rem .9rem}
+.cando li{font-size:.9rem}
+.cando .dim{font-size:.72rem;text-transform:uppercase;letter-spacing:.04em;margin-right:.35rem}
+.tabs{display:flex;gap:.25rem;margin:1.25rem 0 1.5rem;border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none}
+.tabs::-webkit-scrollbar{display:none}
+.tabs a{padding:.65rem .8rem;color:var(--dim);text-decoration:none;font-size:.9375rem;border-bottom:2px solid transparent;display:flex;align-items:center;gap:.4rem;white-space:nowrap;min-height:44px}
+.tabs a.on{color:var(--fg);font-weight:600;border-bottom-color:var(--accent)}
+.inbox{list-style:none;margin:0;padding:0}
+.inbox li{padding:.6rem 0;border-bottom:1px solid var(--line)}
+.inbox li.unread{font-weight:600}
+h2.ask{font-size:1.05rem;font-weight:650;margin:1.25rem 0 .75rem}
+.question{margin:0 0 1.5rem;padding:0 0 0 .85rem;border-left:2px solid var(--line)}
+.question.done{border-left-color:var(--accent)}
+.question .prompt{font-weight:600;margin:0 0 .3rem}
+.question textarea,.question select{width:100%}
+.scale{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.4rem}
+.scale label{display:inline-flex;align-items:center;gap:.35rem;margin:0;padding:.45rem .75rem;min-height:44px;border:1px solid var(--line);border-radius:10px;cursor:pointer;text-transform:none;letter-spacing:0;font-size:.9375rem;color:var(--fg);background:var(--panel)}
+.scale label:has(input:checked){border-color:var(--accent);background:color-mix(in srgb,var(--accent) 12%,transparent);font-weight:600}
+.scale input{width:auto;min-height:0;margin:0}
+.tally{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap;margin:1rem 0 0}
+/* the welcome, which is three steps and says which one you are on */
+.steps{list-style:none;display:flex;gap:.5rem;flex-wrap:wrap;margin:0 0 1.5rem;padding:0;counter-reset:step;font-size:.8125rem;color:var(--dim)}
+.steps li{display:flex;align-items:center;gap:.4rem}
+.steps li::before{counter-increment:step;content:counter(step);display:inline-flex;align-items:center;justify-content:center;width:1.4rem;height:1.4rem;border-radius:999px;border:1px solid var(--line);font-weight:700;font-size:.7rem}
+.steps li+li::after{content:"";order:-1;width:1rem;height:1px;background:var(--line)}
+.steps li.on{color:var(--fg);font-weight:600}
+.steps li.on::before{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent)}
+.steps li.past::before{border-color:var(--good);color:var(--good)}
+.revise{margin:1.75rem 0 0;border-top:1px solid var(--line);padding-top:.9rem}
+.revise .question{opacity:.85}
+.revise[open] .question{opacity:1}
+
+/* tables stay readable on a phone by scrolling themselves rather than the page */
+.scroller{overflow-x:auto;-webkit-overflow-scrolling:touch}
+table{width:100%;border-collapse:collapse;font-size:.9375rem}
+th{text-align:left;font-size:.75rem;text-transform:uppercase;letter-spacing:.04em;color:var(--dim);font-weight:500;padding:.4rem .5rem .4rem 0;border-bottom:1px solid var(--line)}
+td{padding:.55rem .5rem;border-bottom:1px solid var(--line);vertical-align:middle}
+td.dim{color:var(--dim)}
+td.actions{text-align:right;white-space:nowrap}
+dl{margin:1.5rem 0 0;padding-top:1rem;border-top:1px solid var(--line)}
+dt{color:var(--dim);font-size:.8125rem;text-transform:uppercase;letter-spacing:.04em}
+dd{margin:.15rem 0 .75rem}
+
+/* the consent screen a model's connector lands on */
+.consent{border:1px solid var(--line);border-radius:14px;padding:1rem 1.15rem;margin:1.25rem 0;background:var(--panel)}
+.consent h2{font-size:.95rem;margin:0 0 .6rem}
+.powers{list-style:none;margin:0 0 .9rem;padding:0}
+.powers li{padding:.25rem 0 .25rem 1.5rem;position:relative}
+.powers li.yes::before{content:"+";position:absolute;left:.3rem;color:var(--good);font-weight:700}
+.powers li.no::before{content:"\2013";position:absolute;left:.3rem;color:var(--dim);font-weight:700}
+.powers li.no{color:var(--dim)}
+.note{font-size:.875rem;color:var(--dim);margin:0 0 .5rem}
+.fine{font-size:.8125rem;color:var(--dim);margin:0}
+.fine code{word-break:break-all}
+.consent-form{display:flex;align-items:center;gap:1rem;flex-wrap:wrap}
+.consent-form .cancel{font-size:.9375rem;color:var(--dim)}
+.footnote{margin-top:2rem;padding-top:1rem;border-top:1px solid var(--line);font-size:.875rem;color:var(--dim)}
+.footnote a{color:var(--dim)}
+.icon{width:1rem;height:1rem;flex:0 0 auto;vertical-align:-.15em}
+
+/* the footer, and the cookie line that is a notice rather than a wall */
+.sitefoot{border-top:1px solid var(--line);color:var(--dim);font-size:.78rem;line-height:1.5}
+.sitefoot div{max-width:52rem;margin:0 auto;padding:1.1rem 1rem 1.6rem;display:flex;gap:.5rem 1rem;flex-wrap:wrap;align-items:baseline}
+.sitefoot a{color:var(--dim)}
+.sitefoot a:hover{color:var(--fg)}
+.sitefoot .cookies{flex:1 1 18rem;margin:0}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+/* A vote inside a conversation. Bars are a share of the strongest option rather than of the total:
+   a chart where every bar is a tenth of the width says nothing, and this one is read for shape. */
+.poll{border:1px solid var(--line);border-radius:12px;padding:1rem 1.1rem;margin:0 0 1rem;background:var(--panel)}
+.poll.settled{opacity:.85}
+.poll h3{margin:0 0 .3rem;font-size:1.05rem}
+.poll h4{margin:1.1rem 0 .3rem;font-size:.9rem;color:var(--dim);text-transform:uppercase;letter-spacing:.04em}
+.poll .meta{margin:0 0 .6rem}
+.option{display:grid;grid-template-columns:1fr auto;gap:.15rem .8rem;align-items:center;padding:.45rem 0;border-bottom:1px solid var(--line)}
+.option:last-of-type{border-bottom:0}
+.option.winning .what{font-weight:650}
+.option .what{grid-column:1;min-width:0}
+.option .bar{grid-column:1;height:.55rem;border-radius:3px;background:color-mix(in srgb,var(--fg) 8%,transparent);overflow:hidden}
+.option .bar span{display:block;height:100%;background:var(--accent);border-radius:3px;min-width:2px}
+.option.winning .bar span{background:var(--good)}
+.option .tally{grid-column:2;grid-row:1;text-align:right;font-variant-numeric:tabular-nums;font-size:.875rem;white-space:nowrap}
+.option .votebuttons{grid-column:2;grid-row:2;display:flex;gap:.3rem;justify-content:flex-end}
+.option .vote{min-height:36px;padding:.25rem .7rem;font:inherit;font-size:.8125rem;border:1px solid var(--line);border-radius:999px;background:transparent;color:var(--dim);cursor:pointer}
+.option .vote:hover{color:var(--fg);border-color:var(--fg)}
+.option .vote.on{background:var(--accent);border-color:var(--accent);color:var(--bg);font-weight:600}
+.addoption{display:flex;gap:.4rem;flex-wrap:wrap;align-items:center;margin:.6rem 0 0}
+.addoption input,.addoption select{min-height:44px}
+.askpoll label{display:block;margin:.7rem 0 .2rem;font-size:.9rem}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+</style></head><body>
+<a class="skip" href="#main">Skip to the content</a>
+<header><nav aria-label="Primary">
+<span class="brand">{{community}}</span>
+<button type="button" class="themer" data-theme-toggle aria-pressed="false" aria-label="light or dark" title="Switch to dark"><span class="sun">{{{sunIcon}}}</span><span class="moon">{{{moonIcon}}}</span></button>
+{{! the bell stays outside the menu: a count nobody can see until they open something is a count
+    that does not do its job }}
+{{#nav}}{{#bell}}<a href="{{href}}" class="bell{{#lit}} lit{{/lit}}" data-bell data-count="0" aria-label="notifications"><span class="glyph" aria-hidden="true">&#128276;</span><span class="count" data-bell-count>{{#count}}{{.}}{{/count}}{{^count}}0{{/count}}</span></a>{{/bell}}{{/nav}}
+<details class="menu" data-menu>
+<summary aria-label="menu"><span class="bars" aria-hidden="true"><i></i><i></i><i></i></span><span class="word">Menu</span></summary>
+<div class="sheet">
+{{#nav}}{{#post}}<form method="post" action="{{href}}" class="navform"><input type="hidden" name="csrf" value="{{csrf}}"><button type="submit">{{label}}</button></form>{{/post}}{{^post}}{{^bell}}<a href="{{href}}">{{label}}{{#bubble}}<span class="bubble">{{.}}</span>{{/bubble}}</a>{{/bell}}{{/post}}{{/nav}}
+</div>
+</details>
+</nav></header>
+{{#banner}}<div class="asking"><span>{{text}}</span><a href="{{href}}">{{label}}</a></div>{{/banner}}
+<main id="main">
+{{#problem}}<p class="problem">{{.}}</p>{{/problem}}
+{{$body}}{{/body}}
+</main>
+<footer class="sitefoot"><div>
+<span>{{community}}</span>
+<a href="/legal/terms-of-service">Terms</a>
+<a href="/legal/privacy-policy">Privacy</a>
+<p class="cookies">Two cookies, both needed to keep you signed in. No trackers, no analytics, nothing loaded from anybody else's server. <a href="/legal/privacy-policy#cookies">What that means</a>.</p>
+</div></footer>
+<script src="/~menu.js" defer></script>
+{{#live}}<script src="{{liveUrl}}/live.js" data-live="{{liveUrl}}" data-me="{{meId}}" defer></script>{{/live}}
+</body></html>

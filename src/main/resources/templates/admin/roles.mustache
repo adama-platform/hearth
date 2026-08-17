@@ -1,0 +1,10 @@
+{{<shell}}{{$content}}
+<h1>Roles</h1>
+<p class="hint">A role is a name and a list of things it lets somebody do. Give somebody a role in
+  <a href="{{adminUrl}}/people">People</a>; decide what it means here.</p>
+<p class="hint"><strong>Administrator is built in</strong> and cannot be edited or removed &mdash; a
+  community that can edit its way out of having an administrator has locked itself out of its own
+  server. Everything else is yours to invent.</p>
+<div class="doing"><a class="btn" href="{{newUrl}}">{{{plusIcon}}}New role</a></div>
+<div class="panel" data-panel="{{panelUrl}}">{{{panel}}}</div>
+{{/content}}{{/shell}}

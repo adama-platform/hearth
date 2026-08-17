@@ -1,0 +1,320 @@
+{{<layout}}{{$body}}
+<h1>The app, and notifications</h1>
+<p class="hint">Two separate things, and they go wrong separately. Putting {{community}} on your home
+  screen makes it open like an app. Turning notifications on is what lets it tell you something.
+  You can have either without the other &mdash; and the button at the bottom of this page proves
+  whether the second one actually works, which is the only way anybody ever finds out.</p>
+
+{{^secure}}
+<div class="warn-box"><strong>This page is not on https.</strong>
+  Neither installing nor notifications work over plain http &mdash; browsers refuse both, and there
+  is nothing on this page that can get around it. Whoever runs this server needs to turn on
+  certificates first.</div>
+{{/secure}}
+
+<h2>1. Put it on your home screen</h2>
+
+<details class="how" open>
+  <summary>iPhone or iPad</summary>
+  <ol>
+    <li>Open {{community}} in <strong>Safari</strong>. This does not work in Chrome or Firefox on
+      iOS &mdash; Apple only allows Safari to do it.</li>
+    <li>Press the <strong>Share</strong> button (the square with an arrow coming out of it).</li>
+    <li>Scroll down and choose <strong>Add to Home Screen</strong>.</li>
+    <li>Press <strong>Add</strong>.</li>
+  </ol>
+  <p class="dim">Notifications on iOS <em>only</em> work from the icon on your home screen &mdash;
+    not from Safari. So on an iPhone this step is not optional if you want to be told anything.
+    You will also need iOS 16.4 or newer.</p>
+</details>
+
+<details class="how">
+  <summary>Android</summary>
+  <ol>
+    <li>Open {{community}} in <strong>Chrome</strong>.</li>
+    <li>Look for <strong>Install app</strong> or <strong>Add to Home screen</strong> &mdash; either
+      in the bar at the bottom of the screen, or in the &#8942; menu at the top right.</li>
+    <li>Press <strong>Install</strong>.</li>
+  </ol>
+</details>
+
+<details class="how">
+  <summary>A computer</summary>
+  <ol>
+    <li>In Chrome or Edge, look for the small install icon at the right-hand end of the address
+      bar, or open the &#8942; menu and choose <strong>Install {{community}}</strong>.</li>
+    <li>In Safari on a Mac, choose <strong>File &rarr; Add to Dock</strong>.</li>
+    <li>Firefox does not install web apps. Notifications still work in the browser.</li>
+  </ol>
+</details>
+
+<p>Whatever you do here, <a href="{{shell}}">{{shell}}</a> is the app. Everything on this site keeps
+  working in an ordinary browser tab either way.</p>
+
+<h2>2. Turn notifications on</h2>
+
+{{^signedIn}}
+<p class="empty"><strong>You need to be signed in.</strong> A notification is sent to a person, and
+  this browser has not said who it is. <a href="{{loginUrl}}">Sign in</a> and come back.</p>
+{{/signedIn}}
+
+{{#signedIn}}
+<p>Notifications are per browser, not per person: turning them on here does nothing to your phone,
+  and turning them on on your phone does nothing here. Do it on whichever thing you want to be
+  interrupted by.</p>
+<p class="hint">A notification here says who it is from and where to go, and never what it is
+  about &mdash; it crosses somebody else's servers and lands on a lock screen anybody nearby can
+  read.</p>
+
+<div class="state" data-state hidden>
+  <span class="pill" data-state-pill>&mdash;</span>
+  <span class="dim" data-state-word></span>
+</div>
+{{#subscribed}}
+<p class="done">{{devices}} browser(s) of yours are subscribed, counting this one if you turned it
+  on here.</p>
+{{/subscribed}}
+
+<p class="actions">
+  <button type="button" data-turn-on>Turn on notifications</button>
+  <button type="button" class="quiet" data-turn-off hidden>Turn them off on this browser</button>
+</p>
+
+<div class="blocked" data-blocked hidden>
+  <p><strong>This browser has been told no, and will not ask again.</strong> That is a decision
+    stored by the browser rather than by us, so it has to be undone there:</p>
+  <ul>
+    <li><strong>Chrome</strong>: press the icon to the left of the address, then Notifications
+      &rarr; Allow.</li>
+    <li><strong>Safari on a Mac</strong>: Safari &rarr; Settings &rarr; Websites &rarr;
+      Notifications.</li>
+    <li><strong>iPhone</strong>: Settings &rarr; Notifications &rarr; find {{community}} in the
+      list.</li>
+    <li><strong>Android</strong>: press and hold the icon &rarr; App info &rarr; Notifications.</li>
+  </ul>
+</div>
+
+<h2>3. Prove it works</h2>
+<p>This sends a real notification to this browser, through the same path everything else uses. If
+  one appears, notifications work. If nothing appears, something below the browser is eating them
+  &mdash; a focus mode, a system-wide "do not disturb", or notifications switched off for the whole
+  app in your phone's settings.</p>
+
+<p class="actions">
+  <button type="button" data-test>Send me a test notification</button>
+</p>
+<p class="result" data-result hidden></p>
+
+<p class="hint">Nothing here is stored about the test beyond the ordinary record that a
+  notification was sent, which is the same record every other one leaves.</p>
+{{/signedIn}}
+
+<script nonce="{{nonce}}" data-test-url="{{testUrl}}" data-push-url="{{pushUrl}}"
+        data-csrf="{{csrf}}" data-key="{{vapidKey}}" data-signed-in="{{signedIn}}">
+(function () {
+  var cfg = document.currentScript;
+  var testUrl = cfg.getAttribute('data-test-url');
+  var pushUrl = cfg.getAttribute('data-push-url');
+  var csrf = cfg.getAttribute('data-csrf');
+  var key = cfg.getAttribute('data-key');
+  if (cfg.getAttribute('data-signed-in') !== 'true') { return; }
+
+  var state = document.querySelector('[data-state]');
+  var pill = document.querySelector('[data-state-pill]');
+  var word = document.querySelector('[data-state-word]');
+  var blocked = document.querySelector('[data-blocked]');
+  var turnOn = document.querySelector('[data-turn-on]');
+  var turnOff = document.querySelector('[data-turn-off]');
+  var test = document.querySelector('[data-test]');
+  var result = document.querySelector('[data-result]');
+  var supported = 'serviceWorker' in navigator && 'PushManager' in window
+    && 'Notification' in window;
+
+  function show(kind, text) {
+    if (!result) { return; }
+    result.hidden = false;
+    result.className = 'result ' + kind;
+    result.textContent = text;
+  }
+
+  function say(cls, label, detail) {
+    if (!state) { return; }
+    state.hidden = false;
+    pill.className = 'pill ' + cls;
+    pill.textContent = label;
+    word.textContent = detail || '';
+  }
+
+  function b64(base64) {
+    var padded = (base64 + '='.repeat((4 - base64.length % 4) % 4))
+      .replace(/-/g, '+').replace(/_/g, '/');
+    var raw = atob(padded);
+    var bytes = new Uint8Array(raw.length);
+    for (var i = 0; i < raw.length; i++) { bytes[i] = raw.charCodeAt(i); }
+    return bytes;
+  }
+
+  function encode(buffer) {
+    var bytes = new Uint8Array(buffer);
+    var binary = '';
+    for (var i = 0; i < bytes.length; i++) { binary += String.fromCharCode(bytes[i]); }
+    return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  }
+
+  // Every step below repairs rather than duplicates: registering returns the worker that is
+  // already there, subscribing returns the subscription that is already there, and posting it
+  // again updates one row. Somebody pressing the button twice is not a second device.
+  function subscribe() {
+    return navigator.serviceWorker.register('/sw.js').then(function () {
+      return navigator.serviceWorker.ready;
+    }).then(function (registration) {
+      return registration.pushManager.getSubscription().then(function (existing) {
+        if (existing) { return existing; }
+        return registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: b64(key)
+        });
+      });
+    }).then(function (subscription) {
+      var body = new URLSearchParams();
+      body.set('csrf', csrf);
+      body.set('endpoint', subscription.endpoint);
+      body.set('p256dh', encode(subscription.getKey('p256dh')));
+      body.set('auth', encode(subscription.getKey('auth')));
+      return fetch(pushUrl, {method: 'POST', body: body, credentials: 'same-origin'})
+        .then(function (response) {
+          if (!response.ok) { throw new Error('the server would not take the subscription'); }
+          return subscription;
+        });
+    });
+  }
+
+  function refresh() {
+    if (!supported) {
+      say('warn', 'Not supported', 'This browser cannot do notifications at all.');
+      if (turnOn) { turnOn.disabled = true; }
+      if (test) { test.disabled = true; }
+      return;
+    }
+    if (Notification.permission === 'denied') {
+      say('bad', 'Blocked', 'This browser has refused, and will not ask again.');
+      if (blocked) { blocked.hidden = false; }
+      if (turnOn) { turnOn.hidden = true; }
+      return;
+    }
+    if (Notification.permission !== 'granted') {
+      say('warn', 'Not on yet', 'Nothing will reach you on this browser.');
+      return;
+    }
+    navigator.serviceWorker.getRegistration().then(function (registration) {
+      if (!registration) { say('warn', 'Not on yet', 'Press the button.'); return; }
+      registration.pushManager.getSubscription().then(function (subscription) {
+        if (subscription) {
+          say('good', 'On', 'This browser is subscribed.');
+          if (turnOn) { turnOn.textContent = 'Turn them on again'; }
+          if (turnOff) { turnOff.hidden = false; }
+        } else {
+          say('warn', 'Not on yet', 'Permission is given but this browser is not subscribed.');
+        }
+      });
+    });
+  }
+
+  if (turnOn) {
+    turnOn.addEventListener('click', function () {
+      turnOn.disabled = true;
+      Notification.requestPermission().then(function (permission) {
+        if (permission !== 'granted') { turnOn.disabled = false; refresh(); return; }
+        return subscribe().then(function () {
+          turnOn.disabled = false;
+          show('good', 'This browser is subscribed. Send yourself a test below.');
+          refresh();
+        });
+      }).catch(function (err) {
+        turnOn.disabled = false;
+        show('bad', 'That did not work: ' + (err && err.message ? err.message : err));
+      });
+    });
+  }
+
+  if (turnOff) {
+    turnOff.addEventListener('click', function () {
+      var body = new URLSearchParams();
+      body.set('csrf', csrf);
+      body.set('action', 'off');
+      navigator.serviceWorker.getRegistration().then(function (registration) {
+        return registration ? registration.pushManager.getSubscription() : null;
+      }).then(function (subscription) {
+        if (subscription) { subscription.unsubscribe(); }
+        return fetch(pushUrl, {method: 'POST', body: body, credentials: 'same-origin'});
+      }).then(function () {
+        show('good', 'Off. Nothing will reach you on this browser.');
+        if (turnOff) { turnOff.hidden = true; }
+        refresh();
+      });
+    });
+  }
+
+  // The worker tells the page when one lands. That is the half worth waiting for: the server
+  // saying it sent one and the device showing one are different facts, and every push problem
+  // lives in the gap between them.
+  var arrived = false;
+  if (supported) {
+    navigator.serviceWorker.addEventListener('message', function (event) {
+      if (!event.data || event.data.hearth !== 'push-arrived') { return; }
+      arrived = true;
+      show('good', 'It arrived. Notifications work on this browser.');
+    });
+  }
+
+  if (test) {
+    test.addEventListener('click', function () {
+      arrived = false;
+      test.disabled = true;
+      show('', 'Sending...');
+      var body = new URLSearchParams();
+      body.set('csrf', csrf);
+      fetch(testUrl, {method: 'POST', body: body, credentials: 'same-origin'})
+        .then(function (response) { return response.json(); })
+        .then(function (answer) {
+          test.disabled = false;
+          if (!answer.ok) { show('bad', answer.detail || 'Nothing went.'); return; }
+          show('', 'Sent to ' + answer.devices + ' browser(s). Waiting for it to land...');
+          // A push service is allowed to take its time, and a notification that has not arrived
+          // in ten seconds is one somebody would call broken anyway.
+          setTimeout(function () {
+            if (arrived) { return; }
+            show('warn', 'The server sent it and this page never heard it land. If a notification'
+              + ' appeared anyway, everything is fine. If nothing appeared, check that this device'
+              + ' is not in a focus mode and that notifications are allowed for this app in your'
+              + ' system settings.');
+          }, 10000);
+        })
+        .catch(function (err) {
+          test.disabled = false;
+          show('bad', 'Could not ask the server: ' + (err && err.message ? err.message : err));
+        });
+    });
+  }
+
+  refresh();
+})();
+</script>
+
+<style>
+.how{border:1px solid var(--line);border-radius:10px;padding:.2rem .9rem;margin:0 0 .6rem}
+.how summary{cursor:pointer;padding:.7rem 0;min-height:44px;display:flex;align-items:center;font-weight:600}
+.how ol{margin:0 0 .8rem}
+.state{display:flex;gap:.6rem;align-items:center;margin:0 0 1rem}
+.actions{display:flex;gap:.6rem;flex-wrap:wrap}
+.actions button{min-height:44px}
+.actions .quiet{background:transparent;color:var(--dim);border:1px solid var(--line)}
+.result{border-left:3px solid var(--line);padding:.6rem .9rem;border-radius:0 8px 8px 0;background:var(--panel)}
+.result.good{border-left-color:var(--good)}
+.result.bad{border-left-color:var(--bad)}
+.result.warn{border-left-color:var(--warn)}
+.warn-box{border:1px solid var(--warn);border-radius:10px;padding:.9rem;margin:0 0 1.5rem}
+.blocked{border:1px solid var(--line);border-radius:10px;padding:.9rem 1rem;margin:0 0 1.5rem}
+[hidden]{display:none!important}
+</style>
+{{/body}}{{/layout}}

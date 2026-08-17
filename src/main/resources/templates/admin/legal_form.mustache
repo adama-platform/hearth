@@ -1,0 +1,32 @@
+{{<shell}}{{$content}}
+<p class="crumb"><a href="{{backUrl}}">&larr; Legal</a></p>
+<h1>{{heading}}</h1>
+<p class="hint">{{summary}} &middot; published at <a href="{{publicUrl}}">{{publicUrl}}</a></p>
+{{^overridden}}<p class="hint">This is the text the software ships with. Saving anything here makes
+  it yours, and this community stops picking up improvements to the default.</p>{{/overridden}}
+{{#overridden}}<p class="hint">This community has written its own. Emptying the box below and saving
+  puts the shipped text back.</p>{{/overridden}}
+<p class="problem">Not legal advice. Nobody who wrote the default is a lawyer, and it cannot know
+  which country you are in.</p>
+
+<form method="post" action="{{backUrl}}">
+  <input type="hidden" name="csrf" value="{{csrf}}">
+  <input type="hidden" name="action" value="save">
+  <input type="hidden" name="slug" value="{{slug}}">
+  <div><label for="l-body">the document, in markdown &mdash; <code>{{lbrace}}community{{rbrace}}</code> and <code>{{lbrace}}domain{{rbrace}}</code> are filled in when it is shown</label>
+    <textarea id="l-body" name="body" rows="34" class="mono" spellcheck="true">{{form_body}}</textarea></div>
+  <div class="rowactions">
+    <button type="submit">Save</button>
+    <a href="{{publicUrl}}">See the page</a>
+  </div>
+</form>
+
+{{#overridden}}
+<form method="post" action="{{backUrl}}" class="inline">
+  <input type="hidden" name="csrf" value="{{csrf}}">
+  <input type="hidden" name="action" value="reset">
+  <input type="hidden" name="slug" value="{{slug}}">
+  <button type="submit" class="quiet">Go back to the text this server ships</button>
+</form>
+{{/overridden}}
+{{/content}}{{/shell}}

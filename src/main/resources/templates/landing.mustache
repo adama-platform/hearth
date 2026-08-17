@@ -1,0 +1,13 @@
+{{<layout}}{{$body}}
+<p class="face">:-)</p>
+<h1>{{community}}</h1>
+<p>Hello, world.</p>
+<p>This domain has a configuration, so it is served.</p>
+{{#signedIn}}<p>You are signed in as {{email}}.</p>{{/signedIn}}
+{{^signedIn}}<p class="hint">Nobody is signed in. <a href="{{registerUrl}}">Create an account</a>.</p>{{/signedIn}}
+<dl>
+<dt>domain</dt><dd><code>{{domain}}</code></dd>
+{{#diagnostics}}<dt>config</dt><dd><code>{{configFile}}</code></dd>{{/diagnostics}}
+{{#diagnostics}}<dt>database</dt><dd><code>{{databaseDomain}}</code></dd>{{/diagnostics}}
+</dl>
+{{/body}}{{/layout}}

@@ -1,0 +1,78 @@
+{{<shell}}{{$content}}
+<p class="crumb"><a href="{{backUrl}}">&larr; Content</a>{{^missing}} &middot; <a href="{{editUrl}}">edit {{uri}}</a>{{/missing}}</p>
+<h1>{{heading}}</h1>
+{{#missing}}<p class="hint">That page is gone, and its history went with it.</p>{{/missing}}
+{{^missing}}
+<p class="hint">Every save is kept. Click a version to see the page as it was &mdash; rendered through
+  the current template, because that is what restoring it would produce.</p>
+
+{{^anyVersions}}<p class="hint">No versions yet. The next save will start the history.</p>{{/anyVersions}}
+{{#anyVersions}}
+<p class="count">{{count}} version(s)</p>
+<table class="history" data-preview="{{previewBase}}" data-changes="{{changesBase}}">
+  <thead><tr><th class="num">#</th><th>what changed</th><th>who</th><th>when</th><th></th></tr></thead>
+  <tbody>{{#versions}}<tr>
+    <td class="num">{{version}}{{#latest}} <span class="pill good">now</span>{{/latest}}</td>
+    <td>{{summary}}</td>
+    <td class="dim">{{who}}</td>
+    <td class="dim mono">{{when}}</td>
+    <td class="actions">
+      <button type="button" class="quiet" data-version="{{version}}">preview</button>
+      {{^firstVersion}}<button type="button" class="quiet" data-changes-version="{{version}}">changes</button>{{/firstVersion}}
+      {{^latest}}<form class="inline" method="post" action="{{action}}"><input type="hidden" name="csrf" value="{{csrf}}"><input type="hidden" name="action" value="restore"><input type="hidden" name="id" value="{{contentId}}"><input type="hidden" name="version" value="{{version}}"><button type="submit" class="quiet">restore</button></form>{{/latest}}
+    </td>
+  </tr>{{/versions}}</tbody>
+</table>
+<p class="hint">A version marked <em>snapshot</em> holds the whole page; the rest are patches against
+  the one before. That is why a typo costs bytes and a rewrite costs the page.</p>
+<p class="hint"><strong>Restore</strong> saves the old version as a new one. Nothing is deleted and
+  nothing is rewritten &mdash; the edit you are undoing stays in the history, because a history that
+  loses the mistake loses the evidence of what was tried.</p>
+{{/anyVersions}}
+{{/missing}}
+
+<dialog id="preview" class="preview">
+  <div class="preview-head">
+    <strong data-preview-title>Version</strong>
+    <button type="button" class="quiet" data-close>close</button>
+  </div>
+  <div class="preview-body" data-preview-body></div>
+</dialog>
+
+<script nonce="{{nonce}}">
+// The preview modal. The base URL comes from a data attribute rather than being interpolated here,
+// because mustache escapes for HTML and a script block does not decode entities -- the same rule
+// that the live panels follow.
+(function () {
+  var table = document.querySelector('[data-preview]');
+  var dialog = document.getElementById('preview');
+  if (!table || !dialog) { return; }
+  var base = table.getAttribute('data-preview');
+  var changesBase = table.getAttribute('data-changes');
+  var body = dialog.querySelector('[data-preview-body]');
+  var title = dialog.querySelector('[data-preview-title]');
+
+  table.addEventListener('click', function (e) {
+    var button = e.target.closest('[data-version], [data-changes-version]');
+    if (!button) { return; }
+    var diffing = button.hasAttribute('data-changes-version');
+    var version = button.getAttribute(diffing ? 'data-changes-version' : 'data-version');
+    title.textContent = diffing ? 'What version ' + version + ' changed' : 'Version ' + version;
+    body.innerHTML = '<p class="hint">Loading\u2026</p>';
+    if (typeof dialog.showModal === 'function') { dialog.showModal(); } else { dialog.setAttribute('open', ''); }
+    fetch((diffing ? changesBase : base) + version, {credentials: 'same-origin'})
+      .then(function (r) { return r.ok ? r.text() : null; })
+      .then(function (html) {
+        body.innerHTML = html === null ? '<p class="hint">That version could not be loaded.</p>' : html;
+      })
+      .catch(function () { body.innerHTML = '<p class="hint">That version could not be loaded.</p>'; });
+  });
+
+  dialog.addEventListener('click', function (e) {
+    if (e.target.hasAttribute('data-close') || e.target === dialog) {
+      if (typeof dialog.close === 'function') { dialog.close(); } else { dialog.removeAttribute('open'); }
+    }
+  });
+})();
+</script>
+{{/content}}{{/shell}}

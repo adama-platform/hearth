@@ -1,0 +1,10 @@
+{{<shell}}{{$content}}
+<p class="crumb"><a href="{{calendarUrl}}">&larr; Events</a></p>
+<h1>Suggested</h1>
+<p class="hint">What members have put forward, oldest first &mdash; a queue people are waiting in is
+  answered in the order they joined it. Accepting one publishes it; declining keeps it, with the
+  reason, so the person who suggested it can see what happened.</p>
+{{^suggestionsOn}}<p class="problem">Suggestions are switched off for this community, so nothing
+  new will arrive here. Turn them on with <code>calendar.suggestions</code>.</p>{{/suggestionsOn}}
+<div class="panel" data-panel="{{panelUrl}}">{{{panel}}}</div>
+{{/content}}{{/shell}}

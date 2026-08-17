@@ -1,0 +1,30 @@
+<p class="count">{{count}} waiting</p>
+{{^anySuggestions}}<p class="hint">Nothing waiting. When somebody suggests an event it appears here
+  before it appears anywhere else.</p>{{/anySuggestions}}
+{{#suggestions}}
+<div class="suggestion">
+  <h3>{{title}}</h3>
+  <div class="meta">{{who}} &middot; {{when}}{{#startTime}} &middot; {{startTime}}{{/startTime}}{{#location}} &middot; {{location}}{{/location}}</div>
+  {{#body}}<p class="said">{{body}}</p>{{/body}}
+  <div class="doing">
+    <form method="post" action="{{action}}" class="inline">
+      <input type="hidden" name="csrf" value="{{csrf}}">
+      <input type="hidden" name="action" value="accept">
+      <input type="hidden" name="id" value="{{id}}">
+      <button class="btn" type="submit">Put it on the calendar</button>
+    </form>
+    <a class="btn secondary" href="{{editUrl}}">Edit first</a>
+    <details class="decline">
+      <summary>Decline</summary>
+      <form method="post" action="{{action}}">
+        <input type="hidden" name="csrf" value="{{csrf}}">
+        <input type="hidden" name="action" value="decline">
+        <input type="hidden" name="id" value="{{id}}">
+        <label for="d-{{id}}">why &mdash; they will see this</label>
+        <input id="d-{{id}}" type="text" name="note" maxlength="512" placeholder="We already have something that weekend">
+        <button class="btn secondary" type="submit">Decline it</button>
+      </form>
+    </details>
+  </div>
+</div>
+{{/suggestions}}

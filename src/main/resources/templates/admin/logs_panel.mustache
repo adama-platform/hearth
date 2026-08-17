@@ -1,0 +1,9 @@
+{{^anyHits}}<p class="hint">Nothing matches.</p>{{/anyHits}}
+{{#anyHits}}<table>
+  <thead><tr><th>at</th><th>method</th><th>uri</th><th class="num">status</th><th class="num">ms</th><th>ip</th><th class="num">user</th><th>agent</th></tr></thead>
+  <tbody>{{#hits}}<tr class="{{#error}}err{{/error}}">
+    <td class="dim mono">{{at}}</td><td class="dim">{{method}}</td><td class="mono">{{uri}}</td>
+    <td class="num">{{status}}</td><td class="num dim">{{millis}}</td>
+    <td class="dim mono">{{ip}}</td><td class="num dim">{{user}}</td><td class="dim">{{agent}}</td>
+  </tr>{{/hits}}</tbody>
+</table>{{/anyHits}}

@@ -1,0 +1,13 @@
+{{<shell}}{{$content}}
+<h1>People</h1>
+<form class="tools" method="get" action="{{action}}" data-filters>
+  <div class="search">{{{searchIcon}}}
+    <input type="search" name="q" value="{{q}}" placeholder="Search people by email address" aria-label="search people by email">
+  </div>
+  <div class="chips" role="group" aria-label="show">
+    {{#states}}<label class="chip"><input type="radio" name="state" value="{{value}}"{{#selected}} checked{{/selected}}>{{label}}</label>{{/states}}
+  </div>
+  <noscript><button type="submit" class="quiet">Filter</button></noscript>
+</form>
+<div class="panel" data-panel="{{panelUrl}}">{{{panel}}}</div>
+{{/content}}{{/shell}}

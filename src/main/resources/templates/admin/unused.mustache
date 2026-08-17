@@ -1,0 +1,60 @@
+{{<shell}}{{$content}}
+<p class="crumb"><a href="{{backUrl}}">&larr; Files</a></p>
+<h1>Unused files</h1>
+
+<p class="hint">Everything nothing points at any more. This is a <strong>mark and sweep</strong>:
+  every column in this database that holds text somebody wrote is read, every
+  <code>/attachment/…</code> address in it is marked, and what is left over is listed here.
+  {{rowsRead}} row(s) read, {{referenced}} file(s) still pointed at.</p>
+
+{{^trustworthy}}
+<p class="problem">Part of the scan could not be read, so this list is not to be trusted and nothing
+  can be deleted from it: {{#problems}}{{.}} {{/problems}}</p>
+{{/trustworthy}}
+
+{{#anyWhere}}<p class="hint">Pointed at from: {{#where}}<strong>{{source}}</strong> ({{count}})
+  {{/where}}</p>{{/anyWhere}}
+
+{{^anyUnused}}<p class="hint">Nothing is unreferenced. Anything uploaded in the last
+  {{graceHours}} hours is left out of this whatever the scan says &mdash; it is very likely on
+  somebody's clipboard, on its way into a page that does not exist yet.</p>{{/anyUnused}}
+
+{{#anyUnused}}
+<p class="hint"><strong>{{count}} file(s), {{freeable}}.</strong> Anything uploaded in the last
+  {{graceHours}} hours is left out whatever the scan says. Deleting takes the file with the row and
+  cannot be undone.</p>
+
+{{#trustworthy}}
+<form method="post" action="{{action}}">
+  <input type="hidden" name="csrf" value="{{csrf}}">
+  <input type="hidden" name="action" value="sweep">
+  <div><label for="u-confirm">type <strong>delete</strong> to remove all {{count}} of them</label>
+    <input id="u-confirm" type="text" name="confirm" autocomplete="off" placeholder="delete"></div>
+  <div class="doing"><button type="submit">Delete them</button></div>
+</form>
+<p class="hint">The scan runs again when you press it, so a file that has just been put into a page
+  is not deleted by a screen drawn a minute ago.</p>
+{{/trustworthy}}
+
+<div class="filegrid">{{#unused}}
+<div class="card file">
+  <div class="preview">
+    {{#isImage}}<a href="{{url}}"><img src="{{url}}" alt="{{description}}" loading="lazy"></a>{{/isImage}}
+    {{^isImage}}<a href="{{url}}"><span class="dim">{{kind}}</span></a>{{/isImage}}
+  </div>
+  <p class="meta"><a href="{{url}}">{{filename}}</a> <span class="dim">{{size}}</span></p>
+  {{#description}}<p class="hint">{{.}}</p>{{/description}}
+  <p class="hint dim">{{#folder}}{{.}} &middot; {{/folder}}{{who}} &middot; {{at}}</p>
+</div>
+{{/unused}}</div>
+{{/anyUnused}}
+
+<h2>Where it looked</h2>
+<p class="hint">A file is kept if any of these mentions its address. Two of them are not obvious and
+  both matter: a page's <em>history</em> can point at something the current version does not, and
+  deleting it would make restoring that version produce a broken page &mdash; and a
+  <em>suggested edit</em> waiting in the queue is the same problem before the fact.</p>
+<ul class="hint">{{#looked}}<li>{{source}}</li>{{/looked}}</ul>
+<p class="hint">It finds addresses, not intentions. A url built by joining strings together inside a
+  template is a reference this cannot see, and there is no honest way for it to pretend otherwise.</p>
+{{/content}}{{/shell}}

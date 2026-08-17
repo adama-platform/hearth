@@ -1,0 +1,21 @@
+<p class="count">{{count}} shown</p>
+{{^anyPeople}}<p class="hint">Nobody matches that.</p>{{/anyPeople}}
+{{#anyPeople}}<table>
+  <thead><tr><th>email</th><th>state</th><th>profile</th><th>signals</th><th>joined</th><th></th></tr></thead>
+  <tbody>{{#people}}<tr>
+    <td><a href="{{reviewUrl}}">{{email}}</a>{{#invited}} <span class="pill purple" title="invited by {{invitedBy}}">invited</span>{{/invited}}</td>
+    <td>
+      {{#configAdmin}}<span class="pill red">config admin</span>{{/configAdmin}}
+      {{#promotedAdmin}}<span class="pill purple">admin</span>{{/promotedAdmin}}
+      {{#disabled}}<span class="pill warn">off</span>{{/disabled}}
+      {{^disabled}}{{#approved}}<span class="pill good">approved</span>{{/approved}}{{^approved}}<span class="pill dim">waiting</span>{{/approved}}{{/disabled}}
+    </td>
+    <td class="dim">{{#hasProfile}}written{{/hasProfile}}{{^hasProfile}}empty{{/hasProfile}}, {{answered}} answered</td>
+    <td class="dim num" title="{{signals}}">{{events}}</td>
+    <td class="dim mono">{{created}}</td>
+    <td class="actions">
+      {{^approved}}<form class="inline" method="post" action="{{action}}"><input type="hidden" name="csrf" value="{{csrf}}"><input type="hidden" name="user" value="{{id}}"><input type="hidden" name="action" value="approve"><button type="submit">approve</button></form>{{/approved}}
+      <a href="{{reviewUrl}}">review</a>
+    </td>
+  </tr>{{/people}}</tbody>
+</table>{{/anyPeople}}

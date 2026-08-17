@@ -1,0 +1,39 @@
+{{!
+  One thing on the table, its bar, and this reader's own buttons.
+
+  The bar is a share of the strongest option rather than of the total, because a chart where every
+  bar is 12% of the width says nothing and this one is read for its shape. A day carries a yes and
+  a no; a choice or a place carries only a yes, because there is no such thing as being against one
+  option and not for another.
+}}
+<div class="option{{#winning}} winning{{/winning}}">
+  <div class="what">
+    {{what}}{{#placeWhere}} <span class="dim">&mdash; {{.}}</span>{{/placeWhere}}
+    {{#placeUrl}}<a href="{{.}}" class="dim">about it &rarr;</a>{{/placeUrl}}
+  </div>
+  <div class="bar"><span style="width:{{share}}%"></span></div>
+  <div class="tally">
+    <strong>{{score}}</strong>
+    <span class="dim">{{up}} yes{{#anyDown}}, {{down}} no{{/anyDown}}</span>
+  </div>
+  {{#mayVote}}
+  <div class="votebuttons">
+    <form method="post" action="{{action}}" class="inline">
+      <input type="hidden" name="csrf" value="{{csrf}}">
+      <input type="hidden" name="action" value="poll_vote">
+      <input type="hidden" name="option" value="{{id}}">
+      <input type="hidden" name="weight" value="up">
+      <button type="submit" class="vote{{#mineUp}} on{{/mineUp}}" aria-pressed="{{#mineUp}}true{{/mineUp}}{{^mineUp}}false{{/mineUp}}">yes</button>
+    </form>
+    {{#approval}}
+    <form method="post" action="{{action}}" class="inline">
+      <input type="hidden" name="csrf" value="{{csrf}}">
+      <input type="hidden" name="action" value="poll_vote">
+      <input type="hidden" name="option" value="{{id}}">
+      <input type="hidden" name="weight" value="down">
+      <button type="submit" class="vote{{#mineDown}} on{{/mineDown}}" aria-pressed="{{#mineDown}}true{{/mineDown}}{{^mineDown}}false{{/mineDown}}">no</button>
+    </form>
+    {{/approval}}
+  </div>
+  {{/mayVote}}
+</div>

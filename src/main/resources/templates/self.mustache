@@ -1,0 +1,261 @@
+{{<layout}}{{$body}}
+<header class="mecard">
+  <div class="meid">
+    <h1>{{#display_name}}{{.}}{{/display_name}}{{^display_name}}Your profile{{/display_name}}</h1>
+    <p class="mono dim">{{email}}</p>
+    {{#headline}}<p class="tagline">{{.}}</p>{{/headline}}
+  </div>
+  <div class="mestate">
+    {{#approved}}<span class="pill good">a member</span>{{/approved}}
+    {{^approved}}<span class="pill warn">waiting to be approved</span>{{/approved}}
+    {{#roles}}<span class="pill {{color}}">{{label}}</span>{{/roles}}
+  </div>
+</header>
+{{#canEnterAdmin}}<p class="hint">You can help run this place &mdash;
+  <a href="{{adminUrl}}">open the admin section &rarr;</a></p>{{/canEnterAdmin}}
+{{#done}}<p class="done">{{.}}</p>{{/done}}
+<nav class="tabs">{{#tabs}}<a href="{{href}}" class="{{#active}}on{{/active}}">{{label}}{{#bubble}}<span class="bubble">{{.}}</span>{{/bubble}}</a>{{/tabs}}</nav>
+
+{{#onProfile}}
+<p class="hint">This is what an admin sees when deciding whether to let you in, and what the rest of
+the community sees afterwards.</p>
+{{#hasSurvey}}
+<p class="{{#anyRemaining}}done{{/anyRemaining}}{{^anyRemaining}}hint{{/anyRemaining}}">{{#anyRemaining}}{{remaining}} of this community's questions are waiting for you.{{/anyRemaining}}{{^anyRemaining}}You have answered all {{total}} of this community's questions.{{/anyRemaining}}
+  <a href="{{surveyUrl}}">{{#anyRemaining}}Answer them &rarr;{{/anyRemaining}}{{^anyRemaining}}Read back what you said &rarr;{{/anyRemaining}}</a></p>
+{{/hasSurvey}}
+<form method="post" action="{{action}}">
+  <input type="hidden" name="csrf" value="{{csrf}}">
+  <input type="hidden" name="action" value="profile">
+  <div class="field"><label for="display_name">name <span class="tag">required</span></label>
+    <input id="display_name" name="display_name" type="text" maxlength="128" required
+           autocomplete="name" value="{{display_name}}">
+    <p class="hint">What everybody else sees, and what any invitation you send says. An address is
+      not a person.</p></div>
+  <div class="field"><label for="headline">one line about you</label>
+    <input id="headline" name="headline" type="text" maxlength="256" value="{{headline}}"></div>
+  <div class="field"><label for="location">where you are</label>
+    <input id="location" name="location" type="text" maxlength="128" value="{{location}}">
+    <p class="hint">A town or a neighbourhood. Other members see this.</p></div>
+  <div class="field"><label for="about">about you</label>
+    <textarea id="about" name="about" rows="8" maxlength="8192">{{about}}</textarea>
+    <p class="hint">Markdown works here.</p></div>
+  <div class="field"><label for="links">links, one per line</label>
+    <textarea id="links" name="links" rows="3" maxlength="1024">{{links}}</textarea></div>
+  <button type="submit">Save profile</button>
+</form>
+
+{{#geocoding}}
+<section class="card private">
+  <h2>Your address <span class="tag">nobody sees this</span></h2>
+  <p class="hint">Give your address and you get counted when somebody is working out where to hold
+    something. All anybody ever sees is <strong>how far away people are</strong> &mdash; a chart of
+    distances with no names on it, so that a hall that puts half the community on an hour's journey
+    is a thing whoever is planning can see before they book it.</p>
+  <p class="hint">Nobody can read this. Not other members, not the people who run this community,
+    not anything automated. It is not on your profile, not in the members list, and not in what an
+    administrator sees when they look you up. Clear the box and it is gone, along with the point it
+    worked out.</p>
+  <form method="post" action="{{action}}">
+    <input type="hidden" name="csrf" value="{{csrf}}">
+    <input type="hidden" name="action" value="address">
+    <div class="field"><label for="address">street address</label>
+      <input id="address" name="address" type="text" maxlength="256" autocomplete="street-address"
+             value="{{address}}">
+      <p class="hint">A postcode and a town works nearly as well if you would rather not be
+        exact.</p></div>
+    <p class="state {{#placed}}{{#precise}}good{{/precise}}{{^precise}}warn{{/precise}}{{/placed}}">{{homeStatus}}</p>
+    <button type="submit">Save address</button>
+  </form>
+</section>
+{{/geocoding}}
+{{#mayConnect}}
+<section class="card">
+  <h2>Assistants</h2>
+  <p class="hint">You can connect an AI assistant to this community, and it acts <strong>as
+    you</strong> &mdash; under your name, held to exactly what you are allowed to do, and no more.
+    Everything it does is written down for an administrator to read, beside your name and its
+    own.</p>
+  <p class="hint">Connect it from the assistant's own settings, by pointing it at this site. You
+    will be asked to approve it on a screen that lists what it would be able to do.</p>
+  {{#anyAgents}}
+  <ul class="agents">
+    {{#agents}}
+    <li>
+      <span>{{name}}</span>
+      <form method="post" action="{{action}}" class="inline">
+        <input type="hidden" name="csrf" value="{{csrf}}">
+        <input type="hidden" name="action" value="disconnect">
+        <input type="hidden" name="agent" value="{{id}}">
+        <button type="submit" class="quiet">Disconnect</button>
+      </form>
+    </li>
+    {{/agents}}
+  </ul>
+  {{/anyAgents}}
+  {{^anyAgents}}<p class="hint">Nothing is connected right now.</p>{{/anyAgents}}
+</section>
+{{/mayConnect}}
+{{#apiUrl}}
+<section class="card">
+  <h2>Programs</h2>
+  <p class="hint">A command line tool or a script can act as you here, holding a token you make and
+    revoke yourself. It can do exactly what you can do and nothing more, and everything it does is
+    recorded as you.</p>
+  <p><a href="{{.}}">Your tokens &rarr;</a></p>
+</section>
+{{/apiUrl}}
+{{#anyRoles}}
+<section class="capabilities">
+  <h2>What you are trusted with</h2>
+  {{#roles}}
+  <div class="rolecard">
+    <span class="pill {{color}}">{{label}}</span>
+    {{#description}}<span class="dim">{{.}}</span>{{/description}}
+  </div>
+  {{/roles}}
+  {{#anyCan}}
+  <ul class="cando">{{#can}}<li><span class="dim">{{group}}</span> {{label}}</li>{{/can}}</ul>
+  {{/anyCan}}
+  <p class="hint">Roles are given by an administrator. If something here looks wrong, ask one
+    &mdash; you cannot change your own.</p>
+</section>
+{{/anyRoles}}
+{{/onProfile}}
+
+{{#onInbox}}
+{{^anyNotes}}<p class="hint">Nothing here. When somebody replies in a conversation you are part of,
+  it turns up here.</p>{{/anyNotes}}
+{{#anyNotes}}
+<ul class="inbox">
+  {{#notes}}
+  <li class="{{#unread}}unread{{/unread}}">
+    {{#url}}<a href="{{.}}">{{/url}}{{text}}{{#url}}</a>{{/url}}
+  </li>
+  {{/notes}}
+</ul>
+<p class="hint">Notifications age out with the conversations they are about.</p>
+{{/anyNotes}}
+{{/onInbox}}
+
+{{#onInvite}}
+{{^mayInvite}}<p class="hint">Inviting is not open here. An admin can send invitations from the
+  admin section.</p>{{/mayInvite}}
+{{#mayInvite}}
+<p class="hint">Bring somebody. They get a message with your name on it and a link that only works
+  once &mdash; and if they do not answer, we send a friendly reminder and then one last note, and
+  that is the end of it.</p>
+{{#inviteLimited}}<p class="hint">You have written {{invitedToday}} of {{inviteLimit}} today.</p>{{/inviteLimited}}
+<form method="post" action="{{action}}">
+  <input type="hidden" name="csrf" value="{{csrf}}">
+  <input type="hidden" name="action" value="invite">
+  <div class="field"><label for="i-email">their email</label>
+    <input id="i-email" type="email" name="email" maxlength="320" required></div>
+  <button type="submit">Send the invitation</button>
+</form>
+{{/mayInvite}}
+{{#anyMyInvites}}
+<h2>People you invited</h2>
+<ul class="inbox">
+  {{#myInvites}}<li>{{email}} &mdash; <span class="dim">{{stage}}{{#joined}}, and they are here
+    now{{/joined}}</span></li>{{/myInvites}}
+</ul>
+{{/anyMyInvites}}
+{{/onInvite}}
+
+{{#onNotifications}}
+{{^boardEnabled}}<p class="hint">This community does not have a discussion board, so there is
+  nothing to be notified about yet.</p>{{/boardEnabled}}
+<form method="post" action="{{action}}">
+  <input type="hidden" name="csrf" value="{{csrf}}">
+  <input type="hidden" name="action" value="notifications">
+
+  <div class="question">
+    <p class="prompt">When somebody replies to you</p>
+    <p class="hint">A reply aimed at you is usually a conversation waiting on an answer.</p>
+    <div class="scale">
+      {{#responseModes}}
+      <label><input type="radio" name="response_mode" value="{{value}}" {{#checked}}checked{{/checked}}><span>{{label}}</span></label>
+      {{/responseModes}}
+    </div>
+  </div>
+
+  <div class="question">
+    <p class="prompt">When there is activity in a conversation you are watching</p>
+    <p class="hint">You join a conversation by posting or replying in it. You can stop watching any
+      thread from the thread itself.</p>
+    <div class="scale">
+      {{#replyModes}}
+      <label><input type="radio" name="reply_mode" value="{{value}}" {{#checked}}checked{{/checked}}><span>{{label}}</span></label>
+      {{/replyModes}}
+    </div>
+  </div>
+
+  <div class="question">
+    <p class="prompt">How to reach you</p>
+    <label><input type="checkbox" name="email" value="1" {{#notifyEmail}}checked{{/notifyEmail}}><span>Email</span></label>
+    {{#smsAvailable}}
+    <label><input type="checkbox" name="sms" value="1" {{#notifySms}}checked{{/notifySms}}><span>Text message</span></label>
+    <input type="text" name="phone" value="{{phone}}" maxlength="32" placeholder="Mobile number">
+    {{/smsAvailable}}
+    {{^smsAvailable}}
+    <p class="hint">Text messages are not available on this server ({{smsWhy}}). Nothing here will
+      send you one, so there is no point in asking you for a number.</p>
+    {{/smsAvailable}}
+  </div>
+
+  <button type="submit">Save</button>
+</form>
+<p class="hint">Whatever you choose, everything still arrives in your inbox on this page. These
+  settings only decide what is worth an email as well.</p>
+{{/onNotifications}}
+
+
+{{#onData}}
+<h2>What this community holds about you</h2>
+<p class="hint">Everything on this page is written down on one machine, run by the people who run
+  this community. <a href="{{privacyUrl}}">The privacy policy</a> is the whole of it in words.</p>
+
+<h3>A copy of it</h3>
+<p>Your account, your profile, your answers, everything you have written, what you said to each
+  event, and the invitations you sent &mdash; as one file you can keep or take somewhere else. It is
+  built when you ask and never stored on the server.</p>
+<div class="doing"><a class="btn secondary" href="{{exportUrl}}">Download my data</a></div>
+
+<h3>Leaving</h3>
+{{#isConfigAdmin}}
+<p class="hint">Your address is named as an administrator in this community's configuration file, so
+  this cannot delete you &mdash; the account would come back the next time the server starts.
+  Whoever runs the machine has to take the address out of the file first.</p>
+{{/isConfigAdmin}}
+{{^isConfigAdmin}}
+<p>You can delete your account yourself. It removes your account, your profile, your answers, your
+  sessions, your notifications and everything else that names you.</p>
+<p class="hint"><strong>What stays:</strong> what you wrote on the board, with your name taken off
+  it. A conversation other people replied to is theirs as well as yours, and cutting your words out
+  of it would leave holes in their thread. If you want those gone too, ask an administrator &mdash;
+  they can do both at once. If your address has been banned, that stays as well, because a community
+  that cannot keep somebody out cannot protect anybody.</p>
+<details class="revise">
+  <summary>Delete my account</summary>
+  <form method="post" action="{{action}}">
+    <input type="hidden" name="csrf" value="{{csrf}}">
+    <input type="hidden" name="action" value="leave">
+    <div class="field"><label for="d-confirm">type <code>delete</code> to confirm</label>
+      <input id="d-confirm" name="confirm" type="text" autocomplete="off"></div>
+    <button type="submit">Delete my account for good</button>
+    <p class="hint">This cannot be undone, by you or by anybody here.</p>
+  </form>
+</details>
+{{/isConfigAdmin}}
+{{/onData}}
+<style>
+.private{border-color:var(--accent)}
+.private h2{margin-top:0}
+.state{border-left:3px solid var(--line);padding:.5rem .8rem;border-radius:0 8px 8px 0;font-size:.9375rem;color:var(--dim)}
+.state.good{border-left-color:var(--good);color:var(--fg)}
+.state.warn{border-left-color:var(--warn)}
+.agents{list-style:none;margin:.6rem 0 0;padding:0;display:flex;flex-direction:column;gap:.35rem}
+.agents li{display:flex;align-items:center;gap:.6rem;padding:.5rem .7rem;border:1px solid var(--line);border-radius:8px}
+.agents li span{margin-right:auto}
+</style>
+{{/body}}{{/layout}}

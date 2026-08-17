@@ -1,0 +1,39 @@
+demo
+test_data
+target
+*.iml
+target
+
+# the packaged server, dropped at the repo root by `just package`
+hearth.jar
+
+# H2 database files, wherever somebody happens to point --stores
+site/dbs
+site/certs
+*.mv.db
+*.trace.db
+demo-db
+demo-certs
+demo
+
+# For IntelliJ
+.idea
+*.iml
+release
+ca
+127.0.0.1.identity
+logs
+distrib.sh
+.DS_Store
+log.scratch
+.claude
+.mcp.json
+ai.key.json
+stores
+site/dbs
+site/certs
+
+# vendored browser libraries: fetched by `just third-party`, baked into the jar by `just package`.
+# Not committed -- a 2.8MB minified bundle in git history is a repository nobody wants to clone,
+# and the recipe pins every version so a fresh checkout gets exactly the same bytes.
+src/main/resources/3rd/

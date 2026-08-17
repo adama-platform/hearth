@@ -1,0 +1,104 @@
+{{<layout}}{{$body}}
+<p class="crumb"><a href="{{backUrl}}">&larr; Events</a></p>
+<h1>{{title}}</h1>
+{{#draft}}<p class="hint">This is not announced yet. Only admins can see it.</p>{{/draft}}
+{{#cancelled}}<p class="problem">This event has been cancelled.</p>{{/cancelled}}
+
+<dl class="facets">
+  <div><dt>when</dt><dd>{{when}}{{#anyTime}}, {{startTime}}{{/anyTime}}</dd></div>
+  {{#anyPlace}}<div><dt>where</dt><dd><a href="{{placeUrl}}">{{placeName}}</a>{{#anyLocation}}, {{location}}{{/anyLocation}}{{#placeAddress}}<div class="dim">{{placeAddress}}</div>{{/placeAddress}}</dd></div>{{/anyPlace}}
+  {{^anyPlace}}{{#anyLocation}}<div><dt>where</dt><dd>{{location}}</dd></div>{{/anyLocation}}{{/anyPlace}}
+  {{#limited}}<div><dt>places</dt><dd>{{goingCount}} of {{capacity}} taken</dd></div>{{/limited}}
+</dl>
+
+<div class="post-body">{{{bodyHtml}}}</div>
+
+<p class="doing"><a class="button quiet" href="{{icsUrl}}" download>Add to your calendar</a>
+  {{#openToPublic}}<span class="pill blue">open to anybody</span>{{/openToPublic}}</p>
+
+{{#canAnswer}}
+<form class="rsvp" method="post" action="{{action}}">
+  <input type="hidden" name="csrf" value="{{csrf}}">
+  <input type="hidden" name="action" value="rsvp">
+  <input type="hidden" name="event" value="{{id}}">
+  <h2>Are you coming?</h2>
+  {{#full}}{{^iAmGoing}}<p class="hint">This is full. You can still say you want to come and you
+    will go on the waitlist &mdash; if somebody drops out you are moved up automatically and the
+    page will say so.</p>{{/iAmGoing}}{{/full}}
+  <div class="scale">
+    <label><input type="radio" name="answer" value="going" {{#iAmGoing}}checked{{/iAmGoing}}{{#iAmWaiting}}checked{{/iAmWaiting}}><span>Going</span></label>
+    <label><input type="radio" name="answer" value="maybe" {{#iAmMaybe}}checked{{/iAmMaybe}}><span>Maybe</span></label>
+    <label><input type="radio" name="answer" value="no" {{#iSaidNo}}checked{{/iSaidNo}}><span>Not this time</span></label>
+  </div>
+  <div><label for="party">how many of you, counting yourself</label>
+    <input id="party" type="number" name="party" min="1" max="20" value="{{myParty}}"></div>
+  <div><label for="note">anything to add</label>
+    <input id="note" type="text" name="note" maxlength="512" value="{{myNote}}"></div>
+  <button type="submit">{{#answered}}Change my answer{{/answered}}{{^answered}}Answer{{/answered}}</button>
+</form>
+{{#answered}}
+<form class="inline" method="post" action="{{action}}">
+  <input type="hidden" name="csrf" value="{{csrf}}">
+  <input type="hidden" name="action" value="withdraw">
+  <input type="hidden" name="event" value="{{id}}">
+  <button type="submit" class="quiet">take my answer back</button>
+</form>
+{{/answered}}
+{{/canAnswer}}
+{{^canAnswer}}<p class="hint">{{#cancelled}}Answers are closed.{{/cancelled}}{{^cancelled}}This has
+  already happened.{{/cancelled}}</p>{{/canAnswer}}
+
+<h2>Who is coming</h2>
+{{^anyGoing}}<p class="hint">Nobody yet.</p>{{/anyGoing}}
+{{#anyGoing}}<ul class="guests">{{#going}}<li>{{who}}{{plus}}{{#me}} <span class="tag">you</span>{{/me}}{{#byEmail}} <span class="tag">from their calendar</span>{{/byEmail}}{{#noShow}} <span class="pill warn">was not there</span>{{/noShow}}{{#note}} <span class="dim">&mdash; {{.}}</span>{{/note}}{{#canMarkAttendance}}
+  <form class="inline" method="post" action="{{action}}"><input type="hidden" name="csrf" value="{{csrf}}"><input type="hidden" name="event" value="{{eventId}}"><input type="hidden" name="user" value="{{userId}}"><input type="hidden" name="action" value="{{#noShow}}attended{{/noShow}}{{^noShow}}no_show{{/noShow}}"><button type="submit">{{#noShow}}was there after all{{/noShow}}{{^noShow}}was not there{{/noShow}}</button></form>{{/canMarkAttendance}}</li>{{/going}}</ul>{{/anyGoing}}
+
+{{#anyProposals}}
+<section class="rsvp">
+  <h3>Somebody would rather it were another day</h3>
+  <p class="hint">Their calendar suggested it. Nothing has moved: taking one reschedules the event
+    and sends everybody a fresh invitation.</p>
+  <ul class="guests">
+    {{#proposals}}
+    <li>{{who}} &mdash; <strong>{{proposed}}</strong>
+      {{#canMove}}
+      <form class="inline" method="post" action="{{action}}">
+        <input type="hidden" name="csrf" value="{{csrf}}">
+        <input type="hidden" name="event" value="{{eventId}}">
+        <input type="hidden" name="user" value="{{userId}}">
+        <input type="hidden" name="action" value="take_proposal">
+        <label class="check"><input type="checkbox" name="keep_answers"> keep everybody's answers</label>
+        <button type="submit">move it to this day</button>
+      </form>
+      {{/canMove}}
+    </li>
+    {{/proposals}}
+  </ul>
+  <p class="hint">Unticked, everybody who said yes or maybe is asked again &mdash; because they
+    agreed to a day that will not be happening. Anybody who said no is left alone: that is probably
+    still true, and asking again teaches people that answering does not stick.</p>
+</section>
+{{/anyProposals}}
+
+{{#anyMaybe}}<h3>Maybe</h3>
+<ul class="guests">{{#maybe}}<li>{{who}}{{plus}}{{#me}} <span class="tag">you</span>{{/me}}{{#byEmail}} <span class="tag">from their calendar</span>{{/byEmail}}{{#proposed}} <span class="pill blue">would rather {{.}}</span>{{/proposed}}</li>{{/maybe}}</ul>{{/anyMaybe}}
+
+{{#anyWaiting}}<h3>Waiting for a place</h3>
+<ul class="guests">{{#waiting}}<li>{{who}}{{plus}}{{#me}} <span class="tag">you</span>{{/me}}</li>{{/waiting}}</ul>
+<p class="hint">In the order they asked. If somebody drops out, the longest wait that fits moves
+  up.</p>{{/anyWaiting}}
+
+{{#anyNo}}<h3>Not coming</h3>
+<ul class="guests">{{#no}}<li>{{who}}{{#me}} <span class="tag">you</span>{{/me}}{{#byEmail}} <span class="tag">from their calendar</span>{{/byEmail}}</li>{{/no}}</ul>{{/anyNo}}
+
+{{#anyOutside}}<h3>From outside</h3>
+<ul class="guests">{{#outside}}<li>{{who}}{{plus}}{{#maybe}} <span class="tag">maybe</span>{{/maybe}}</li>{{/outside}}</ul>
+<p class="hint">This event is open to anybody, and these are people with no account here who said
+  they were coming. They take no place &mdash; the count above is members.</p>{{/anyOutside}}
+
+{{#anySilent}}<h3>Not heard from</h3>
+<ul class="guests">{{#silent}}<li>{{.}}</li>{{/silent}}</ul>
+<p class="hint">{{#remindOn}}They are nudged {{remindDays}} day(s) before.{{/remindOn}} A no is as
+  useful as a yes &mdash; it is how anybody knows how many chairs to put out.</p>{{/anySilent}}
+{{>comments}}
+{{/body}}{{/layout}}

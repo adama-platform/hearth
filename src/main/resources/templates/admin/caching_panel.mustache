@@ -1,0 +1,9 @@
+<table>
+  <thead><tr><th>cache</th><th>policy</th><th class="num">entries</th><th class="num">hits</th><th class="num">misses</th><th class="num">hit rate</th><th class="num">invalidated</th></tr></thead>
+  <tbody>{{#caches}}<tr>
+    <td>{{name}}</td><td class="dim mono">{{policy}}</td>
+    <td class="num">{{size}}</td><td class="num">{{hits}}</td><td class="num dim">{{misses}}</td>
+    <td class="num">{{rate}}%</td><td class="num dim">{{invalidations}}</td>
+  </tr>{{/caches}}</tbody>
+</table>
+<p class="hint">The survey indexer has run {{sweeps}} sweeps and holds counts for {{indexed}} people; {{bubbles}} have an answer sheet.</p>

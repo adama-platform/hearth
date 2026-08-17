@@ -1,0 +1,42 @@
+{{<layout}}{{$body}}
+<h1>Questions</h1>
+<p class="hint">What this community is asking its members, and what you have said. Answers change
+  &mdash; come back whenever yours does.</p>
+{{#done}}<p class="done">{{.}}</p>{{/done}}
+
+{{^anyQuestions}}
+<div class="empty"><strong>Nothing is being asked yet.</strong>
+  When the people running this place want to know something, it turns up here.</div>
+{{/anyQuestions}}
+
+{{#anyQuestions}}
+<div class="tally">
+  <span class="pill {{^anyRemaining}}good{{/anyRemaining}}{{#anyRemaining}}warn{{/anyRemaining}}">{{answered}} of {{total}} answered</span>
+  {{#anyRemaining}}<span class="dim">{{remaining}} to go</span>{{/anyRemaining}}
+</div>
+
+<nav class="tabs">
+  <a href="{{todoUrl}}" class="{{^all}}on{{/all}}">To answer{{#anyRemaining}}<span class="bubble">{{remaining}}</span>{{/anyRemaining}}</a>
+  <a href="{{allUrl}}" class="{{#all}}on{{/all}}">Your answers</a>
+</nav>
+
+{{#upToDate}}{{^all}}
+<p class="alldone">All answered &mdash; thank you. You can
+  <a href="{{allUrl}}">read back and change what you said</a> at any time.</p>
+{{/all}}{{/upToDate}}
+
+{{#anyShown}}
+<form method="post" action="{{action}}">
+  <input type="hidden" name="csrf" value="{{csrf}}">
+  {{#all}}<input type="hidden" name="all" value="1">{{/all}}
+  {{#questions}}{{>ask}}{{/questions}}
+  <button type="submit">{{#all}}Save changes{{/all}}{{^all}}Save answers{{/all}}</button>
+  {{#all}}<p class="hint">Clearing a box removes that answer and puts the question back on your
+    list. Nothing else you have said is touched.</p>{{/all}}
+</form>
+{{/anyShown}}
+{{/anyQuestions}}
+
+<p class="footnote">These answers are read by whoever runs this community. Your profile &mdash; your
+  name, and what everybody else sees &mdash; is on <a href="{{selfUrl}}">your profile</a>.</p>
+{{/body}}{{/layout}}

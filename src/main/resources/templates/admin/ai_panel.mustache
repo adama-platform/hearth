@@ -1,0 +1,20 @@
+<p class="count">{{count}} shown</p>
+{{^anyActions}}<p class="hint">Nothing matches.</p>{{/anyActions}}
+{{#anyActions}}
+{{#actions}}
+<details class="action {{#refused}}refused{{/refused}}{{#failed}}failed{{/failed}}">
+  <summary>
+    <span class="mono dim">{{at}}</span>
+    <span class="tool">{{tool}}</span>
+    {{#subject}}<span class="mono">{{.}}</span>{{/subject}}
+    {{#wrote}}<span class="pill purple">changed</span>{{/wrote}}
+    {{#refused}}<span class="pill warn">refused</span>{{/refused}}
+    {{#failed}}<span class="pill red">failed</span>{{/failed}}
+    <span class="dim">{{detail}}</span>
+    <span class="who dim">{{agent}} as {{email}} &middot; {{millis}}ms</span>
+  </summary>
+  {{#anyArguments}}<h3>Asked for</h3><pre>{{arguments}}</pre>{{/anyArguments}}
+  {{#anyResult}}<h3>Answered</h3><pre>{{result}}</pre>{{/anyResult}}
+</details>
+{{/actions}}
+{{/anyActions}}

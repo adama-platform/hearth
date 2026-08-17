@@ -1,0 +1,9 @@
+{{<layout}}{{$body}}
+<p class="face">:-(</p>
+<h1>There is nothing here</h1>
+<p>{{community}} has no page at this address. It may have moved, or the link may have been typed
+  from memory.</p>
+<p class="hint"><a href="{{home}}">Back to the front page</a></p>
+{{#signInUrl}}<p class="hint">Some pages need you to be signed in. If you were expecting something
+  here, <a href="{{.}}">sign in</a> and we will bring you back to it.</p>{{/signInUrl}}
+{{/body}}{{/layout}}

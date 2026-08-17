@@ -1,0 +1,42 @@
+{{<shell}}{{$content}}
+<h1>Events</h1>
+<p class="hint">Events happen on a day, or across a span of them.
+  {{#suggestionsOn}}Anybody in the community can suggest one; somebody with the permission decides
+  what goes on the calendar.{{/suggestionsOn}}
+  {{^suggestionsOn}}Only people with the permission create them; everybody else answers.{{/suggestionsOn}}</p>
+<div class="doing">
+  <a class="btn" href="{{newUrl}}">{{{plusIcon}}}New event</a>
+  {{#suggestionsOn}}<a class="btn secondary" href="{{suggestionsUrl}}">Suggested{{#anySuggested}} <span class="pill blue">{{openSuggestions}}</span>{{/anySuggested}}</a>{{/suggestionsOn}}
+  <a class="btn secondary" href="{{calendarUrl}}">See what members see</a>
+</div>
+<details class="explain">
+  <summary>Calendar invitations {{#invitesOn}}&mdash; on{{/invitesOn}}{{^invitesOn}}&mdash; not working{{/invitesOn}}</summary>
+  {{^invitesOn}}<p class="problem">No invitation can be sent: {{invitesWhyNot}}.</p>{{/invitesOn}}
+  {{#invitesOn}}
+  <p>Pressing <strong>Invite everybody</strong> on an event sends a real calendar invitation to every
+    approved member &mdash; the kind that appears in Gmail, Outlook and Apple Mail with accept, maybe
+    and decline buttons on it. Whichever they press comes back to
+    <code>{{replyTo}}</code> and lands on the guest list, without them opening this site at all.</p>
+  <p class="hint">Sending is a button rather than something that happens when you save, for the same
+    reason writing an invitation to a person is separate from sending it: an event whose day is
+    still being argued about should not be in anybody's calendar yet. Changing an event afterwards
+    marks it as needing a fresh invitation, and sending again is what moves it in everybody's
+    calendar.</p>
+  {{#remindOn}}<p class="hint">Anybody who has not answered is nudged <strong>{{remindDays}}</strong>
+    day(s) before. Somebody who said no is never chased.</p>{{/remindOn}}
+  {{^remindOn}}<p class="hint">Reminders are off. <code>calendar.remind-days-before</code> turns
+    them back on.</p>{{/remindOn}}
+
+  <h3>What the invitation says</h3>
+  <p class="hint">The event's own words come first. This paragraph goes underneath, on every
+    invitation &mdash; it is the part about the community rather than about the event, which is
+    exactly the thing nobody wants to retype every time.
+    {{#customTemplate}}This community has written its own.{{/customTemplate}}
+    {{^customTemplate}}This is the wording that ships.{{/customTemplate}}
+    Change it, and every other message this server sends, under
+    <a href="{{messagesUrl}}">Messages</a>.</p>
+  <blockquote class="preview">{{inviteTemplate}}</blockquote>
+  {{/invitesOn}}
+</details>
+<div class="panel" data-panel="{{panelUrl}}">{{{panel}}}</div>
+{{/content}}{{/shell}}

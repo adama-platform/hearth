@@ -1,0 +1,27 @@
+<p class="count">{{openCount}} waiting &middot; {{count}} in all</p>
+{{^anyProposals}}<p class="hint">Nothing has been suggested yet.</p>{{/anyProposals}}
+{{#anyProposals}}<table>
+  <thead><tr><th>page</th><th>who</th><th>when</th><th>state</th><th></th></tr></thead>
+  <tbody>{{#proposals}}<tr>
+    <td>
+      <span class="mono">{{uri}}</span>{{#newPage}} <span class="pill">new page</span>{{/newPage}}
+      {{#stale}}{{#open}}<span class="pill warn" title="the page changed after this was written">page moved since</span>{{/open}}{{/stale}}
+      {{#note}}<div class="dim">{{.}}</div>{{/note}}
+      {{#decisionNote}}<div class="dim">&mdash; {{.}}</div>{{/decisionNote}}
+    </td>
+    <td class="dim">{{who}}</td>
+    <td class="dim mono">{{when}}</td>
+    <td>
+      {{#open}}<span class="pill">waiting</span>{{/open}}
+      {{^open}}<span class="pill dim">{{state}}{{#decidedBy}} by {{.}}{{/decidedBy}}</span>{{/open}}
+    </td>
+    <td class="actions">
+      {{#changesUrl}}<button type="button" class="quiet" data-changes-url="{{.}}">see changes</button>{{/changesUrl}}
+      {{#open}}
+      <form class="inline" method="post" action="{{action}}"><input type="hidden" name="csrf" value="{{csrf}}"><input type="hidden" name="id" value="{{id}}"><input type="hidden" name="action" value="approve"><button type="submit">approve</button></form>
+      <form class="inline" method="post" action="{{action}}"><input type="hidden" name="csrf" value="{{csrf}}"><input type="hidden" name="id" value="{{id}}"><input type="hidden" name="action" value="decline"><button type="submit">decline</button></form>
+      {{/open}}
+      {{#editUrl}}<a href="{{.}}">the page</a>{{/editUrl}}
+    </td>
+  </tr>{{/proposals}}</tbody>
+</table>{{/anyProposals}}

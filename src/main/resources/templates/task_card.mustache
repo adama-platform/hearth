@@ -1,0 +1,44 @@
+{{!
+  One item, wherever it appears. The tick is a 44px target because the gesture it exists for is
+  done forty times in an hour with one hand.
+}}
+<div class="card">
+  <div class="top">
+    <a class="what" href="{{url}}">{{title}}</a>
+    {{#overdue}}<span class="pill warn">overdue</span>{{/overdue}}
+    {{#repeats}}<span class="pill">every {{repeatDays}}d</span>{{/repeats}}
+  </div>
+  {{#last}}<p class="meta">last: {{.}}</p>{{/last}}
+  {{#due}}{{^done}}<p class="meta">due {{.}}</p>{{/done}}{{/due}}
+  <div class="row">
+    {{^done}}
+    {{#hasSets}}<a class="tick" href="{{url}}">Log a set</a>{{/hasSets}}
+    {{^hasSets}}
+    <form method="post" action="{{action}}" class="inline">
+      <input type="hidden" name="csrf" value="{{csrf}}">
+      <input type="hidden" name="action" value="complete">
+      <input type="hidden" name="task" value="{{id}}">
+      <button type="submit" class="tick">Done</button>
+    </form>
+    {{/hasSets}}
+    {{/done}}
+    {{#done}}
+    <form method="post" action="{{action}}" class="inline">
+      <input type="hidden" name="csrf" value="{{csrf}}">
+      <input type="hidden" name="action" value="complete">
+      <input type="hidden" name="task" value="{{id}}">
+      <input type="hidden" name="done" value="0">
+      <button type="submit" class="untick">not done after all</button>
+    </form>
+    {{/done}}
+    {{#moves}}
+    <form method="post" action="{{action}}" class="inline">
+      <input type="hidden" name="csrf" value="{{csrf}}">
+      <input type="hidden" name="action" value="move_task">
+      <input type="hidden" name="task" value="{{id}}">
+      <input type="hidden" name="phase" value="{{name}}">
+      <button type="submit" class="moveto">&rarr; {{name}}</button>
+    </form>
+    {{/moves}}
+  </div>
+</div>

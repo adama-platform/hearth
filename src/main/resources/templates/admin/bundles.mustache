@@ -1,0 +1,57 @@
+{{<shell}}{{$content}}
+<p class="crumb"><a href="{{backUrl}}">&larr; Content</a></p>
+<h1>Import &amp; export</h1>
+<p class="hint">Every page and every template as one JSON file. {{pages}} page(s),
+  {{templateCount}} template(s). Each row carries a <em>merge key</em> stamped once and never
+  changed, so bringing a bundle back is a merge rather than a pile of duplicates &mdash; whatever a
+  page's address has become since.</p>
+
+<h2>Take it away</h2>
+<div class="doing"><a class="btn" href="{{bundleUrl}}" download>Download everything</a></div>
+<p class="hint">Drafts and the pages locked away from AI are in it, which is why this needs the
+  permission that writes pages rather than the one that reads them. Keep it in git, hand it to
+  somebody, or restore from it.</p>
+
+<h2>Bring one back</h2>
+{{^canImport}}<p class="hint">Importing writes pages <em>and</em> puts them live, so it needs
+  &ldquo;publish pages&rdquo; as well as &ldquo;write pages&rdquo;. You have one of the two.</p>{{/canImport}}
+{{#canImport}}
+<form method="post" action="{{uploadUrl}}" enctype="multipart/form-data">
+  <input type="hidden" name="csrf" value="{{csrf}}">
+  <input type="hidden" name="bundle" value="1">
+  <div class="field"><label for="b-file">a bundle from a file</label>
+    <input id="b-file" type="file" name="file" accept=".json,application/json" required></div>
+  <div class="doing"><button type="submit">Bring it in</button>
+    <button type="button" class="quiet" data-modal="paste">or paste one</button></div>
+</form>
+
+<dialog id="paste" class="picker">
+  <form method="post" action="{{action}}">
+    <input type="hidden" name="csrf" value="{{csrf}}">
+    <input type="hidden" name="action" value="import">
+    <h2>Paste a bundle</h2>
+    <div class="field"><label for="b-json">the JSON</label>
+      <textarea id="b-json" name="bundle" rows="12" placeholder="{ &quot;hearth&quot;: 1, &quot;content&quot;: [ ... ] }"></textarea></div>
+    <div class="doing"><button type="submit">Bring it in</button>
+      <button type="button" class="quiet" data-close>Cancel</button></div>
+  </form>
+</dialog>
+
+<p class="hint"><strong>Only what differs is written.</strong> A page whose every field matches is
+  skipped entirely &mdash; no save, no event, no version &mdash; so pushing the whole site on every
+  commit does not fill the history with edits nobody made. A key this site has never seen arriving
+  at an address already taken is <em>adopted</em> rather than duplicated, and a row with no key at
+  all still imports and is given one.</p>
+<p class="hint">Every page an import writes is versioned like any other edit, so an import that went
+  wrong is undone from a page's history rather than from a backup.</p>
+{{/canImport}}
+
+<h2>From a script</h2>
+<p class="hint">The same thing over HTTP, which is what a command line tool uses. It answers with
+  what changed, row by row, and <code>?dry=1</code> answers the same thing without writing.</p>
+<pre><code>curl -H "Authorization: Bearer $TOKEN" {{apiUrl}} &gt; site.json
+
+curl -X POST -H "Authorization: Bearer $TOKEN" \
+     --data-binary @site.json "{{apiUrl}}?dry=1"</code></pre>
+{{#apiPage}}<p class="hint">A token is made on <a href="{{.}}">your programs page</a>.</p>{{/apiPage}}
+{{/content}}{{/shell}}

@@ -1,0 +1,13 @@
+{{<shell}}{{$content}}
+<h1>Log</h1>
+<p class="hint">The last {{capacity}} requests this process served, in memory. A restart loses them.</p>
+<form class="tools" method="get" action="{{action}}" data-filters>
+  <div class="search">{{{searchIcon}}}
+    <input type="search" name="q" value="{{q}}" placeholder="Search the log by address, IP or browser" aria-label="search the log">
+  </div>
+  <label class="check"><input type="checkbox" name="errors" value="1"{{#errorsOnly}} checked{{/errorsOnly}}> errors only</label>
+  <button type="button" class="quiet live" data-live="Go live" data-live-on="Stop">Go live</button>
+  <noscript><button type="submit" class="quiet">Filter</button></noscript>
+</form>
+<div class="scroll panel" data-panel="{{panelUrl}}">{{{panel}}}</div>
+{{/content}}{{/shell}}

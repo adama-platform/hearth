@@ -1,0 +1,42 @@
+{{<layout}}{{$body}}
+<h1>Members</h1>
+<p class="hint">{{count}} {{#searching}}matching{{/searching}}{{^searching}}here{{/searching}}. This
+  page is for members and nobody else &mdash; not the open web, and not somebody waiting to be let
+  in.</p>
+
+<form class="finder" method="get" action="{{action}}" role="search">
+  <label class="visually-hidden" for="m-q">Search members</label>
+  <input id="m-q" type="search" name="q" value="{{q}}" placeholder="Search by name, place or what they wrote">
+  <button type="submit" class="btn secondary">Search</button>
+  {{#searching}}<a class="btn secondary" href="{{action}}">Clear</a>{{/searching}}
+</form>
+
+{{^anyMembers}}<p class="empty"><strong>Nobody matches that.</strong>Try a shorter search, or
+  <a href="{{action}}">see everybody</a>.</p>{{/anyMembers}}
+
+{{#anyMembers}}
+<ul class="members">
+  {{#members}}
+  <li>
+    <a class="card" href="{{url}}">
+      <div class="who">
+        <span class="avatar" aria-hidden="true">{{initial}}</span>
+        <div class="named">
+          <h3>{{name}}{{#me}} <span class="pill blue">you</span>{{/me}}</h3>
+          <div class="meta">
+            {{#anyHeadline}}<span>{{headline}}</span>{{/anyHeadline}}
+            {{#anyLocation}}{{#anyHeadline}}<span class="sep">&middot;</span>{{/anyHeadline}}<span>{{location}}</span>{{/anyLocation}}
+          </div>
+        </div>
+      </div>
+      {{#anyBlurb}}<p class="blurb">{{blurb}}</p>{{/anyBlurb}}
+      {{^anyBlurb}}<p class="blurb dim">{{#me}}You have not written anything about yourself yet.{{/me}}{{^me}}Has not written anything yet.{{/me}}</p>{{/anyBlurb}}
+    </a>
+  </li>
+  {{/members}}
+</ul>
+{{/anyMembers}}
+
+<p class="footnote">Yours is the one people see when they click your name.
+  <a href="{{selfUrl}}">Edit your profile</a>.</p>
+{{/body}}{{/layout}}

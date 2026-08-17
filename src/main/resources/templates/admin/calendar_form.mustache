@@ -1,0 +1,108 @@
+{{<shell}}{{$content}}
+<p class="crumb"><a href="{{backUrl}}">&larr; Calendar</a>{{#editing}} &middot; <a href="{{viewUrl}}">see it as a member</a>{{/editing}}</p>
+<h1>{{heading}}</h1>
+{{#editing}}<p class="hint">{{going}} going{{#waiting}}, {{.}} on the waitlist{{/waiting}}. Raising
+  the capacity moves the longest wait that fits up automatically; lowering it never takes a place
+  back from somebody who already has one.</p>{{/editing}}
+<form method="post" action="{{backUrl}}">
+  <input type="hidden" name="csrf" value="{{csrf}}">
+  <input type="hidden" name="action" value="save">
+  {{#editing}}<input type="hidden" name="id" value="{{form_id}}">{{/editing}}
+  {{#anyBestHours}}<p class="hint">When people can come, from
+    <a href="{{whenUrl}}">the grid</a>: {{#bestHours}}<strong>{{when}}</strong> &mdash; {{clear}}
+    of {{ideal}}. {{/bestHours}}</p>{{/anyBestHours}}
+  <div><label for="e-title">what is it</label><input id="e-title" type="text" name="title" maxlength="256" value="{{form_title}}" required></div>
+  <div><label for="e-starts">first day</label><input id="e-starts" type="date" name="starts_on" value="{{form_starts_on}}" required></div>
+  <div><label for="e-ends">last day <span class="dim">&mdash; leave empty for a one-day event</span></label><input id="e-ends" type="date" name="ends_on" value="{{form_ends_on}}"></div>
+  <div><label for="e-time">time <span class="dim">&mdash; written as you want it read, e.g. "doors at 7"</span></label><input id="e-time" type="text" name="start_time" maxlength="64" value="{{form_start_time}}"></div>
+  <div><label for="e-place">where</label>
+    {{#anyPlaces}}<select id="e-place" name="place">
+      <option value="">somewhere else &mdash; typed below</option>
+      {{#places}}<option value="{{id}}"{{#selected}} selected{{/selected}}>{{name}}{{#address}} &mdash; {{address}}{{/address}}</option>{{/places}}
+    </select>{{/anyPlaces}}
+    {{^anyPlaces}}<p class="hint">The {{#placesUrl}}<a href="{{.}}">address book</a>{{/placesUrl}}{{^placesUrl}}address book{{/placesUrl}} is empty. Anything
+      you put there can be picked here, so the pub the community always uses is written down once
+      rather than typed slightly differently on four events.</p>{{/anyPlaces}}
+    <input id="e-where" type="text" name="location" maxlength="512" value="{{form_location}}" placeholder="back room, or a whole address if it is nowhere the community knows">
+    <p class="hint">A place from the address book gets its name, its address and a link to its page.
+      Anything typed here is shown beside it &mdash; "The Oak, back room" &mdash; or on its own when
+      it is somebody's garden.</p>
+    {{#travel}}
+    <div class="travel">
+      <h3>How far people would come to {{place}}</h3>
+      {{#any}}
+      <table class="bars">
+        {{#buckets}}<tr><th>{{label}}</th>
+          <td class="w"><span class="bar" style="width:{{share}}%"></span></td>
+          <td class="n">{{#any}}{{count}}{{/any}}{{^any}}&mdash;{{/any}}</td></tr>{{/buckets}}
+      </table>
+      <p class="hint">{{placed}} of {{members}} member(s) counted &mdash; {{precise}} from an
+        address they gave, {{rough}} placed roughly from the town on their profile. Middle distance
+        about {{median}} {{unit}}.{{#unplaced}} {{.}} said nothing about where they are and are not
+        in this.{{/unplaced}}</p>
+      <p class="hint">Nobody's address is readable by anyone, including you. These are counts.</p>
+      {{/any}}
+      {{^any}}<p class="hint">Nobody has said where they are yet, so there is nothing to count.
+        People fill this in on their own page, and it is private to them.</p>{{/any}}
+    </div>
+    {{/travel}}
+    {{#travelUnplaced}}<p class="hint">That place has no coordinates yet, so there is no travel
+      chart for it. One is looked up in the background after a place is saved.</p>{{/travelUnplaced}}
+    </div>
+  <div><label for="e-cap">how many can come <span class="dim">&mdash; empty means no limit; counted by heads, so somebody bringing three takes four places</span></label><input id="e-cap" type="number" name="capacity" min="0" value="{{form_capacity}}"></div>
+  <div><label for="e-body">the details</label><textarea id="e-body" name="body" rows="10">{{form_body}}</textarea></div>
+  <label class="check"><input type="checkbox" name="published" {{#form_published}}checked{{/form_published}}> announced &mdash; members can see it and answer</label>
+  {{#invitesOn}}<label class="check"><input type="checkbox" name="invite" {{#newEvent}}checked{{/newEvent}}> and send everybody a calendar invitation</label>
+  <p class="hint">Only when it is announced. Leave it unticked while the day is still being argued
+    about &mdash; an event nobody has agreed on should not be in anybody's calendar, and you can
+    send it from the list whenever you are ready.</p>{{/invitesOn}}
+  {{^invitesOn}}<p class="hint">Calendar invitations cannot be sent: {{invitesWhyNot}}.</p>{{/invitesOn}}
+  {{#suggested}}<p class="hint">This was suggested by a member and is not on the calendar yet.
+    Saving it here does not accept it &mdash; that is the button on the
+    <a href="{{backUrl}}/suggestions">suggested</a> screen.</p>{{/suggested}}
+  <div class="doing"><button class="btn" type="submit">Save</button></div>
+</form>
+
+{{#editing}}
+<h2>Who else can come</h2>
+<form class="inline" method="post" action="{{action}}">
+  <input type="hidden" name="csrf" value="{{csrf}}">
+  <input type="hidden" name="action" value="open_public">
+  <input type="hidden" name="id" value="{{form_id}}">
+  <button type="submit" class="quiet">{{#openToPublic}}Make it members only again{{/openToPublic}}{{^openToPublic}}Open it to anybody{{/openToPublic}}</button>
+</form>
+{{#openToPublic}}<p class="hint">Anybody can open this event and take
+  <a href="{{icsUrl}}">the calendar file</a> without an account here. If they answer from their
+  calendar it lands below rather than on the guest list &mdash; it takes no seat and tells nobody
+  they are coming until you decide.</p>{{/openToPublic}}
+{{^openToPublic}}<p class="hint">Members only. An answer from an address nobody here recognises is
+  ignored, which is the right answer for almost everything and the wrong one for the evening you
+  actually want strangers at.</p>{{/openToPublic}}
+
+{{#anyOutside}}
+<h3>Answers from outside</h3>
+<div class="scroller"><table>
+  <thead><tr><th>who</th><th>said</th><th>when</th><th></th></tr></thead>
+  <tbody>{{#outside}}<tr>
+    <td>{{name}}{{plus}}<div class="dim mono">{{email}}</div></td>
+    <td>{{answer}}</td>
+    <td class="dim">{{at}}</td>
+    <td class="actions">
+      {{#converted}}<span class="pill blue">joined</span>{{/converted}}
+      {{^converted}}{{#invited}}<span class="pill dim">invited</span>{{/invited}}
+      {{^invited}}{{#canInvite}}<form class="inline" method="post" action="{{action}}">
+        <input type="hidden" name="csrf" value="{{csrf}}">
+        <input type="hidden" name="action" value="invite_outsider">
+        <input type="hidden" name="id" value="{{form_id}}">
+        <input type="hidden" name="guest" value="{{id}}">
+        <button type="submit" class="quiet">Invite them</button>
+      </form>{{/canInvite}}{{/invited}}{{/converted}}
+    </td>
+  </tr>{{/outside}}</tbody>
+</table></div>
+<p class="hint">Somebody who found out about this, said they were coming, and has never been asked
+  to join is the strongest lead a small community gets. Inviting them is one press; when they join,
+  what they said here becomes an ordinary answer.</p>
+{{/anyOutside}}
+{{/editing}}
+{{/content}}{{/shell}}

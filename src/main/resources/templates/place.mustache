@@ -1,0 +1,16 @@
+{{<layout}}{{$body}}
+<p class="crumb"><a href="{{backUrl}}">&larr; {{plural}}</a></p>
+<h1>{{name}}</h1>
+{{#anyAddress}}<p class="tagline">{{address}}</p>{{/anyAddress}}
+
+<dl class="facets">
+  {{#fields}}{{#any}}<div><dt>{{label}}</dt><dd>{{value}}</dd></div>{{/any}}{{/fields}}
+  {{#website}}<div><dt>website</dt><dd><a href="{{.}}" rel="noopener noreferrer">{{.}}</a></dd></div>{{/website}}
+  {{#phone}}<div><dt>phone</dt><dd><a href="tel:{{.}}">{{.}}</a></dd></div>{{/phone}}
+  {{#email}}<div><dt>email</dt><dd><a href="mailto:{{.}}">{{.}}</a></dd></div>{{/email}}
+  {{#mapUrl}}<div><dt>map</dt><dd><a href="{{.}}">open in maps</a></dd></div>{{/mapUrl}}
+</dl>
+
+<div class="post-body">{{{bodyHtml}}}</div>
+{{>comments}}
+{{/body}}{{/layout}}

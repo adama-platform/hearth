@@ -1,0 +1,22 @@
+<p class="count">{{count}} waiting</p>
+{{^anyFlags}}<p class="hint">Nothing has been flagged. That is the usual state of this page.</p>{{/anyFlags}}
+{{#anyFlags}}
+{{#flags}}
+<div class="card">
+  <p class="meta">
+    <span class="pill warn">{{kindLabel}}</span>
+    <span>{{count}} {{#one}}person{{/one}}{{^one}}people{{/one}}</span>
+    <span class="sep">&middot;</span><span class="mono dim">{{when}}</span>
+    {{#url}}<a href="{{.}}">see it in place</a>{{/url}}
+  </p>
+  <div class="post-body">{{{bodyHtml}}}</div>
+  <p class="meta"><span class="dim">written by</span> <span>{{author}}</span>
+    {{#removed}}<span class="pill dim">already removed</span>{{/removed}}</p>
+  {{#reasons}}<p class="hint">&ldquo;{{.}}&rdquo;</p>{{/reasons}}
+  <div class="doing">
+    <form class="inline" method="post" action="{{action}}"><input type="hidden" name="csrf" value="{{csrf}}"><input type="hidden" name="action" value="clear"><input type="hidden" name="subject_kind" value="{{subjectKind}}"><input type="hidden" name="subject_id" value="{{subjectId}}"><button type="submit">looked at it, it is fine</button></form>
+    {{^removed}}<form class="inline" method="post" action="{{action}}"><input type="hidden" name="csrf" value="{{csrf}}"><input type="hidden" name="action" value="remove"><input type="hidden" name="subject_kind" value="{{subjectKind}}"><input type="hidden" name="subject_id" value="{{subjectId}}"><button type="submit">take it down</button></form>{{/removed}}
+  </div>
+</div>
+{{/flags}}
+{{/anyFlags}}

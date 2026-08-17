@@ -1,0 +1,63 @@
+{{<shell}}{{$content}}
+<h1>Machine</h1>
+<p class="hint">What this box is doing, read from <code>/proc</code> where there is one. Anything it
+  cannot read is left blank rather than guessed at &mdash; a made-up number on a page like this is
+  worse than a missing one, because somebody acts on it.</p>
+
+<h2>Processor</h2>
+<div class="cards">
+  <div class="card"><div class="n">{{#cpuKnown}}{{cpuNow}}%{{/cpuKnown}}{{^cpuKnown}}&mdash;{{/cpuKnown}}</div><div class="l">right now</div></div>
+  <div class="card"><div class="n">{{cpuAverage}}</div><div class="l">last {{averageMinutes}} min</div></div>
+  <div class="card"><div class="n">{{processors}}</div><div class="l">cores</div></div>
+  <div class="card"><div class="n">{{load}}</div><div class="l">load average</div></div>
+</div>
+<p class="hint">Load average is <strong>runnable processes, not a percentage</strong> &mdash; that is
+  {{loadPerCore}} per core here. The percentage above is what <code>top</code> computes: the share of
+  the time since the last sample that was not idle.</p>
+{{^cpuKnown}}<p class="hint">No <code>/proc/stat</code> on this machine, so there is no processor
+  figure. Everything else on this page still works.</p>{{/cpuKnown}}
+
+<h2>Memory</h2>
+<div class="cards">
+  <div class="card"><div class="n">{{heapPercent}}%</div><div class="l">JVM heap</div></div>
+  <div class="card"><div class="n">{{heapUsed}}</div><div class="l">of {{heapMax}}</div></div>
+  {{#hostKnown}}
+  <div class="card"><div class="n">{{hostPercent}}%</div><div class="l">host memory</div></div>
+  <div class="card"><div class="n">{{hostAvailable}}</div><div class="l">available of {{hostTotal}}</div></div>
+  {{/hostKnown}}
+</div>
+<p class="hint">Two numbers because they answer two questions. The <strong>heap</strong> says whether
+  this program is under pressure; the <strong>host</strong> says whether the machine is, which is
+  what decides whether the next thing to start on this box gets killed. Available rather than free,
+  because free memory on Linux is nearly always small &mdash; the kernel uses the rest for cache, and
+  reporting that would make every healthy machine look like it is falling over.</p>
+{{^hostKnown}}<p class="hint">No <code>/proc/meminfo</code>, so the host numbers are not
+  available.</p>{{/hostKnown}}
+
+<h2>The last {{hours}} hours</h2>
+{{^anyBars}}<p class="hint">Nothing sampled yet. A reading is taken every {{sampleMinutes}} minute(s),
+  so this fills in as the server runs and starts again from empty after a restart &mdash; it is a
+  window on the last day, not a record.</p>{{/anyBars}}
+{{#anyBars}}
+<div class="graph" role="img" aria-label="processor, host memory and heap over the last day">
+  {{#bars}}<span class="col" title="{{when}} &middot; cpu {{cpu}}% &middot; host {{host}}% &middot; heap {{heap}}%">
+    <b class="cpu" style="height:{{cpuHeight}}%"></b><b class="host" style="height:{{hostHeight}}%"></b><b class="heap" style="height:{{heapHeight}}%"></b>
+  </span>{{/bars}}
+</div>
+<p class="hint"><span class="key cpu"></span> processor &nbsp; <span class="key host"></span> host
+  memory &nbsp; <span class="key heap"></span> heap. {{samples}} sample(s) held, averaged into
+  columns so a spike in a quiet hour still shows.</p>
+{{/anyBars}}
+
+<h2>This process</h2>
+<div class="cards">
+  <div class="card"><div class="n">{{hits}}</div><div class="l">requests</div></div>
+  <div class="card"><div class="n">{{errorRate}}%</div><div class="l">errors</div></div>
+  <div class="card"><div class="n">{{livePings}}</div><div class="l">live pings</div></div>
+  <div class="card"><div class="n">{{eventsEmitted}}</div><div class="l">mutations</div></div>
+</div>
+<p class="hint">Up {{uptime}}, running {{version}}. Requests exclude the live channel, which is
+  counted on its own &mdash; an open tab asks it every few seconds forever, and letting that into the
+  numbers would push every page anybody reads off the bottom of them.
+  <a href="{{eventsUrl}}">The mutation stream</a> keeps the last thousand row changes.</p>
+{{/content}}{{/shell}}

@@ -1,0 +1,44 @@
+{{<shell}}{{$content}}
+<p class="crumb"><a href="{{backUrl}}">&larr; Directories</a>{{#templateUrl}} &middot; <a href="{{.}}">the page template</a>{{/templateUrl}}</p>
+<h1>{{heading}}</h1>
+{{#missing}}<p class="problem">That template could not be found.</p>{{/missing}}
+{{^missing}}
+<form class="editor" method="post" action="{{backUrl}}">
+  <input type="hidden" name="csrf" value="{{csrf}}">
+  <input type="hidden" name="action" value="save">
+  <input type="hidden" name="name" value="{{form_name}}">
+  <label class="check"><input type="checkbox" name="directory"{{#form_directory}} checked{{/form_directory}}> this template publishes a directory index</label>
+  <div class="row">
+    <div><label for="d-path">where the index lives</label>
+      <input id="d-path" type="text" name="directory_path" value="{{form_directory_path}}" placeholder="/blog"></div>
+    <div><label for="d-size">entries per page</label>
+      <input id="d-size" type="number" name="directory_page_size" min="1" max="200" value="{{form_directory_page_size}}"></div>
+  </div>
+  <div><label for="d-pattern">how page two is addressed</label>
+    <input id="d-pattern" type="text" name="directory_pattern" value="{{form_directory_pattern}}" placeholder="/blog/page/{{lbrace}}page{{rbrace}}">
+    <p class="hint">A pattern with <code>{{lbrace}}page{{rbrace}}</code> in it. Empty means
+      <code>/blog/page/2</code>. <strong>Page one is always the bare path</strong> whatever the
+      pattern says &mdash; two addresses for one page is two entries in a search engine.</p></div>
+  <label class="check"><input type="checkbox" name="newest"{{#form_newest}} checked{{/form_newest}}> newest first</label>
+  <p class="hint">By the day each page was <em>published</em>, which is a date somebody can move, not
+    the day the row appeared. Newest first is right for a blog and wrong for a handbook.</p>
+
+  <div><label for="d-body">the index template</label>
+    <textarea id="d-body" name="directory_body">{{form_directory_body}}</textarea>
+    <p class="hint">{{#ownIndex}}This index has its own markup.{{/ownIndex}}{{^ownIndex}}This is the
+      listing you get for free; edit it and it becomes yours.{{/ownIndex}} What it is given:</p>
+    <pre><code>{{lbrace}}#entries{{rbrace}}     uri, title, at, excerpt, folder{{#anyFields}}, and this template's fields{{/anyFields}}
+{{lbrace}}count{{rbrace}}        how many entries there are in total
+{{lbrace}}page{{rbrace}} {{lbrace}}pages{{rbrace}}  which page this is, and how many there are
+{{lbrace}}#hasPrev{{rbrace}}     with prevUrl / nextUrl / firstUrl / lastUrl
+{{lbrace}}#numbers{{rbrace}}     n, url, here &mdash; for a row of page numbers
+{{lbrace}}{{lbrace}}body{{rbrace}}{{rbrace}}     a plain list, for before you have written one</code></pre>
+    {{#anyFields}}<p class="hint">This template declares {{#fields}}<code>{{lbrace}}{{name}}{{rbrace}}</code> {{/fields}}&mdash;
+      every entry carries whatever it filled in, so a listing can show summaries rather than
+      excerpts.</p>{{/anyFields}}
+  </div>
+  <div class="doing"><button class="btn" type="submit">Save</button></div>
+</form>
+<p class="hint">{{entries}} page(s) use this template.</p>
+{{/missing}}
+{{/content}}{{/shell}}

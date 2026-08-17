@@ -1,0 +1,8 @@
+{{<shell}}{{$content}}
+<h1>Caching</h1>
+<p class="hint">A cache nobody can see the hit rate of is a cache nobody can tune. Everything here is in memory and dies with the process; the TTL is a backstop, and the event bus is the mechanism.</p>
+<div class="tools">
+  <button type="button" class="quiet live" data-live="Go live" data-live-on="Stop">Go live</button>
+</div>
+<div class="panel" data-panel="{{panelUrl}}">{{{panel}}}</div>
+{{/content}}{{/shell}}

@@ -1,0 +1,23 @@
+<p class="count">{{count}} event(s)</p>
+{{^anyEvents}}<p class="hint">Nothing on the calendar yet.</p>{{/anyEvents}}
+{{#anyEvents}}<table>
+  <thead><tr><th>what</th><th>when</th><th>where</th><th class="num">going</th><th></th></tr></thead>
+  <tbody>{{#events}}<tr>
+    <td>
+      <a href="{{editUrl}}">{{title}}</a>
+      {{^published}}<span class="pill dim">draft</span>{{/published}}
+      {{#cancelled}}<span class="pill red">cancelled</span>{{/cancelled}}
+      {{#over}}<span class="pill dim">over</span>{{/over}}
+      {{#staleInvites}}<span class="pill warn">invitations are out of date</span>{{/staleInvites}}
+      {{#invited}}{{^staleInvites}}<span class="pill green">invited</span>{{/staleInvites}}{{/invited}}
+    </td>
+    <td class="dim mono">{{when}}</td>
+    <td class="dim">{{location}}</td>
+    <td class="num dim">{{going}}{{#limited}} / {{capacity}}{{/limited}}{{#waiting}} <span class="pill">+{{.}} waiting</span>{{/waiting}}</td>
+    <td class="actions">
+      {{^cancelled}}{{^over}}<form class="inline" method="post" action="{{action}}"><input type="hidden" name="csrf" value="{{csrf}}"><input type="hidden" name="id" value="{{id}}"><input type="hidden" name="action" value="invite"><button type="submit">{{#invited}}invite again{{/invited}}{{^invited}}invite everybody{{/invited}}</button></form>{{/over}}{{/cancelled}}
+      <form class="inline" method="post" action="{{action}}"><input type="hidden" name="csrf" value="{{csrf}}"><input type="hidden" name="id" value="{{id}}"><input type="hidden" name="action" value="cancel"><button type="submit">{{#cancelled}}reinstate{{/cancelled}}{{^cancelled}}cancel{{/cancelled}}</button></form>
+      <form class="inline" method="post" action="{{action}}" onsubmit="return confirm('Delete this event and everybody&#39;s answers? Cancelling keeps the page.')"><input type="hidden" name="csrf" value="{{csrf}}"><input type="hidden" name="id" value="{{id}}"><input type="hidden" name="action" value="delete"><button type="submit">delete</button></form>
+    </td>
+  </tr>{{/events}}</tbody>
+</table>{{/anyEvents}}

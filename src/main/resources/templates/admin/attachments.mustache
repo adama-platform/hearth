@@ -1,0 +1,43 @@
+{{<shell}}{{$content}}
+<h1>Files</h1>
+<p class="hint">{{count}} file(s), {{held}}. <a href="{{unusedUrl}}">What is nothing pointing at?</a> Anything here can be put in a page: the
+  <strong>copy</strong> button beside each one gives you the line to paste, and the page editor has
+  a picker that does it for you.</p>
+
+<details class="card" open>
+  <summary>Upload</summary>
+  <form method="post" action="{{uploadUrl}}" enctype="multipart/form-data">
+    <input type="hidden" name="csrf" value="{{csrf}}">
+    <div><label for="f-file">the file <span class="dim">&mdash; up to {{maxMb}}MB</span></label>
+      <input id="f-file" type="file" name="file" accept="{{accept}}" required></div>
+    <div><label for="f-desc">what it is <span class="dim">&mdash; this becomes the alt text, so
+      somebody using a screen reader knows what the picture is of</span></label>
+      <input id="f-desc" type="text" name="description" maxlength="512"></div>
+    <div class="row">
+      <div><label for="f-folder">folder</label>
+        <input id="f-folder" type="text" name="folder" list="folders" placeholder="suppers/2026-05">
+        <datalist id="folders">{{#folders}}<option value="{{value}}"></option>{{/folders}}</datalist></div>
+      <div><label for="f-tags">tags</label>
+        <input id="f-tags" type="text" name="tags" placeholder="supper cake outside"></div>
+    </div>
+    <label class="check"><input type="checkbox" name="public"> anybody can see it &mdash; leave this
+      off and it needs a signed-in member</label>
+    <div class="doing"><button type="submit">Upload</button></div>
+  </form>
+  <p class="hint">This community accepts: {{extensions}}. Nothing else, because the list is what
+    stops somebody uploading a page that this domain would then serve to its own members.</p>
+</details>
+
+<form class="tools" method="get" action="{{action}}" data-filters>
+  <div class="search">{{{searchIcon}}}
+    <input type="search" name="q" value="{{q}}" placeholder="Search names, descriptions and tags" aria-label="search files">
+  </div>
+  <div class="chips" role="group" aria-label="kind">
+    {{#kinds}}<label class="chip"><input type="radio" name="kind" value="{{value}}"{{#selected}} checked{{/selected}}>{{label}}</label>{{/kinds}}
+  </div>
+  <input type="text" name="folder" value="{{folder}}" list="folders" placeholder="any folder" aria-label="folder">
+  <noscript><button type="submit" class="quiet">Filter</button></noscript>
+</form>
+{{#anyTags}}<p class="hint">Tags: {{#tags}}<a href="{{url}}">{{tag}}</a> {{/tags}}</p>{{/anyTags}}
+<div class="panel" data-panel="{{panelUrl}}">{{{panel}}}</div>
+{{/content}}{{/shell}}

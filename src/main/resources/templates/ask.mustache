@@ -1,0 +1,8 @@
+{{! one question, wherever it is asked: the survey, or the welcome on the way in }}
+<div class="question{{#answered}} done{{/answered}}">
+  <p class="prompt">{{prompt}}{{#required}} <span class="tag">required</span>{{/required}}</p>
+  {{#anyHelp}}<p class="hint">{{help}}</p>{{/anyHelp}}
+  {{#free}}<textarea id="{{field}}" name="{{field}}" rows="3" maxlength="4000" aria-label="{{prompt}}">{{answer}}</textarea>{{/free}}
+  {{#choice}}<select id="{{field}}" name="{{field}}" aria-label="{{prompt}}"><option value="">&mdash;</option>{{#options}}<option value="{{value}}" {{#selected}}selected{{/selected}}>{{value}}</option>{{/options}}</select>{{/choice}}
+  {{#rating}}<div class="scale" role="group" aria-label="{{prompt}}">{{#scale}}<label><input type="radio" name="{{field}}" value="{{value}}" {{#selected}}checked{{/selected}}><span>{{value}}</span></label>{{/scale}}</div>{{/rating}}
+</div>

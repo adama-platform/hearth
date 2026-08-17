@@ -1,0 +1,30 @@
+<p class="count">{{count}} shown</p>
+{{^anyInvites}}<p class="hint">Nothing matches.</p>{{/anyInvites}}
+{{#anyInvites}}<table>
+  <thead><tr><th>who</th><th>where it got to</th><th>invited by</th><th>when</th><th></th></tr></thead>
+  <tbody>{{#invites}}<tr>
+    <td class="mono">{{email}}{{#note}}<div class="hint">{{.}}</div>{{/note}}</td>
+    <td>
+      {{#converted}}<span class="pill good">joined</span> <a href="{{memberUrl}}">see them</a>{{/converted}}
+      {{^converted}}
+        {{#revoked}}<span class="pill warn">revoked</span>{{/revoked}}
+        {{^revoked}}
+          {{#clicked}}<span class="pill blue">clicked</span> <span class="dim">{{clicks}}&times;</span>{{/clicked}}
+          {{^clicked}}
+            {{#opened}}<span class="pill purple">opened</span> <span class="dim">{{opens}}&times;</span>{{/opened}}
+            {{^opened}}{{#sent}}<span class="pill dim">no evidence of an open</span>{{/sent}}{{^sent}}<span class="pill dim">not sent</span>{{/sent}}{{/opened}}
+          {{/clicked}}
+        {{/revoked}}
+      {{/converted}}
+    </td>
+    <td class="dim">{{invitedBy}}</td>
+    <td class="dim mono">{{created}}</td>
+    <td class="actions">
+      {{^converted}}{{^revoked}}
+        <form class="inline" method="post" action="{{action}}"><input type="hidden" name="csrf" value="{{csrf}}"><input type="hidden" name="id" value="{{id}}"><input type="hidden" name="action" value="send"><button type="submit">{{#sent}}send again{{/sent}}{{^sent}}send{{/sent}}</button></form>
+        <form class="inline" method="post" action="{{action}}"><input type="hidden" name="csrf" value="{{csrf}}"><input type="hidden" name="id" value="{{id}}"><input type="hidden" name="action" value="revoke"><button type="submit">revoke</button></form>
+      {{/revoked}}{{/converted}}
+      <form class="inline" method="post" action="{{action}}" onsubmit="return confirm('Delete this invitation from the record?')"><input type="hidden" name="csrf" value="{{csrf}}"><input type="hidden" name="id" value="{{id}}"><input type="hidden" name="action" value="delete"><button type="submit">delete</button></form>
+    </td>
+  </tr>{{/invites}}</tbody>
+</table>{{/anyInvites}}

@@ -1,0 +1,21 @@
+{{! votes and a flag, for a post or a comment. Nothing here hides or reorders anything: the counts
+    are a signal for a person to act on, and the person is the one who decides. }}
+<span class="signals">
+  <form class="inline" method="post" action="{{signalAction}}"><input type="hidden" name="csrf" value="{{csrf}}"><input type="hidden" name="action" value="vote"><input type="hidden" name="vote" value="up"><input type="hidden" name="subject_kind" value="{{subjectKind}}"><input type="hidden" name="subject_id" value="{{subjectId}}"><input type="hidden" name="post" value="{{postId}}"><button type="submit" class="vote{{#iVotedUp}} on{{/iVotedUp}}" aria-label="agree" title="agree">&#9650;{{#anyUp}} {{up}}{{/anyUp}}</button></form>
+  <form class="inline" method="post" action="{{signalAction}}"><input type="hidden" name="csrf" value="{{csrf}}"><input type="hidden" name="action" value="vote"><input type="hidden" name="vote" value="down"><input type="hidden" name="subject_kind" value="{{subjectKind}}"><input type="hidden" name="subject_id" value="{{subjectId}}"><input type="hidden" name="post" value="{{postId}}"><button type="submit" class="vote{{#iVotedDown}} on{{/iVotedDown}}" aria-label="disagree" title="disagree">&#9660;{{#anyDown}} {{down}}{{/anyDown}}</button></form>
+  <details class="flagbox">
+    <summary title="ask somebody to look at this">&#9873;{{#flagged}} <span class="pill warn">{{flags}}</span>{{/flagged}}</summary>
+    <form method="post" action="{{signalAction}}">
+      <input type="hidden" name="csrf" value="{{csrf}}">
+      <input type="hidden" name="action" value="flag">
+      <input type="hidden" name="subject_kind" value="{{subjectKind}}">
+      <input type="hidden" name="subject_id" value="{{subjectId}}">
+      <input type="hidden" name="post" value="{{postId}}">
+      <label for="f-{{subjectKind}}-{{subjectId}}">what is wrong with it</label>
+      <input id="f-{{subjectKind}}-{{subjectId}}" type="text" name="reason" maxlength="512" placeholder="optional, and it helps">
+      <button type="submit" class="small">Ask somebody to look</button>
+      <p class="hint">Nothing happens to it automatically. Somebody who moderates here reads it and
+        decides. Whoever wrote it is not told that you did this.</p>
+    </form>
+  </details>
+</span>

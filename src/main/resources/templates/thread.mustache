@@ -1,0 +1,213 @@
+{{<layout}}{{$body}}
+<p class="crumb"><a href="{{boardUrl}}">&larr; Discussion</a></p>
+<h1>{{title}}</h1>
+<div class="meta">
+  <span>{{author}}</span><span class="sep">&middot;</span><span>{{when}}</span>
+  <span class="sep">&middot;</span><span>{{watchers}} watching</span>
+  {{#edited}}<span class="pill">edited</span>{{/edited}}
+  {{#expires}}<span class="pill warn">{{daysLeft}} day(s) left</span>{{/expires}}
+  {{#locked}}<span class="pill">locked</span>{{/locked}}
+</div>
+<div class="post-body">{{{bodyHtml}}}</div>
+
+<div class="rowactions">
+{{>signals}}
+{{#watching}}
+<form method="post" action="{{action}}" class="inline">
+  <input type="hidden" name="csrf" value="{{csrf}}">
+  <input type="hidden" name="action" value="unwatch">
+  <input type="hidden" name="post" value="{{id}}">
+  <button type="submit" class="quiet">stop watching this</button>
+</form>
+{{/watching}}
+{{#canRemove}}
+<form method="post" action="{{action}}" class="inline" onsubmit="return confirm('Remove this from the feed? The replies are kept.')">
+  <input type="hidden" name="csrf" value="{{csrf}}">
+  <input type="hidden" name="action" value="remove_post">
+  <input type="hidden" name="post" value="{{id}}">
+  <button type="submit" class="quiet">remove</button>
+</form>
+{{/canRemove}}
+</div>
+
+{{#mine}}
+<details class="reply">
+  <summary>edit what you wrote</summary>
+  <form method="post" action="{{action}}">
+    <input type="hidden" name="csrf" value="{{csrf}}">
+    <input type="hidden" name="action" value="edit_post">
+    <input type="hidden" name="post" value="{{id}}">
+    <input type="text" name="title" maxlength="256" value="{{title}}" required>
+    <textarea name="body" rows="6" required>{{body}}</textarea>
+    <button type="submit">Save</button>
+  </form>
+  <p class="hint">It will say it was edited. People replied to what it said before.</p>
+</details>
+{{/mine}}
+
+{{#anyPolls}}
+<h2>Being decided</h2>
+{{#polls}}
+<section class="poll{{^open}} settled{{/open}}">
+  <h3>{{question}}</h3>
+  <p class="meta">
+    {{#open}}{{#closes}}<span class="pill warn">closes {{.}}</span>{{/closes}}{{^closes}}<span class="pill">open until somebody counts it</span>{{/closes}}{{/open}}
+    {{^open}}<span class="pill good">counted</span>{{/open}}
+    {{#schedule}}<span class="pill">becomes an event</span>{{/schedule}}
+  </p>
+  {{#outcome}}<p class="done">{{.}}{{#eventUrl}} <a href="{{.}}">See it &rarr;</a>{{/eventUrl}}</p>{{/outcome}}
+
+  {{#schedule}}
+  <h4>Which day</h4>
+  <p class="hint">Say yes to every day you could come, and no to the ones you cannot. Several yeses
+    is the useful answer &mdash; one pick throws away most of what you know.</p>
+  {{#times}}{{>poll_option}}{{/times}}
+  {{^times}}<p class="hint">No days on the table yet.</p>{{/times}}
+  {{#mayAdd}}
+  <form method="post" action="{{action}}" class="addoption">
+    <input type="hidden" name="csrf" value="{{csrf}}">
+    <input type="hidden" name="action" value="poll_option">
+    <input type="hidden" name="poll" value="{{id}}">
+    <input type="hidden" name="facet" value="time">
+    <label class="sr">a day</label><input type="date" name="day" required>
+    <label class="sr">time of day</label><input type="text" name="at" maxlength="64" placeholder="from 7, say">
+    <button type="submit" class="quiet">Suggest this day</button>
+  </form>
+  {{/mayAdd}}
+
+  <h4>Where</h4>
+  <p class="hint">One place wins, so this is a single vote &mdash; picking another moves it.</p>
+  {{#places}}{{>poll_option}}{{/places}}
+  {{^places}}<p class="hint">Nowhere on the table yet.</p>{{/places}}
+  {{#mayAdd}}{{#placeChoices}}{{/placeChoices}}
+  <form method="post" action="{{action}}" class="addoption">
+    <input type="hidden" name="csrf" value="{{csrf}}">
+    <input type="hidden" name="action" value="poll_option">
+    <input type="hidden" name="poll" value="{{id}}">
+    <input type="hidden" name="facet" value="place">
+    <label class="sr">a place</label>
+    <select name="place">{{#placeChoices}}<option value="{{id}}">{{name}}</option>{{/placeChoices}}</select>
+    <button type="submit" class="quiet">Suggest this place</button>
+  </form>
+  {{/mayAdd}}
+  {{/schedule}}
+
+  {{^schedule}}
+  {{#choices}}{{>poll_option}}{{/choices}}
+  {{^choices}}<p class="hint">Nothing on the table yet.</p>{{/choices}}
+  {{#mayAdd}}
+  <form method="post" action="{{action}}" class="addoption">
+    <input type="hidden" name="csrf" value="{{csrf}}">
+    <input type="hidden" name="action" value="poll_option">
+    <input type="hidden" name="poll" value="{{id}}">
+    <input type="hidden" name="facet" value="choice">
+    <label class="sr">another option</label>
+    <input type="text" name="label" maxlength="256" placeholder="another option" required>
+    <button type="submit" class="quiet">Add it</button>
+  </form>
+  {{/mayAdd}}
+  {{/schedule}}
+
+  {{#mayClose}}
+  <form method="post" action="{{action}}" class="inline" onsubmit="return confirm('Count it now? This is the end of the voting.')">
+    <input type="hidden" name="csrf" value="{{csrf}}">
+    <input type="hidden" name="action" value="poll_close">
+    <input type="hidden" name="poll" value="{{id}}">
+    <button type="submit" class="quiet">Count it now</button>
+  </form>
+  {{/mayClose}}
+</section>
+{{/polls}}
+{{/anyPolls}}
+
+{{#mayAskPoll}}
+<details class="reply askpoll">
+  <summary>put something to a vote</summary>
+  <form method="post" action="{{action}}">
+    <input type="hidden" name="csrf" value="{{csrf}}">
+    <input type="hidden" name="action" value="poll_new">
+    <input type="hidden" name="post" value="{{id}}">
+    <label for="p-q">what is being decided</label>
+    <input id="p-q" type="text" name="question" maxlength="512" required>
+    <label for="p-kind">what kind</label>
+    <select id="p-kind" name="kind">
+      <option value="choice">a straight choice &mdash; most votes wins</option>
+      {{#mayAskSchedule}}<option value="schedule">a day and a place &mdash; and it becomes an event</option>{{/mayAskSchedule}}
+    </select>
+    {{^mayAskSchedule}}<p class="hint">A vote that turns itself into an event needs permission to
+      create events. Ask somebody who has it, or use a straight choice and let them put the event
+      up.</p>{{/mayAskSchedule}}
+    <label for="p-choices">the options, one per line <span class="dim">&mdash; for a straight choice</span></label>
+    <textarea id="p-choices" name="choices" rows="4"></textarea>
+    <label for="p-closes">closes at the end of <span class="dim">&mdash; needed for a day-and-place vote</span></label>
+    <input id="p-closes" type="date" name="closes_on">
+    <label class="check"><input type="checkbox" name="only_me"> only I can add options</label>
+    <button type="submit">Ask</button>
+  </form>
+</details>
+{{/mayAskPoll}}
+
+<h2><span data-live-count>{{commentCount}}</span> repl{{#anyComments}}ies{{/anyComments}}{{^anyComments}}y{{/anyComments}}</h2>
+<div data-live-region="comments">
+{{#commentGroups}}
+{{#collapsed}}<details class="clump" data-key="g{{label}}"><summary>{{label}} &mdash; {{count}} repl{{#count}}ies{{/count}}</summary>{{/collapsed}}
+{{^collapsed}}<div class="clump open" data-key="g{{label}}">{{#anyLabel}}<h3 class="when">{{label}}</h3>{{/anyLabel}}{{/collapsed}}
+{{#comments}}
+<div class="comment" data-key="c{{id}}" style="margin-left:{{indent}}rem">
+  <div class="meta">{{author}} &middot; {{when}}{{#edited}} &middot; <span class="dim">edited</span>{{/edited}}</div>
+  <div class="comment-body">{{{bodyHtml}}}</div>
+  <div class="rowactions">
+  {{^removed}}{{>signals}}{{/removed}}
+  {{#canReply}}
+  <details class="reply">
+    <summary>reply</summary>
+    <form method="post" action="{{action}}">
+      <input type="hidden" name="csrf" value="{{csrf}}">
+      <input type="hidden" name="action" value="reply">
+      <input type="hidden" name="post" value="{{postId}}">
+      <input type="hidden" name="parent" value="{{id}}">
+      <textarea name="body" rows="3" required></textarea>
+      <button type="submit">Reply</button>
+    </form>
+  </details>
+  {{/canReply}}
+  {{#mine}}{{^removed}}
+  <details class="reply">
+    <summary>edit</summary>
+    <form method="post" action="{{action}}">
+      <input type="hidden" name="csrf" value="{{csrf}}">
+      <input type="hidden" name="action" value="edit_comment">
+      <input type="hidden" name="comment" value="{{id}}">
+      <textarea name="body" rows="3" required>{{body}}</textarea>
+      <button type="submit">Save</button>
+    </form>
+  </details>
+  {{/removed}}{{/mine}}
+  {{#canRemove}}{{^removed}}
+  <form method="post" action="{{action}}" class="inline" onsubmit="return confirm('Remove this comment? The replies underneath it stay.')">
+    <input type="hidden" name="csrf" value="{{csrf}}">
+    <input type="hidden" name="action" value="remove_comment">
+    <input type="hidden" name="comment" value="{{id}}">
+    <button type="submit" class="quiet">remove</button>
+  </form>
+  {{/removed}}{{/canRemove}}
+  </div>
+</div>
+{{/comments}}
+{{#collapsed}}</details>{{/collapsed}}{{^collapsed}}</div>{{/collapsed}}
+{{/commentGroups}}
+</div>
+
+{{^locked}}
+<form method="post" action="{{action}}" class="newcomment">
+  <input type="hidden" name="csrf" value="{{csrf}}">
+  <input type="hidden" name="action" value="reply">
+  <input type="hidden" name="post" value="{{id}}">
+  <label for="c-body">add to this</label>
+  <textarea id="c-body" name="body" rows="4" required></textarea>
+  <button type="submit">Reply</button>
+</form>
+<p class="hint">Replying starts you watching, so you hear about what comes next.</p>
+{{/locked}}
+{{#locked}}<p class="hint">This conversation is locked.</p>{{/locked}}
+{{/body}}{{/layout}}

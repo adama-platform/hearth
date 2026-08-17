@@ -1,0 +1,14 @@
+{{<shell}}{{$content}}
+<h1>Navigation</h1>
+<p class="hint">A folder is just a name a page carries. Pages sharing one appear together, and a template can walk the whole tree.</p>
+{{^anyFolders}}<p class="hint">No folders yet. Give a page a folder in its editor and it will appear here.</p>{{/anyFolders}}
+{{#folders}}
+  <h2>{{name}} <span class="count">{{count}}</span></h2>
+  <table><tbody>{{#pages}}<tr><td class="mono"><a href="{{editUrl}}">{{uri}}</a></td><td>{{title}}</td></tr>{{/pages}}</tbody></table>
+{{/folders}}
+{{#anyOrphans}}
+  <h2>Outside the navigation</h2>
+  <p class="hint">These are reachable by their uri and by nothing else.</p>
+  <table><tbody>{{#orphans}}<tr><td class="mono"><a href="{{editUrl}}">{{uri}}</a></td><td>{{title}}</td><td class="actions"><span class="pill warn">no folder</span></td></tr>{{/orphans}}</tbody></table>
+{{/anyOrphans}}
+{{/content}}{{/shell}}

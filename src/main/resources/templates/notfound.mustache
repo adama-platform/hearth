@@ -1,0 +1,8 @@
+{{<layout}}{{$body}}
+<p class="face">:-(</p>
+<h1>no configuration</h1>
+<p>This server has no config for the domain you asked for, so it will not serve anything here.</p>
+<p class="hint">Not found and not supported.</p>
+{{#signInUrl}}<p class="hint">If you were expecting something here,
+  <a href="{{.}}">sign in</a> and we will bring you back to it.</p>{{/signInUrl}}
+{{/body}}{{/layout}}

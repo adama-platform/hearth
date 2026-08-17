@@ -1,0 +1,14 @@
+{{<shell}}{{$content}}
+<h1>Bans</h1>
+<p class="hint">A banned address is refused before a code is minted, before anything is mailed, and before a row is written. It costs a lookup instead of a scrypt hash.</p>
+<form class="editor" method="post" action="{{action}}">
+  <input type="hidden" name="csrf" value="{{csrf}}">
+  <input type="hidden" name="action" value="ban">
+  <div class="row">
+    <div><label for="ban-email">email</label><input id="ban-email" type="text" name="email" placeholder="someone@example.com" required></div>
+    <div><label for="ban-reason">why</label><input id="ban-reason" type="text" name="reason" placeholder="for the next admin to read"></div>
+  </div>
+  <button type="submit">Ban</button>
+</form>
+<div class="panel" data-panel="{{panelUrl}}">{{{panel}}}</div>
+{{/content}}{{/shell}}

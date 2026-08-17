@@ -1,0 +1,20 @@
+<p class="count">{{count}} role(s)</p>
+{{#anyRoles}}<table>
+  <thead><tr><th>role</th><th class="num">people</th><th class="num">can do</th><th>what it allows</th><th></th></tr></thead>
+  <tbody>{{#roles}}<tr>
+    <td>
+      {{^builtin}}<a href="{{editUrl}}">{{label}}</a>{{/builtin}}{{#builtin}}<strong>{{label}}</strong>{{/builtin}}
+      {{#builtin}}<span class="pill purple">built in</span>{{/builtin}}
+      <div class="dim">{{description}}</div>
+    </td>
+    <td class="num dim">{{holders}}</td>
+    <td class="num dim">{{count}}</td>
+    <td class="dim">{{allows}}</td>
+    <td class="actions">
+      {{^builtin}}<form class="inline" method="post" action="{{action}}" onsubmit="return confirm('Remove this role? Everybody who holds it loses it.')"><input type="hidden" name="csrf" value="{{csrf}}"><input type="hidden" name="name" value="{{name}}"><input type="hidden" name="action" value="delete"><button type="submit">delete</button></form>{{/builtin}}
+    </td>
+  </tr>{{/roles}}</tbody>
+</table>{{/anyRoles}}
+{{#bootstrapAdmins}}<p class="hint">Administrators by config, who hold every permission no matter
+  what this page says: <span class="mono">{{.}}</span>. That list lives in the domain's config file
+  and is the lock on the door this page cannot close.</p>{{/bootstrapAdmins}}

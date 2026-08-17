@@ -1,0 +1,37 @@
+{{<layout}}{{$body}}
+<h1>Discussion</h1>
+{{#expires}}<p class="hint">Posts here age out after {{expiryDays}} days, so the feed stays a
+  conversation rather than an archive.</p>{{/expires}}
+
+<details class="newpost">
+  <summary>Start something</summary>
+  <form method="post" action="{{action}}">
+    <input type="hidden" name="csrf" value="{{csrf}}">
+    <input type="hidden" name="action" value="post">
+    <div><label for="p-title">what is it about</label><input id="p-title" type="text" name="title" maxlength="256" required></div>
+    <div><label for="p-body">say more</label><textarea id="p-body" name="body" rows="6" required></textarea></div>
+    <button type="submit">Post</button>
+  </form>
+</details>
+
+{{^anyPosts}}<p class="empty"><strong>Nothing here yet.</strong>Be the first &mdash; a question
+  somebody can answer is the easiest thing to start with.</p>{{/anyPosts}}
+{{#anyPosts}}
+<ul class="feed" data-live-region="feed">
+  {{#posts}}
+  <li data-key="p{{id}}">
+    <a class="subject" href="{{url}}">{{title}}</a>
+    <div class="meta">
+      <span>{{author}}</span><span class="sep">&middot;</span><span>{{when}}</span>
+      <span class="sep">&middot;</span><span>{{comments}} repl{{#comments}}ies{{/comments}}{{^comments}}y{{/comments}}</span>
+      {{#pinned}}<span class="pill">pinned</span>{{/pinned}}
+      {{#locked}}<span class="pill">locked</span>{{/locked}}
+      {{#watching}}<span class="pill blue">watching</span>{{/watching}}
+      {{#expiring}}<span class="pill warn">{{daysLeft}} day(s) left</span>{{/expiring}}
+      {{>signals}}
+    </div>
+  </li>
+  {{/posts}}
+</ul>
+{{/anyPosts}}
+{{/body}}{{/layout}}

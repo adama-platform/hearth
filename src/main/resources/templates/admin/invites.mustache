@@ -1,0 +1,64 @@
+{{<shell}}{{$content}}
+<h1>Invites</h1>
+<div class="doing">
+  <a class="btn" href="{{newUrl}}">{{{plusIcon}}}Invite somebody</a>
+</div>
+<div class="cards">
+  <div class="card"><div class="n">{{sent}}</div><div class="l">sent</div></div>
+  <div class="card"><div class="n">{{opened}}</div><div class="l">opened</div></div>
+  <div class="card"><div class="n">{{clicked}}</div><div class="l">clicked</div></div>
+  <div class="card"><div class="n">{{converted}}</div><div class="l">joined</div></div>
+  <div class="card"><div class="n">{{conversionRate}}%</div><div class="l">conversion</div></div>
+  <div class="card"><div class="n">{{outstanding}}</div><div class="l">outstanding</div></div>
+</div>
+<details class="explain">
+  <summary>What these numbers do and do not mean</summary>
+
+  <p><strong>Sent</strong> and <strong>joined</strong> are facts. The server sent the message, and
+  somebody signed up with that address. <strong>Conversion</strong> is the only number here worth
+  making a decision on &mdash; not how many went out, but how many became a person who turns up.</p>
+
+  <p><strong>Open is not a read, in either direction, and it has got worse.</strong> An open is
+  recorded when a one-pixel image in the message is fetched. That fails both ways:</p>
+
+  <ul>
+    <li><b>Under-reports.</b> Most clients block remote images by default. Somebody can read the
+      whole thing, twice, and never register an open. <em>No evidence of an open</em> is exactly
+      what it says &mdash; it is not "unread".</li>
+    <li><b>Over-reports, which is newer.</b> Apple Mail Privacy Protection fetches remote images
+      <em>on its own</em>, before a person has opened anything, and Apple Mail is around half of
+      all opens. Gmail proxies and pre-fetches images too. So a recorded open frequently means a
+      machine looked, not a person.</li>
+  </ul>
+
+  <p>Read together: an open is <strong>weak evidence that the message was delivered somewhere real
+  and was not obviously refused</strong>. It is not evidence that a human saw it. A high open rate
+  with no conversions usually means Apple prefetching, not interest; a low open rate with good
+  conversions is normal and fine.</p>
+
+  <p><strong>Clicked is the one in between, and it is honest.</strong> It is recorded when somebody
+  follows the link in the message and lands on the sign-up form &mdash; a decision a person made,
+  which no mail client makes on their behalf. Read the three together and you know which problem you
+  have: nothing opened is a message that did not arrive or did not get looked at; opened but never
+  clicked is a message that did not persuade; clicked but never joined is a sign-up form or a moment
+  that lost them, and that one is worth investigating because it is the closest anybody got.</p>
+
+  <p>If you want to know whether an invitation worked, look at <strong>joined</strong>. It is the
+  only number here that a machine cannot fake on somebody's behalf.</p>
+
+  <p class="dim">The pixel is never cached and always returns an image, even for a token that means
+  nothing &mdash; a mail client must not get an error page, and a cached pixel would record one open
+  forever.</p>
+</details>
+
+<form class="tools" method="get" action="{{action}}" data-filters>
+  <div class="search">{{{searchIcon}}}
+    <input type="search" name="q" value="{{q}}" placeholder="Search invitations by email address" aria-label="search invitations">
+  </div>
+  <div class="chips" role="group" aria-label="stage">
+    {{#stages}}<label class="chip"><input type="radio" name="stage" value="{{value}}"{{#selected}} checked{{/selected}}>{{label}}</label>{{/stages}}
+  </div>
+  <noscript><button type="submit" class="quiet">Filter</button></noscript>
+</form>
+<div class="panel" data-panel="{{panelUrl}}">{{{panel}}}</div>
+{{/content}}{{/shell}}

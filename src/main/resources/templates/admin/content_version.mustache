@@ -1,0 +1,15 @@
+{{#problem}}<p class="problem">{{.}}</p>{{/problem}}
+{{^problem}}
+<dl class="facets">
+  <div><dt>uri</dt><dd class="mono">{{uri}}</dd></div>
+  <div><dt>title</dt><dd>{{title}}</dd></div>
+  <div><dt>kind</dt><dd>{{kind}}</dd></div>
+  <div><dt>template</dt><dd class="mono">{{#template}}{{.}}{{/template}}{{^template}}&mdash;{{/template}}</dd></div>
+  <div><dt>folder</dt><dd>{{#folder}}{{.}}{{/folder}}{{^folder}}&mdash;{{/folder}}</dd></div>
+  <div><dt>state</dt><dd>{{#published}}published{{/published}}{{^published}}draft{{/published}}{{#humanOnly}}, human only{{/humanOnly}}</dd></div>
+</dl>
+<h3>As it looked</h3>
+<iframe class="preview-frame" sandbox srcdoc="{{rendered}}" title="version {{version}}"></iframe>
+<h3>Source</h3>
+<pre class="source">{{body}}</pre>
+{{/problem}}

@@ -1,0 +1,29 @@
+<section class="comments" id="comments">
+  <h2><span data-live-count>{{commentCount}}</span> comment{{^oneComment}}s{{/oneComment}}</h2>
+  {{^anyComments}}<p class="hint">Nothing said yet.</p>{{/anyComments}}
+  <div data-live-region="comments">
+    {{#commentGroups}}
+    {{#collapsed}}
+    <details class="clump" data-key="g{{label}}">
+      <summary>{{label}} &mdash; {{count}} comment{{^one}}s{{/one}}</summary>
+      {{#comments}}{{>comment}}{{/comments}}
+    </details>
+    {{/collapsed}}
+    {{^collapsed}}
+    <div class="clump open" data-key="g{{label}}">
+      {{#anyLabel}}<h3 class="when">{{label}}</h3>{{/anyLabel}}
+      {{#comments}}{{>comment}}{{/comments}}
+    </div>
+    {{/collapsed}}
+    {{/commentGroups}}
+  </div>
+
+  <form class="newcomment" method="post" action="{{commentAction}}">
+    <input type="hidden" name="csrf" value="{{csrf}}">
+    <input type="hidden" name="{{commentSubjectField}}" value="{{commentSubjectId}}">
+    <input type="hidden" name="action" value="comment">
+    <label for="c-body">say something</label>
+    <textarea id="c-body" name="body" rows="3" required></textarea>
+    <div class="doing"><button type="submit">Post</button></div>
+  </form>
+</section>

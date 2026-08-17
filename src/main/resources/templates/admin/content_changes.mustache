@@ -1,0 +1,24 @@
+{{#problem}}<p class="problem">{{.}}</p>{{/problem}}
+{{#first}}<p class="hint">This is the first version, so there is nothing before it to compare
+  against. Preview it instead.</p>{{/first}}
+{{^problem}}{{^first}}
+{{#identical}}<p class="hint">Nothing in the page text changed between version {{previous}} and
+  version {{version}} &mdash; the difference is in the settings above the text.</p>{{/identical}}
+{{^identical}}
+<p class="count"><span class="pill good">+{{addedCount}}</span>
+  <span class="pill bad">&minus;{{removedCount}}</span>
+  <span class="dim">{{unchanged}} line(s) unchanged</span></p>
+{{/identical}}
+{{#anyRows}}
+<table class="diff">
+  <tbody>{{#rows}}<tr class="{{kind}}">
+    <td class="num">{{before}}</td>
+    <td class="num">{{after}}</td>
+    <td class="sign">{{#added}}+{{/added}}{{#removed}}&minus;{{/removed}}</td>
+    <td class="line">{{text}}</td>
+  </tr>{{/rows}}</tbody>
+</table>
+<p class="hint">Unchanged lines away from a change are left out, so a one-word fix reads as a
+  one-word fix.</p>
+{{/anyRows}}
+{{/first}}{{/problem}}

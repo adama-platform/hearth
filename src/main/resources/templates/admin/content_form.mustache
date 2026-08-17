@@ -1,0 +1,189 @@
+{{<shell}}{{$content}}
+{{#openSuggestions}}<p class="hint"><strong>{{.}}</strong> suggested edit(s) waiting for this page
+  &mdash; <a href="{{proposalsUrl}}">review them &rarr;</a></p>{{/openSuggestions}}
+<p class="crumb"><a href="{{backUrl}}">&larr; Content</a>{{#editing}} &middot; <a href="{{historyUrl}}">history ({{versionCount}})</a> &middot; <a href="{{bundleUrl}}" download>download as JSON</a>{{/editing}}</p>
+{{#mergeKey}}<p class="hint mono">merge key {{.}} &mdash; what this page is called in a bundle, so
+  bringing one back is a merge rather than a second copy at a new address.</p>{{/mergeKey}}
+<h1>{{heading}}</h1>
+<form class="editor" method="post" action="{{backUrl}}" data-editor data-fields="{{templateFieldsJson}}">
+  <input type="hidden" name="csrf" value="{{csrf}}">
+  
+  {{#editing}}<input type="hidden" name="id" value="{{form_id}}">{{/editing}}
+  <div class="row">
+    <div><label for="c-uri">uri</label><input id="c-uri" type="text" name="uri" value="{{form_uri}}" placeholder="/about" required>
+      <p class="hint">The pages that show what the community already holds have a <em>hole</em> in
+        their address, and the request fills it: <code>{{lbrace}}page{{rbrace}}</code> for a listing,
+        <code>{{lbrace}}event_id{{rbrace}}</code>, <code>{{lbrace}}place_id{{rbrace}}</code> or
+        <code>{{lbrace}}member_id{{rbrace}}</code> for one of a thing &mdash;
+        <code>/whats-on/{{lbrace}}page{{rbrace}}</code>,
+        <code>/people/{{lbrace}}member_id{{rbrace}}</code>. Page one of a listing is always the bare
+        path.</p></div>
+    <div><label for="c-title">title</label><input id="c-title" type="text" name="title" value="{{form_title}}"></div>
+  </div>
+  <div class="row">
+    <div>
+      <label for="c-kind">kind</label>
+      <select id="c-kind" name="kind" data-kind>{{#kinds}}<option value="{{value}}"{{#selected}} selected{{/selected}} data-describe="{{describe}}" data-uri-rule="{{uriRule}}" data-wants-template="{{#wantsTemplate}}1{{/wantsTemplate}}">{{label}}</option>{{/kinds}}</select>
+      <p class="hint" data-kind-help></p>
+      <p class="hint" data-uri-help></p>
+    </div>
+    <div data-template-row{{^wantsTemplate}} class="hide"{{/wantsTemplate}}>
+      <label for="c-template">template</label>
+      <select id="c-template" name="template_name" data-template>{{#templateNames}}<option value="{{value}}"{{#selected}} selected{{/selected}}>{{label}}</option>{{/templateNames}}</select>
+    </div>
+    {{#anySorts}}<div>
+      <label for="c-sort">order</label>
+      <select id="c-sort" name="sort">{{#sorts}}<option value="{{value}}"{{#selected}} selected{{/selected}}>{{label}}</option>{{/sorts}}</select>
+    </div>{{/anySorts}}
+    {{#isPlaceListing}}<div>
+      <label for="c-placekind">which kind of place</label>
+      <select id="c-placekind" name="place_kind">{{#placeKinds}}<option value="{{value}}"{{#selected}} selected{{/selected}}>{{label}}</option>{{/placeKinds}}</select>
+    </div>{{/isPlaceListing}}
+    <div>
+      <label for="c-date">published <span class="dim">&mdash; what a listing orders by</span></label>
+      <input id="c-date" type="date" name="published_at" value="{{form_published_at}}">
+    </div>
+    <div>
+      <label for="c-size">rows per page <span class="dim">&mdash; listings only</span></label>
+      <input id="c-size" type="number" name="page_size" min="1" max="200" value="{{form_page_size}}" placeholder="20">
+    </div>
+    <div>
+      <label for="c-folder">navigation folder</label>
+      <input id="c-folder" type="text" name="nav_folder" value="{{form_folder}}" list="folders" placeholder="leave empty to keep it out of the nav">
+      <datalist id="folders">{{#folders}}<option value="{{value}}"></option>{{/folders}}</datalist>
+    </div>
+  </div>
+  <div class="fields" data-template-fields></div>
+  <div>
+    <label for="c-body">body</label>
+    <div class="editorbar">
+      <button type="button" class="quiet" data-rich-toggle hidden>plain markdown</button>
+      {{#filesUrl}}<button type="button" class="quiet" data-pick="{{.}}" data-pick-into="c-body">Insert a file</button>{{/filesUrl}}
+    </div>
+    <div id="c-rich" class="richeditor" data-rich data-markdown-for="c-body" hidden></div>
+    <textarea id="c-body" name="body">{{form_body}}</textarea>
+  </div>
+  <div class="row">
+    {{#canPublish}}<label class="check"><input type="checkbox" name="published"{{#form_published}} checked{{/form_published}}> published</label>{{/canPublish}}
+    {{^canPublish}}{{#form_published}}<input type="hidden" name="published" value="on">{{/form_published}}
+      <p class="hint">{{#form_published}}This page is live. Taking it down needs
+        &lsquo;Publish a page, or take one down&rsquo;.{{/form_published}}{{^form_published}}This
+        page is not published, and publishing it needs &lsquo;Publish a page, or take one
+        down&rsquo;. Save it and ask somebody who has that.{{/form_published}}</p>{{/canPublish}}
+    <label class="check"><input type="checkbox" name="human_only"{{#form_human_only}} checked{{/form_human_only}}> human only</label>
+  </div>
+  <p class="hint">A <strong>human only</strong> page is invisible to every connected model: not in a
+    listing, not in a search, not fetchable, and writing to it is refused. It changes nothing about
+    who among the people here can see it &mdash; that is what published is for.</p>
+  {{#canSave}}<button type="submit" name="action" value="save">Save</button>{{/canSave}}
+  {{#canSuggest}}
+  <div class="suggestbox">
+    {{#suggestOnly}}<p class="hint">You can suggest changes here. Somebody who can publish will
+      review it &mdash; nothing goes live until they say yes.</p>{{/suggestOnly}}
+    <label for="c-sugnote">why you are suggesting this <span class="dim">&mdash; optional</span></label>
+    <input id="c-sugnote" type="text" name="suggestion_note" maxlength="1024">
+    <button type="submit" name="action" value="suggest" class="{{^suggestOnly}}quiet{{/suggestOnly}}">Suggest this change</button>
+  </div>
+  {{/canSuggest}}
+  <a href="{{backUrl}}" class="hint">cancel</a>
+</form>
+<script nonce="{{nonce}}">
+// The kind decides whether a template applies at all, and the template decides which extra boxes
+// the page needs. Both are read from data attributes -- never interpolated into this script, because
+// mustache escapes for HTML and a script block does not decode entities.
+(function () {
+  var form = document.querySelector('[data-editor]');
+  if (!form) { return; }
+  var byTemplate = JSON.parse(form.getAttribute('data-fields') || '{}');
+  var kind = form.querySelector('[data-kind]');
+  var help = form.querySelector('[data-kind-help]');
+  var uriHelp = form.querySelector('[data-uri-help]');
+  var templateRow = form.querySelector('[data-template-row]');
+  var template = form.querySelector('[data-template]');
+  var slot = form.querySelector('[data-template-fields]');
+
+  function escape(text) {
+    return String(text == null ? '' : text).replace(/[&<>"]/g, function (c) {
+      return {'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}[c];
+    });
+  }
+
+  function drawFields() {
+    slot.innerHTML = '';
+    if (!templateRow || templateRow.classList.contains('hide')) { return; }
+    var fields = byTemplate[template.value] || [];
+    fields.forEach(function (field) {
+      var box = document.createElement('div');
+      var input = field.type === 'multiline' || field.type === 'markdown'
+        ? '<textarea name="' + escape(field.name) + '" style="min-height:6rem">' + escape(field.value) + '</textarea>'
+        : '<input type="text" name="' + escape(field.name) + '" value="' + escape(field.value) + '">';
+      box.innerHTML = '<label>' + escape(field.label) + (field.required ? ' *' : '') + '</label>' + input
+        + (field.help ? '<p class="hint">' + escape(field.help) + '</p>' : '');
+      slot.appendChild(box);
+    });
+  }
+
+  function onKind() {
+    var option = kind.options[kind.selectedIndex];
+    help.textContent = option ? (option.getAttribute('data-describe') || '') : '';
+    // the address rule for the kind that is chosen, rather than a paragraph covering all of them
+    if (uriHelp) {
+      uriHelp.textContent = option ? (option.getAttribute('data-uri-rule') || '') : '';
+    }
+    var wants = option && option.getAttribute('data-wants-template') === '1';
+    if (templateRow) { templateRow.classList.toggle('hide', !wants); }
+    drawFields();
+  }
+
+  kind.addEventListener('change', onKind);
+  if (template) { template.addEventListener('change', drawFields); }
+  onKind();
+})();
+</script>
+<link rel="stylesheet" href="/3rd/milkdown/7.21.3/common.css">
+<link rel="stylesheet" href="/3rd/milkdown/7.21.3/theme.css">
+<script type="module" nonce="{{nonce}}">
+// Milkdown, from inside the jar. The textarea stays the form field and the single source of truth:
+// the editor writes back into it on every change, so a submit sends markdown whether the editor
+// loaded or not. If this script fails -- old browser, blocked module, a bad release -- the page is
+// still a working textarea, which is the whole reason for doing it in this order rather than
+// replacing the field with a widget.
+(async function () {
+  var host = document.querySelector('[data-rich]');
+  var area = document.getElementById(host && host.getAttribute('data-markdown-for'));
+  var toggle = document.querySelector('[data-rich-toggle]');
+  if (!host || !area) { return; }
+  var mod;
+  try {
+    mod = await import('/3rd/milkdown/7.21.3/milkdown.js');
+  } catch (e) {
+    return;                       // the textarea is already correct; leave it alone
+  }
+  if (!mod || !mod.Crepe) { return; }
+
+  var crepe = new mod.Crepe({ root: host, defaultValue: area.value });
+  await crepe.create();
+  host.hidden = false;
+  area.style.display = 'none';
+  toggle.hidden = false;
+
+  crepe.on(function (listener) {
+    listener.markdownUpdated(function (_ctx, markdown) { area.value = markdown; });
+  });
+  // and once more on submit, because a change event that has not fired yet is an empty save --
+  // exactly the class of bug that once wiped a page
+  area.form.addEventListener('submit', function () {
+    try { area.value = crepe.getMarkdown(); } catch (e) { /* keep whatever the listener left */ }
+  });
+
+  var rich = true;
+  toggle.addEventListener('click', function () {
+    rich = !rich;
+    if (!rich) { try { area.value = crepe.getMarkdown(); } catch (e) {} }
+    host.hidden = !rich;
+    area.style.display = rich ? 'none' : '';
+    toggle.textContent = rich ? 'plain markdown' : 'rich editor';
+  });
+})();
+</script>
+{{/content}}{{/shell}}

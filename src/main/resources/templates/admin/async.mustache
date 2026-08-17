@@ -1,0 +1,26 @@
+{{<shell}}{{$content}}
+<h1>Async</h1>
+<p class="hint">Work that somebody else's server has to answer, done slowly and out of the way of
+  anybody waiting for a page. Right now that means turning addresses into points &mdash; for places
+  in the address book, and for members who said where they are so that travel distances can be
+  worked out.</p>
+<p class="hint">One queue for the whole machine, because a rate limit is a promise this server makes
+  as somebody else's client rather than something each community gets its own share of. The counts
+  below are the machine's; the list at the bottom is this community's.</p>
+<div class="tools">
+  <form method="post" action="{{action}}">
+    <input type="hidden" name="csrf" value="{{csrf}}">
+    <button type="submit" name="action" value="retry">Look up anybody still waiting</button>
+  </form>
+  <form method="post" action="{{action}}">
+    <input type="hidden" name="csrf" value="{{csrf}}">
+    <button type="submit" name="action" value="reopen">Try the given-up-on ones again</button>
+  </form>
+  <form method="post" action="{{action}}">
+    <input type="hidden" name="csrf" value="{{csrf}}">
+    <button type="submit" name="action" value="clear" class="quiet">Drop what is waiting</button>
+  </form>
+  <button type="button" class="quiet live" data-live="Go live" data-live-on="Stop">Go live</button>
+</div>
+<div class="panel" data-panel="{{panelUrl}}">{{{panel}}}</div>
+{{/content}}{{/shell}}

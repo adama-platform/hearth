@@ -1,0 +1,133 @@
+{{<layout}}{{$body}}
+<h1>{{heading}}</h1>
+<p>{{lead}}</p>
+<noscript>
+  <p class="problem">This form needs JavaScript. It is built in the browser on purpose, so that the
+  page a scraper downloads has no form in it at all.</p>
+</noscript>
+<div id="mount"></div>
+<p class="footnote">{{{footnote}}}</p>
+<script type="application/json" id="mint">{{{mint}}}</script>
+<script nonce="{{nonce}}">
+(function () {
+  "use strict";
+  var blob = JSON.parse(document.getElementById("mint").textContent);
+  var mount = document.getElementById("mount");
+
+  // ---- what the browser did while this page was open ---------------------------------------
+  // Counted, posted, and kept on the account row. Zero of everything is refused; beyond that the
+  // numbers are for looking back at a wave of signups later, not for deciding anything now.
+  var counts = {m: 0, k: 0, t: 0, p: 0, s: 0, f: 0};
+  var startedAt = Date.now();
+  function bump(bucket) { return function () { if (counts[bucket] < 100000) counts[bucket]++; }; }
+  var passive = {passive: true, capture: true};
+  ["mousemove", "mousedown", "mouseup", "click"].forEach(function (e) {
+    document.addEventListener(e, bump("m"), passive);
+  });
+  ["keydown", "keyup"].forEach(function (e) { document.addEventListener(e, bump("k"), passive); });
+  ["touchstart", "touchmove", "touchend"].forEach(function (e) {
+    document.addEventListener(e, bump("t"), passive);
+  });
+  ["pointerdown", "pointerup"].forEach(function (e) { document.addEventListener(e, bump("p"), passive); });
+  document.addEventListener("scroll", bump("s"), passive);
+  ["focusin", "focusout"].forEach(function (e) { document.addEventListener(e, bump("f"), passive); });
+
+  function signals() {
+    return "m:" + counts.m + "|k:" + counts.k + "|t:" + counts.t + "|p:" + counts.p
+      + "|s:" + counts.s + "|f:" + counts.f + "|e:" + (Date.now() - startedAt);
+  }
+
+  // ---- the proof that this script ran ------------------------------------------------------
+  // Not a secret and cannot be one, since you are reading it; all it shows is that something
+  // executed the page rather than posting the raw HTML.
+  //
+  // The arithmetic is deliberately small. The obvious thing here is FNV-1a, and the obvious FNV-1a
+  // is wrong in JavaScript: numbers are doubles, so a 32-bit multiply overflows past 2^53 and the
+  // low bits are rounded away before the truncation can catch them. Java's int multiply wraps
+  // exactly, the two disagree, and the symptom is a form that tells everybody JavaScript is
+  // switched off. Staying under 2^31 means both languages compute the same number for structural
+  // reasons rather than because somebody remembered Math.imul.
+  function proof(nonce) {
+    var h = 7;
+    for (var i = 0; i < nonce.length; i++) {
+      h = (h * 31 + nonce.charCodeAt(i)) % 1000003;
+    }
+    return h.toString(36);
+  }
+
+  // ---- build the form ----------------------------------------------------------------------
+  // Field names came from the server and are different on every page load, so a name harvested
+  // from one visit is worthless on the next.
+  var form = document.createElement("form");
+  form.method = "post";
+  form.action = blob.action;
+
+  function hidden(name, value) {
+    var input = document.createElement("input");
+    input.type = "hidden";
+    input.name = name;
+    input.value = value;
+    form.appendChild(input);
+    return input;
+  }
+
+  function field(name, label, type, autocomplete, extra) {
+    var wrap = document.createElement("div");
+    wrap.className = "field";
+    var id = "f" + Math.random().toString(36).slice(2, 9);
+    var lab = document.createElement("label");
+    lab.htmlFor = id;
+    lab.textContent = label;
+    var input = document.createElement("input");
+    input.id = id;
+    input.name = name;
+    input.type = type;
+    input.required = true;
+    if (autocomplete) input.autocomplete = autocomplete;
+    if (extra) Object.keys(extra).forEach(function (k) { input[k] = extra[k]; });
+    wrap.appendChild(lab);
+    wrap.appendChild(input);
+    form.appendChild(wrap);
+    return input;
+  }
+
+  hidden(blob.f.csrf, blob.csrf);
+  hidden(blob.f.proof, proof(blob.nonce));
+  if (blob.handle) hidden(blob.f.handle, blob.handle);
+
+  // Left empty by us and hidden from people. Anything that fills in every input it finds will fill
+  // this one too, and say so.
+  var trap = hidden(blob.f.trap, "");
+  trap.setAttribute("tabindex", "-1");
+  trap.setAttribute("aria-hidden", "true");
+
+  var signalsInput = hidden(blob.f.signals, "");
+
+  var first = null;
+  if (blob.want.email) {
+    first = field(blob.f.email, "email", "email", "email");
+    // an invitation already knows the address it was sent to, and re-keying it is where a
+    // conversion goes missing against an address one character out
+    if (blob.email) { first.value = blob.email; }
+  }
+  if (blob.want.code) {
+    first = field(blob.f.code, "code", "text", "one-time-code",
+      {inputMode: "numeric", maxLength: blob.codeLength, className: "code", pattern: "[0-9]*"}) || first;
+  }
+  if (blob.want.password) {
+    field(blob.f.password, blob.passwordLabel, "password", blob.want.code ? "new-password" : "current-password");
+  }
+
+  var button = document.createElement("button");
+  button.type = "submit";
+  button.textContent = blob.submit;
+  form.appendChild(button);
+
+  // the counts are stamped at submit time, so they cover the whole time the page was open
+  form.addEventListener("submit", function () { signalsInput.value = signals(); });
+
+  mount.appendChild(form);
+  if (first) first.focus();
+})();
+</script>
+{{/body}}{{/layout}}

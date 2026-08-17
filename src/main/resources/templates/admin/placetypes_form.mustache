@@ -1,0 +1,85 @@
+{{<shell}}{{$content}}
+<p class="crumb"><a href="{{backUrl}}">&larr; Kinds</a></p>
+<h1>{{heading}}</h1>
+<form method="post" action="{{backUrl}}">
+  <input type="hidden" name="csrf" value="{{csrf}}">
+  <input type="hidden" name="action" value="save">
+  <div class="row">
+    <div><label for="k-slug">short name <span class="dim">&mdash; used in the URL</span></label>
+      <input id="k-slug" type="text" name="slug" maxlength="64" value="{{form_slug}}" required {{#editing}}readonly{{/editing}}></div>
+    <div><label for="k-label">one of them is a&hellip;</label><input id="k-label" type="text" name="label" maxlength="64" value="{{form_label}}" placeholder="Ranch"></div>
+    <div><label for="k-plural">several of them are&hellip;</label><input id="k-plural" type="text" name="plural" maxlength="64" value="{{form_plural}}" placeholder="Ranches"></div>
+  </div>
+  <div><label for="k-desc">what this kind is for</label><textarea id="k-desc" name="description" rows="2">{{form_description}}</textarea></div>
+  <div class="row">
+    <div><label for="k-template">template <span class="dim">&mdash; renders every place of this kind</span></label>
+      <select id="k-template" name="template_name"><option value="">the built-in page</option>{{#templates}}<option value="{{name}}"{{#selected}} selected{{/selected}}>{{name}}</option>{{/templates}}</select></div>
+    <div><label for="k-sort">order in the list</label><input id="k-sort" type="number" name="sort" value="{{form_sort}}"></div>
+  </div>
+  <label class="check"><input type="checkbox" name="published" {{#form_published}}checked{{/form_published}}> listed &mdash; members can see this kind and what is in it</label>
+
+  <h2>What a {{#form_label}}{{.}}{{/form_label}}{{^form_label}}place of this kind{{/form_label}} records</h2>
+  <p class="hint">Beyond the address, which every place has. These become the boxes on the editor and
+    the columns in the listing &mdash; and a connected model can only fill in fields declared here.</p>
+  <div data-fields>
+    {{#fields}}
+    <div class="field" data-field>
+      <div class="row">
+        <div><label>name</label><input type="text" name="p_name_{{index}}" value="{{name}}"></div>
+        <div><label>type</label><select name="p_type_{{index}}">{{#types}}<option value="{{value}}"{{#selected}} selected{{/selected}}>{{label}}</option>{{/types}}</select></div>
+        <div><label>label</label><input type="text" name="p_label_{{index}}" value="{{label}}"></div>
+      </div>
+      <div class="row">
+        <div><label>help</label><input type="text" name="p_help_{{index}}" value="{{help}}"></div>
+        <div><label class="check"><input type="checkbox" name="p_required_{{index}}"{{#required}} checked{{/required}}> required</label></div>
+        <div class="drop"><button type="button" class="quiet" data-drop>remove</button></div>
+      </div>
+    </div>
+    {{/fields}}
+  </div>
+  <button type="button" class="quiet" data-add data-next="{{nextIndex}}">Add a field</button>
+  <button type="submit">Save</button>
+</form>
+
+<template data-blank>
+  <div class="field" data-field>
+    <div class="row">
+      <div><label>name</label><input type="text" data-n="p_name_"></div>
+      <div><label>type</label><select data-n="p_type_">{{#fieldTypes}}<option value="{{value}}">{{label}}</option>{{/fieldTypes}}</select></div>
+      <div><label>label</label><input type="text" data-n="p_label_"></div>
+    </div>
+    <div class="row">
+      <div><label>help</label><input type="text" data-n="p_help_"></div>
+      <div><label class="check"><input type="checkbox" data-n="p_required_"> required</label></div>
+      <div class="drop"><button type="button" class="quiet" data-drop>remove</button></div>
+    </div>
+  </div>
+</template>
+
+<script nonce="{{nonce}}">
+// Add and remove field rows. The index only has to be unique within the submission -- the server
+// walks 0..MAX and skips the gaps -- so removing a row never has to renumber the others.
+(function () {
+  var add = document.querySelector('[data-add]');
+  var host = document.querySelector('[data-fields]');
+  var blank = document.querySelector('[data-blank]');
+  if (!add || !host || !blank) { return; }
+  var next = parseInt(add.getAttribute('data-next'), 10) || 0;
+  add.addEventListener('click', function () {
+    var row = blank.content.cloneNode(true);
+    row.querySelectorAll('[data-n]').forEach(function (input) {
+      input.setAttribute('name', input.getAttribute('data-n') + next);
+      input.removeAttribute('data-n');
+    });
+    host.appendChild(row);
+    next++;
+  });
+  document.addEventListener('click', function (e) {
+    if (e.target.hasAttribute && e.target.hasAttribute('data-drop')) {
+      var field = e.target.closest('[data-field]');
+      if (field) { field.remove(); }
+    }
+  });
+})();
+</script>
+{{/content}}{{/shell}}

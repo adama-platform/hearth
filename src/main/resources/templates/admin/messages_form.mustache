@@ -1,0 +1,50 @@
+{{<shell}}{{$content}}
+<p class="crumb"><a href="{{backUrl}}">&larr; Messages</a></p>
+<h1>{{heading}}</h1>
+{{^overridden}}<p class="hint">This is the wording that ships. Saving anything different makes it
+  yours; saving it back exactly as it was takes the override away again, so it goes on improving
+  with the software.</p>{{/overridden}}
+
+<div class="card">
+  <p class="meta"><span class="dim">what it will look like</span></p>
+  <p><strong>{{previewSubject}}</strong></p>
+  <p>{{previewLead}}</p>
+  {{#previewBody}}<p class="dim">{{.}}</p>{{/previewBody}}
+</div>
+
+<form method="post" action="{{action}}">
+  <input type="hidden" name="csrf" value="{{csrf}}">
+  <input type="hidden" name="action" value="save">
+  <input type="hidden" name="slug" value="{{slug}}">
+  <div class="field"><label for="m-subject">subject line</label>
+    <input id="m-subject" type="text" name="subject" maxlength="512" value="{{form_subject}}" required></div>
+  <div class="field"><label for="m-lead">the first line</label>
+    <textarea id="m-lead" name="lead" rows="2">{{form_lead}}</textarea></div>
+  <div class="field"><label for="m-body">and the paragraph under it <span class="dim">&mdash; optional</span></label>
+    <textarea id="m-body" name="body" rows="5">{{form_body}}</textarea></div>
+  <p class="hint">You can use these, in any of the three boxes:
+    {{#parameters}}<code>{{lbrace}}{{name}}{{rbrace}}</code> {{/parameters}}</p>
+  <p class="hint">Anything else in braces becomes nothing at all &mdash; which is why the preview
+    above is worth reading before you save.</p>
+  <div class="doing">
+    <button type="submit">Save</button>
+    <button type="submit" name="action" value="reset" class="quiet">Reset to the wording that ships</button>
+  </div>
+  <p class="hint">Resetting removes this community's version entirely, so the message goes back to
+    improving with the software.{{^overridden}} Nothing is overridden here at the moment, so it
+    changes nothing.{{/overridden}}</p>
+</form>
+
+<h2>Send yourself one</h2>
+<form method="post" action="{{action}}">
+  <input type="hidden" name="csrf" value="{{csrf}}">
+  <input type="hidden" name="action" value="test">
+  <input type="hidden" name="slug" value="{{slug}}">
+  <div class="field"><label for="m-to">send this message to</label>
+    <input id="m-to" type="email" name="to" placeholder="you@example.com" required></div>
+  <div class="doing"><button type="submit" class="quiet">Send it now</button></div>
+</form>
+<p class="hint">A real one, through the same path everybody else's goes through, with believable
+  values in it. A preview shows you the words; only a message that arrives tells you whether it
+  survives Outlook and whether it lands in a spam folder.</p>
+{{/content}}{{/shell}}

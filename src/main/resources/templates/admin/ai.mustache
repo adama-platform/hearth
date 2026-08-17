@@ -1,0 +1,50 @@
+{{<shell}}{{$content}}
+<h1>AI</h1>
+{{^enabled}}
+  <p class="hint">This domain is not connected to any model. Turn it on with <code>mcp.enabled</code>
+    in the domain config; it is off by default because what it hands out is the ability to rewrite
+    the site.</p>
+{{/enabled}}
+{{#enabled}}
+  <div class="cards">
+    <div class="card"><div class="n">{{recorded}}</div><div class="l">actions</div></div>
+    <div class="card"><div class="n">{{writes}}</div><div class="l">changes</div></div>
+    <div class="card"><div class="n">{{lockedPages}}</div><div class="l">human only</div></div>
+  </div>
+  <p class="hint">Endpoint <code>{{endpoint}}</code> &mdash; {{policy}}. The last {{capacity}} actions
+    are kept in memory; a restart loses them, and every action that changed a row also emitted a
+    mutation event, which is the durable record.</p>
+
+  <h2>Connectors</h2>
+  {{^anyConnectors}}<p class="hint">Nothing is connected yet.</p>{{/anyConnectors}}
+  {{#anyConnectors}}<table>
+    <thead><tr><th>connector</th><th>vendor</th><th>goes back to</th><th class="num">tokens</th><th>since</th><th></th></tr></thead>
+    <tbody>{{#connectors}}<tr>
+      <td>{{name}}{{#disabled}} <span class="pill warn">off</span>{{/disabled}}</td>
+      <td class="dim">{{vendor}}</td>
+      <td class="dim mono">{{redirects}}</td>
+      <td class="num">{{tokens}}</td>
+      <td class="dim mono">{{created}}</td>
+      <td class="actions">
+        {{#disabled}}<form class="inline" method="post" action="{{action}}"><input type="hidden" name="csrf" value="{{csrf}}"><input type="hidden" name="id" value="{{id}}"><input type="hidden" name="action" value="enable"><button type="submit">allow</button></form>{{/disabled}}
+        {{^disabled}}<form class="inline" method="post" action="{{action}}"><input type="hidden" name="csrf" value="{{csrf}}"><input type="hidden" name="id" value="{{id}}"><input type="hidden" name="action" value="disable"><button type="submit">block</button></form>{{/disabled}}
+        <form class="inline" method="post" action="{{action}}" onsubmit="return confirm('Disconnect this connector and revoke every token it holds?')"><input type="hidden" name="csrf" value="{{csrf}}"><input type="hidden" name="id" value="{{id}}"><input type="hidden" name="action" value="disconnect"><button type="submit">disconnect</button></form>
+      </td>
+    </tr>{{/connectors}}</tbody>
+  </table>{{/anyConnectors}}
+
+  <h2>What it did</h2>
+<form class="tools" method="get" action="{{action}}" data-filters>
+  <div class="search">{{{searchIcon}}}
+    <input type="search" name="q" value="{{q}}" placeholder="Search what the model did" aria-label="search the AI log">
+  </div>
+  <div class="chips" role="group" aria-label="outcome">
+    {{#outcomes}}<label class="chip"><input type="radio" name="outcome" value="{{value}}"{{#selected}} checked{{/selected}}>{{label}}</label>{{/outcomes}}
+  </div>
+  <label class="check"><input type="checkbox" name="writes" value="1"{{#writesOnly}} checked{{/writesOnly}}> changes only</label>
+  <button type="button" class="quiet live" data-live="Go live" data-live-on="Stop">Go live</button>
+  <noscript><button type="submit" class="quiet">Filter</button></noscript>
+</form>
+  <div class="panel" data-panel="{{panelUrl}}">{{{panel}}}</div>
+{{/enabled}}
+{{/content}}{{/shell}}

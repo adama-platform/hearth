@@ -1,0 +1,9 @@
+<p class="count">{{count}} banned</p>
+{{^anyBans}}<p class="hint">Nobody is banned.</p>{{/anyBans}}
+{{#anyBans}}<table>
+  <thead><tr><th>email</th><th>why</th><th>since</th><th></th></tr></thead>
+  <tbody>{{#bans}}<tr>
+    <td class="mono">{{email}}</td><td class="dim">{{reason}}</td><td class="dim mono">{{created}}</td>
+    <td class="actions"><form class="inline" method="post" action="{{action}}"><input type="hidden" name="csrf" value="{{csrf}}"><input type="hidden" name="id" value="{{id}}"><input type="hidden" name="action" value="lift"><button type="submit">lift</button></form></td>
+  </tr>{{/bans}}</tbody>
+</table>{{/anyBans}}

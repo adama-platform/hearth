@@ -1,0 +1,13 @@
+<p class="count">{{count}} templates</p>
+{{^anyTemplates}}<p class="hint">No templates yet. Markdown pages render without one.</p>{{/anyTemplates}}
+{{#anyTemplates}}<table>
+  <thead><tr><th>name</th><th class="num">used by</th><th class="num">fields</th><th>index</th><th>updated</th><th></th></tr></thead>
+  <tbody>{{#templates}}<tr>
+    <td class="mono"><a href="{{editUrl}}">{{name}}</a></td>
+    <td class="num dim">{{uses}}</td>
+    <td class="num dim">{{fields}}</td>
+    <td class="dim mono">{{#directory}}<a href="{{directoryPath}}">{{directoryPath}}</a>{{/directory}}{{^directory}}&mdash;{{/directory}}</td>
+    <td class="dim mono">{{updated}}</td>
+    <td class="actions"><form class="inline" method="post" action="{{action}}" onsubmit="return confirm('Delete this template? Pages using it will render without one.')"><input type="hidden" name="csrf" value="{{csrf}}"><input type="hidden" name="id" value="{{id}}"><input type="hidden" name="action" value="delete"><button type="submit">delete</button></form></td>
+  </tr>{{/templates}}</tbody>
+</table>{{/anyTemplates}}

@@ -1,0 +1,80 @@
+{{<shell}}{{$content}}
+<p class="crumb"><a href="{{backUrl}}">&larr; People</a></p>
+<h1>{{heading}}</h1>
+{{#missing}}<p class="hint">That account is gone.</p>{{/missing}}
+{{^missing}}
+<p>
+  {{#configAdmin}}<span class="pill red">config admin</span>{{/configAdmin}}
+  {{#promotedAdmin}}<span class="pill purple">admin</span>{{/promotedAdmin}}
+  {{#disabled}}<span class="pill warn">turned off</span>{{/disabled}}
+  {{^disabled}}{{#approved}}<span class="pill good">approved</span>{{/approved}}{{^approved}}<span class="pill dim">waiting</span>{{/approved}}{{/disabled}}
+</p>
+<p class="hint mono">joined {{created}} &middot; {{events}} interaction events &middot; {{signals}} &middot; {{ip}}</p>
+{{#invited}}<p class="hint">Came in on an invitation from <strong>{{invitedBy}}</strong>, sent
+  {{invitedOn}}.{{#inviteNote}} The invitation said: &ldquo;{{.}}&rdquo;{{/inviteNote}}</p>{{/invited}}
+
+<div class="review">
+  <h2>What they wrote about themselves</h2>
+  {{#person}}
+    <p class="meta">{{displayName}}{{#headline}} &mdash; {{headline}}{{/headline}}{{#location}} &middot; {{location}}{{/location}}</p>
+    {{{aboutHtml}}}
+    {{#anyLinks}}<p class="mono">{{#links}}{{.}} {{/links}}</p>{{/anyLinks}}
+    {{^filledIn}}<p class="empty">Nothing yet. There is nothing here to judge them on.</p>{{/filledIn}}
+    <h2>Answers <span class="count">{{answeredCount}} given, {{remainingCount}} left</span></h2>
+    {{^anyAnswers}}<p class="empty">No answers yet.</p>{{/anyAnswers}}
+    {{#answers}}<div class="qa"><div class="q">{{prompt}}</div><div>{{answer}}</div></div>{{/answers}}
+  {{/person}}
+</div>
+
+<div class="tools">
+  {{^approved}}<form class="inline" method="post" action="{{action}}"><input type="hidden" name="csrf" value="{{csrf}}"><input type="hidden" name="user" value="{{id}}"><input type="hidden" name="action" value="approve"><button type="submit">Approve</button></form>{{/approved}}
+  {{#rejectable}}
+    <form class="inline" method="post" action="{{action}}"><input type="hidden" name="csrf" value="{{csrf}}"><input type="hidden" name="user" value="{{id}}"><input type="hidden" name="action" value="reject"><button type="submit" class="quiet">Reject and delete</button></form>
+    <form class="inline" method="post" action="{{action}}"><input type="hidden" name="csrf" value="{{csrf}}"><input type="hidden" name="user" value="{{id}}"><input type="hidden" name="action" value="reject_and_ban"><button type="submit" class="quiet">Reject, delete and ban</button></form>
+  {{/rejectable}}
+  {{#rejectable}}{{#disabled}}<form class="inline" method="post" action="{{action}}"><input type="hidden" name="csrf" value="{{csrf}}"><input type="hidden" name="user" value="{{id}}"><input type="hidden" name="action" value="enable"><button type="submit" class="quiet">Turn back on</button></form>{{/disabled}}
+  {{^disabled}}<form class="inline" method="post" action="{{action}}"><input type="hidden" name="csrf" value="{{csrf}}"><input type="hidden" name="user" value="{{id}}"><input type="hidden" name="action" value="disable"><button type="submit" class="quiet">Turn off</button></form>{{/disabled}}{{/rejectable}}
+  {{#canNotify}}<form class="inline" method="post" action="{{action}}"><input type="hidden" name="csrf" value="{{csrf}}"><input type="hidden" name="user" value="{{id}}"><input type="hidden" name="action" value="test_push"><button type="submit" class="quiet">Send a test notification</button></form>{{/canNotify}}
+  {{#admin}}{{^configAdmin}}<form class="inline" method="post" action="{{action}}"><input type="hidden" name="csrf" value="{{csrf}}"><input type="hidden" name="user" value="{{id}}"><input type="hidden" name="action" value="revoke_admin"><button type="submit" class="quiet">Remove admin</button></form>{{/configAdmin}}{{/admin}}
+  {{^admin}}<form class="inline" method="post" action="{{action}}"><input type="hidden" name="csrf" value="{{csrf}}"><input type="hidden" name="user" value="{{id}}"><input type="hidden" name="action" value="grant_admin"><button type="submit" class="quiet">Make admin</button></form>{{/admin}}
+</div>
+{{^rejectable}}<p class="hint">An admin cannot be rejected, deleted or turned off, so those buttons
+  are not drawn &mdash; remove the admin role first and they appear. A community that could switch
+  its own administrators off has locked itself out of its own server.</p>{{/rejectable}}
+<p class="hint">Rejecting deletes the account, the profile and the answers. Turning off keeps all three and ends every session.</p>
+
+{{#pushSummary}}<p class="hint">{{.}}</p>{{/pushSummary}}
+{{^anyPush}}<p class="hint">No browser of theirs is subscribed to notifications, so a test would go
+  nowhere. That is the ordinary state: it needs them to press the button in the app.</p>{{/anyPush}}
+
+<h2>If they asked to be forgotten</h2>
+<p class="hint">Somebody can write and ask you to show them what you hold, or to delete it. Under the
+  UK and EU GDPR you have <strong>one month</strong> to answer, and your privacy policy says you
+  will. These are the two buttons that do it.</p>
+<div class="tools">
+  <a class="btn secondary" href="{{exportUrl}}">Download everything about them</a>
+</div>
+{{#erasable}}
+<details class="revise">
+  <summary>Delete this person</summary>
+  <p class="hint">Removes the account, the profile, the answers, the sessions, the notifications,
+    the invitations to them and their answers to events &mdash; and takes their name off what they
+    wrote, everywhere it appears. A ban on their address stays: a community that cannot keep
+    somebody out cannot protect anybody.</p>
+  <form method="post" action="{{action}}">
+    <input type="hidden" name="csrf" value="{{csrf}}">
+    <input type="hidden" name="user" value="{{id}}">
+    <input type="hidden" name="action" value="erase">
+    <label class="check"><input type="checkbox" name="and_words"> also take down what they wrote
+      &mdash; only if they asked, because a thread with holes in it is worse for everybody
+      still here</label>
+    <div class="field"><label for="e-confirm">type <code>delete</code> to confirm</label>
+      <input id="e-confirm" name="confirm" type="text" autocomplete="off"></div>
+    <button type="submit">Delete them for good</button>
+  </form>
+</details>
+{{/erasable}}
+{{^erasable}}<p class="hint">An administrator cannot be deleted from here. Remove the role
+  first.</p>{{/erasable}}
+{{/missing}}
+{{/content}}{{/shell}}

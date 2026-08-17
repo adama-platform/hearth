@@ -1,0 +1,13 @@
+{{<shell}}{{$content}}
+<p class="crumb"><a href="{{backUrl}}">&larr; Places</a></p>
+<h1>Kinds of place</h1>
+<p class="hint">A kind decides what gets recorded. A <em>ranch</em> might record whether the beef is
+  grass finished and which cuts they sell; a <em>vendor</em> might record what the discount is and
+  who to ask for; a <em>venue</em> might record how many fit and whether there is parking. None of
+  that belongs in this program, so you declare it here and every address of that kind gets the
+  same boxes.</p>
+<p class="hint">A kind can name a template, edited under Content, which renders every place of that
+  kind. Without one there is a plain built-in page, which is enough to start.</p>
+<div class="doing"><a class="btn" href="{{newUrl}}">{{{plusIcon}}}New kind</a><a class="btn secondary" href="{{backUrl}}">Addresses</a></div>
+<div class="panel" data-panel="{{panelUrl}}">{{{panel}}}</div>
+{{/content}}{{/shell}}

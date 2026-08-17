@@ -1,0 +1,37 @@
+{{<shell}}{{$content}}
+<h1>Suggested edits</h1>
+<p class="hint">The version history looking forwards. Somebody who can write but not publish
+  suggests a change here, and somebody who can review says yes or no. An approved suggestion
+  becomes a version like any other &mdash; afterwards it is indistinguishable from an edit made
+  directly, because it is one.</p>
+<p class="hint">A declined suggestion stays, with the reason, so whoever wrote it can read why.</p>
+<div class="panel" data-panel="{{panelUrl}}">{{{panel}}}</div>
+
+<dialog id="preview" class="preview">
+  <div class="preview-head"><strong data-preview-title>Changes</strong>
+    <button type="button" class="quiet" data-close>close</button></div>
+  <div class="preview-body" data-preview-body></div>
+</dialog>
+<script nonce="{{nonce}}">
+(function () {
+  var dialog = document.getElementById('preview');
+  var body = dialog && dialog.querySelector('[data-preview-body]');
+  if (!dialog) { return; }
+  document.addEventListener('click', function (e) {
+    var button = e.target.closest('[data-changes-url]');
+    if (!button) { return; }
+    body.innerHTML = '<p class="hint">Loading…</p>';
+    if (typeof dialog.showModal === 'function') { dialog.showModal(); } else { dialog.setAttribute('open', ''); }
+    fetch(button.getAttribute('data-changes-url'), {credentials: 'same-origin'})
+      .then(function (r) { return r.ok ? r.text() : null; })
+      .then(function (html) { body.innerHTML = html === null ? '<p class="hint">Could not load that.</p>' : html; })
+      .catch(function () { body.innerHTML = '<p class="hint">Could not load that.</p>'; });
+  });
+  dialog.addEventListener('click', function (e) {
+    if (e.target.hasAttribute('data-close') || e.target === dialog) {
+      if (typeof dialog.close === 'function') { dialog.close(); } else { dialog.removeAttribute('open'); }
+    }
+  });
+})();
+</script>
+{{/content}}{{/shell}}

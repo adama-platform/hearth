@@ -1,0 +1,18 @@
+<p class="count">{{count}} shown, {{sheets}} people have answered something</p>
+{{^anyQuestions}}<p class="hint">Nothing matches.</p>{{/anyQuestions}}
+{{#anyQuestions}}<table>
+  <thead><tr><th class="num">#</th><th>question</th><th>kind</th><th class="num">answers</th><th></th></tr></thead>
+  <tbody>{{#questions}}<tr>
+    <td class="num dim">{{position}}</td>
+    <td>
+      <a href="{{editUrl}}">{{prompt}}</a>
+      {{^published}} <span class="pill dim">draft</span>{{/published}}
+      {{#required}} <span class="pill warn">required</span>{{/required}}
+      {{#options}}<div class="hint">{{.}}</div>{{/options}}
+    </td>
+    <td class="dim">{{kind}}</td>
+    <td class="num">{{answers}}</td>
+    <td class="actions"><form class="inline" method="post" action="{{action}}" onsubmit="return confirm('Delete this question? Answers already given stop being counted.')"><input type="hidden" name="csrf" value="{{csrf}}"><input type="hidden" name="id" value="{{id}}"><input type="hidden" name="action" value="delete"><button type="submit">delete</button></form></td>
+  </tr>{{/questions}}</tbody>
+</table>
+<p class="hint">Answer counts are maintained by the survey indexer off the request path, so they trail a write by a moment rather than costing a query here.</p>{{/anyQuestions}}

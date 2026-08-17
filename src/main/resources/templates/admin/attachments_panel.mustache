@@ -1,0 +1,52 @@
+{{^anyFiles}}<p class="hint">Nothing here yet.</p>{{/anyFiles}}
+{{#picking}}{{#anyFiles}}
+<div class="filegrid">{{#files}}
+<div class="card file">
+  <div class="preview">
+    {{#isImage}}<img src="{{url}}" alt="{{description}}" loading="lazy">{{/isImage}}
+    {{^isImage}}<span class="dim">{{kind}}</span>{{/isImage}}
+  </div>
+  <p class="meta">{{filename}} <span class="dim">{{size}}</span></p>
+  <button type="button" class="quiet" data-insert="{{embed}}">Put it in the page</button>
+</div>
+{{/files}}</div>
+{{/anyFiles}}{{/picking}}
+{{^picking}}
+{{#anyFiles}}
+<div class="filegrid">{{#files}}
+<div class="card file">
+  <div class="preview">
+    {{#isImage}}<a href="{{url}}"><img src="{{url}}" alt="{{description}}" loading="lazy"></a>{{/isImage}}
+    {{#isVideo}}<video controls preload="metadata" src="{{url}}"></video>{{/isVideo}}
+    {{#isAudio}}<audio controls preload="none" src="{{url}}"></audio>{{/isAudio}}
+    {{^isImage}}{{^isVideo}}{{^isAudio}}<a href="{{url}}">{{filename}}</a>{{/isAudio}}{{/isVideo}}{{/isImage}}
+  </div>
+  <p class="meta"><a href="{{url}}">{{filename}}</a> <span class="dim">{{size}} &middot; {{kind}}</span>
+    {{#public}}<span class="pill blue">public</span>{{/public}}{{^public}}<span class="pill dim">members</span>{{/public}}</p>
+  <p class="hint mono" data-copy="{{embed}}">{{embed}}</p>
+  <form method="post" action="{{action}}">
+    <input type="hidden" name="csrf" value="{{csrf}}">
+    <input type="hidden" name="action" value="save">
+    <input type="hidden" name="id" value="{{id}}">
+    <div><label for="d-{{id}}">what it is</label>
+      <input id="d-{{id}}" type="text" name="description" maxlength="512" value="{{description}}"></div>
+    <div class="row">
+      <div><label for="fo-{{id}}">folder</label>
+        <input id="fo-{{id}}" type="text" name="folder" value="{{folder}}"></div>
+      <div><label for="tg-{{id}}">tags</label>
+        <input id="tg-{{id}}" type="text" name="tags" value="{{tags}}"></div>
+    </div>
+    <label class="check"><input type="checkbox" name="public"{{#public}} checked{{/public}}> anybody can see it</label>
+    <div class="doing"><button type="submit" class="quiet">Save</button></div>
+  </form>
+  <form method="post" action="{{action}}" class="inline">
+    <input type="hidden" name="csrf" value="{{csrf}}">
+    <input type="hidden" name="action" value="delete">
+    <input type="hidden" name="id" value="{{id}}">
+    <button type="submit" class="quiet">Delete</button>
+  </form>
+  <p class="hint dim">{{who}} &middot; {{at}}</p>
+</div>
+{{/files}}</div>
+{{/anyFiles}}
+{{/picking}}

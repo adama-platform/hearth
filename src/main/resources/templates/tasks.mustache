@@ -1,0 +1,79 @@
+{{<layout}}{{$body}}
+<h1>Projects</h1>
+<p class="hint">Things to do, routines to keep, and what you have actually done. Your own are yours
+  alone &mdash; nobody else opens them, including whoever runs this place.</p>
+
+{{#anyLately}}
+<section class="lately">
+  <h2>Lately</h2>
+  <ul>{{#lately}}<li><strong>{{what}}</strong>{{#said}} <span class="dim">{{.}}</span>{{/said}} <span class="dim">&middot; {{when}}</span></li>{{/lately}}</ul>
+</section>
+{{/anyLately}}
+
+{{#anyMine}}
+<h2>Yours</h2>
+<div class="projects">
+  {{#mine}}
+  <a class="project" href="{{url}}">
+    <span class="name">{{name}}</span>
+    {{#summary}}<span class="dim">{{.}}</span>{{/summary}}
+    <span class="counts">{{open}} {{word}}{{#anyDue}} <span class="pill warn">{{due}} due</span>{{/anyDue}}</span>
+  </a>
+  {{/mine}}
+</div>
+{{/anyMine}}
+{{^anyMine}}<p class="empty">Nothing of your own yet. A project is a list, a routine, or a board
+  &mdash; whatever you need to keep track of.</p>{{/anyMine}}
+
+{{#anyShared}}
+<h2>{{community}}</h2>
+<div class="projects">
+  {{#shared}}
+  <a class="project" href="{{url}}">
+    <span class="name">{{name}}</span>
+    {{#summary}}<span class="dim">{{.}}</span>{{/summary}}
+    <span class="counts">{{open}} {{word}}{{#anyDue}} <span class="pill warn">{{due}} due</span>{{/anyDue}}</span>
+  </a>
+  {{/shared}}
+</div>
+{{/anyShared}}
+
+<p><a href="{{libraryUrl}}">What things are &rarr;</a> <span class="dim">&mdash; exercises, chores
+  and anything else with instructions worth writing down once.</span></p>
+
+<details class="reply">
+  <summary>Start a project</summary>
+  <form method="post" action="{{action}}">
+    <input type="hidden" name="csrf" value="{{csrf}}">
+    <input type="hidden" name="action" value="new_project">
+    <label for="p-name">what is it called</label>
+    <input id="p-name" type="text" name="name" maxlength="128" required>
+    <label for="p-summary">one line about it</label>
+    <input id="p-summary" type="text" name="summary" maxlength="256">
+    <div class="two">
+      <div><label for="p-word">one of them is a</label>
+        <input id="p-word" type="text" name="task_word" maxlength="32" value="task" placeholder="task, exercise, chore"></div>
+      <div><label for="p-words">several are</label>
+        <input id="p-words" type="text" name="tasks_word" maxlength="32" value="tasks"></div>
+    </div>
+    <label for="p-phases">phases, comma separated <span class="dim">&mdash; leave empty for a plain list</span></label>
+    <input id="p-phases" type="text" name="phases" maxlength="256" placeholder="To do, Doing, Done">
+    <label for="p-hide">hide finished ones after <span class="dim">&mdash; hours; they are kept for the history either way</span></label>
+    <input id="p-hide" type="number" name="hide_done_hours" min="0" max="8760" value="24">
+    {{#mayShare}}<label class="check"><input type="checkbox" name="shared"> for the whole community, not just me</label>{{/mayShare}}
+    <button type="submit">Start it</button>
+  </form>
+</details>
+<style>
+.projects{display:grid;gap:.5rem;margin:0 0 1.5rem}
+.project{display:flex;flex-direction:column;gap:.15rem;padding:.9rem 1rem;border:1px solid var(--line);border-radius:12px;background:var(--panel);text-decoration:none;color:inherit;min-height:44px}
+.project:hover{border-color:var(--accent)}
+.project .name{font-weight:650;font-size:1.05rem}
+.project .counts{font-size:.875rem;color:var(--dim);margin-top:.2rem}
+.lately{border-left:3px solid var(--line);padding:.2rem 0 .2rem .9rem;margin:0 0 1.5rem}
+.lately h2{margin:0 0 .3rem;font-size:.8rem;text-transform:uppercase;letter-spacing:.04em;color:var(--dim)}
+.lately ul{list-style:none;margin:0;padding:0;font-size:.9375rem}
+.lately li{padding:.15rem 0}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:.6rem}
+</style>
+{{/body}}{{/layout}}

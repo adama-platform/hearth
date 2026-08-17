@@ -1,0 +1,23 @@
+<p class="count">{{count}} conversation(s)</p>
+{{^anyPosts}}<p class="hint">Nothing has been posted yet.</p>{{/anyPosts}}
+{{#anyPosts}}<table>
+  <thead><tr><th>title</th><th>who</th><th class="num">replies</th><th class="num">watching</th><th>started</th><th></th></tr></thead>
+  <tbody>{{#posts}}<tr>
+    <td>
+      <a href="{{url}}">{{title}}</a>
+      {{#pinned}}<span class="pill purple">pinned</span>{{/pinned}}
+      {{#locked}}<span class="pill">locked</span>{{/locked}}
+      {{#removed}}<span class="pill red">removed</span>{{/removed}}
+      {{#expired}}<span class="pill dim">aged out</span>{{/expired}}
+    </td>
+    <td class="dim">{{author}}</td>
+    <td class="num dim">{{comments}}</td>
+    <td class="num dim">{{watchers}}</td>
+    <td class="dim mono">{{when}}</td>
+    <td class="actions">
+      <form class="inline" method="post" action="{{action}}"><input type="hidden" name="csrf" value="{{csrf}}"><input type="hidden" name="id" value="{{id}}"><input type="hidden" name="action" value="pin"><button type="submit">{{#pinned}}unpin{{/pinned}}{{^pinned}}pin{{/pinned}}</button></form>
+      <form class="inline" method="post" action="{{action}}"><input type="hidden" name="csrf" value="{{csrf}}"><input type="hidden" name="id" value="{{id}}"><input type="hidden" name="action" value="lock"><button type="submit">{{#locked}}unlock{{/locked}}{{^locked}}lock{{/locked}}</button></form>
+      {{^removed}}<form class="inline" method="post" action="{{action}}" onsubmit="return confirm('Remove this from the feed? The thread and its replies are kept.')"><input type="hidden" name="csrf" value="{{csrf}}"><input type="hidden" name="id" value="{{id}}"><input type="hidden" name="action" value="remove"><button type="submit">remove</button></form>{{/removed}}
+    </td>
+  </tr>{{/posts}}</tbody>
+</table>{{/anyPosts}}

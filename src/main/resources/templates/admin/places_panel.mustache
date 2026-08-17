@@ -1,0 +1,19 @@
+<p class="count">{{count}} address(es)</p>
+{{^anyPlaces}}<p class="hint">Nothing in the book yet.</p>{{/anyPlaces}}
+{{#anyPlaces}}<table>
+  <thead><tr><th>name</th><th>kind</th><th>where</th><th>state</th><th></th></tr></thead>
+  <tbody>{{#places}}<tr>
+    <td><a href="{{editUrl}}">{{name}}</a></td>
+    <td class="dim">{{kind}}</td>
+    <td class="dim">{{address}}{{#geoProblem}}<br><span class="{{#geoStuck}}warn{{/geoStuck}}">{{.}}</span>{{/geoProblem}}</td>
+    <td>
+      {{#published}}<span class="pill good">listed</span>{{/published}}
+      {{^published}}<span class="pill dim">draft</span>{{/published}}
+      {{#humanOnly}}<span class="pill purple">human only</span>{{/humanOnly}}
+    </td>
+    <td class="actions">
+      {{#published}}<a href="{{viewUrl}}">view</a>{{/published}}
+      <form class="inline" method="post" action="{{action}}" onsubmit="return confirm('Remove this address for good?')"><input type="hidden" name="csrf" value="{{csrf}}"><input type="hidden" name="id" value="{{id}}"><input type="hidden" name="action" value="delete"><button type="submit">delete</button></form>
+    </td>
+  </tr>{{/places}}</tbody>
+</table>{{/anyPlaces}}

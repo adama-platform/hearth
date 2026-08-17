@@ -1,0 +1,48 @@
+{{<shell}}{{$content}}
+<h1>Overview</h1>
+
+{{#showPeople}}
+<section class="here">
+  <h2>Here now <span class="pill{{#anyOnline}} good{{/anyOnline}}">{{onlineCount}}</span></h2>
+  {{^anyOnline}}<p class="hint">Nobody has a page open at the moment. This fills in the second
+    somebody does &mdash; it is read from memory and never written down.</p>{{/anyOnline}}
+  {{#anyOnline}}
+  <ul class="whoshere">
+    {{#online}}
+    <li><a href="{{url}}"><span class="dot on" aria-hidden="true"></span><span class="who">{{name}}</span><span class="addr">{{email}}</span>{{#admin}}<span class="pill red">admin</span>{{/admin}}</a></li>
+    {{/online}}
+  </ul>
+  <p class="hint">Somebody counts as here if this server has heard from their browser in the last
+    minute or so. It is the only number on this page that changes while you are looking at it.</p>
+  {{/anyOnline}}
+</section>
+
+<h2>The community</h2>
+<div class="cards">
+  <div class="card"><div class="n">{{people}}</div><div class="l">people</div></div>
+  <div class="card"><div class="n">{{waiting}}</div><div class="l">waiting</div></div>
+  <div class="card"><div class="n">{{sessions}}</div><div class="l">sessions</div></div>
+  <div class="card"><div class="n">{{banCount}}</div><div class="l">bans</div></div>
+</div>
+{{/showPeople}}
+
+{{#showContent}}
+<h2>What is on it</h2>
+<div class="cards">
+  <div class="card"><div class="n">{{pages}}</div><div class="l">pages</div></div>
+  <div class="card"><div class="n">{{templateCount}}</div><div class="l">templates</div></div>
+  <div class="card"><div class="n">{{questionCount}}</div><div class="l">questions</div></div>
+</div>
+{{/showContent}}
+
+{{#showSystem}}
+<p class="hint">How the machine is doing &mdash; processor, memory, requests, errors &mdash; is
+  under <a href="{{systemUrl}}">System</a>. It is a question about a box rather than about a
+  community, and a debugging view on the page everybody lands on is a page people learn to skim.</p>
+{{/showSystem}}
+
+{{^showPeople}}{{^showContent}}{{^showSystem}}
+<p class="hint">Your role covers one part of this place rather than the whole of it, so there is
+  nothing to summarise here. What you can reach is in the sidebar.</p>
+{{/showSystem}}{{/showContent}}{{/showPeople}}
+{{/content}}{{/shell}}

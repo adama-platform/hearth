@@ -1,0 +1,15 @@
+{{<shell}}{{$content}}
+<h1>Content</h1>
+<form class="tools" method="get" action="{{action}}" data-filters>
+  <div class="search">{{{searchIcon}}}
+    <input type="search" name="q" value="{{q}}" placeholder="Search pages by address, title or body" aria-label="search pages">
+  </div>
+  <div class="chips" role="group" aria-label="show">
+    {{#publishedOptions}}<label class="chip"><input type="radio" name="published" value="{{value}}"{{#selected}} checked{{/selected}}>{{label}}</label>{{/publishedOptions}}
+  </div>
+  <noscript><button type="submit" class="quiet">Filter</button></noscript>
+</form>
+<div class="doing"><a class="btn" href="{{newUrl}}">{{{plusIcon}}}New page</a>
+  {{#bundlesUrl}}<a class="btn quiet" href="{{.}}">Import &amp; export</a>{{/bundlesUrl}}</div>
+<div class="panel" data-panel="{{panelUrl}}">{{{panel}}}</div>
+{{/content}}{{/shell}}
