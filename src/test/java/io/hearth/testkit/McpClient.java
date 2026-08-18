@@ -192,6 +192,12 @@ public class McpClient {
         arguments.put(key, number);
       } else if (value instanceof Long number) {
         arguments.put(key, number);
+      } else if (value instanceof JsonNode json) {
+        // Structured arguments have to arrive as structure. Everything else here stringifies, and
+        // an object argument turned into "{a=b}" would be a test proving the server copes with a
+        // shape no real client sends -- which is how a tool advertising an object parameter went
+        // years being silently unusable without a single test noticing.
+        arguments.set(key, json);
       } else {
         arguments.put(key, String.valueOf(value));
       }

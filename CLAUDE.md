@@ -2085,6 +2085,45 @@ against the real jar instead. Raise the floor when the honest number moves up; d
     test walks every declared tool both ways round, and a new tool with neither a permission nor a
     line on the deliberately-open list fails it.
 
+262. **A structured argument has to arrive as structure, and the transport is where that was
+    wrong.** `unwrap` handled null, boolean, number and array and then fell through to `asText()`,
+    which for a container node is the empty string -- so every nested object any tool declared
+    reached the surface as `""`. `place_save` advertised a `fields` object from the day the address
+    book shipped and read it behind an `instanceof Map` that could never be true, which meant a
+    model filling in a kind's own fields was answered with a success and wrote nothing. That is
+    invariant 76's failure arriving through the plumbing instead of the handler, and it is worse
+    there, because the handler's refusal was correct and unreachable. `ToolArgumentTests` checks
+    every structured argument both ways: that a value lands, and that a bad one is still refused.
+263. **A page's declared field values are given to its own template.** They used to reach a
+    directory listing's entries and the feeds and stop -- so a template could declare `subtitle`,
+    the editor could draw the box, the row could hold the value, and `{{subtitle}}` on the page
+    rendered as nothing. The manual has promised that `{{headline}}` works since the feature
+    shipped; it was the code that was wrong. Built-ins win the name clash (`putIfAbsent`), so a
+    field somebody called `title` cannot shadow the page's own.
+264. **Declaring a template's fields is absent-keeps, present-replaces.** Absent has to keep, or a
+    model fixing a typo in a body strips every box off the page editor. Present has to replace
+    rather than merge, because that is what the admin screen does with the same declarations, and a
+    list whose meaning depended on which of two screens wrote it is the "two ways to describe a
+    form" problem this project has already paid for once. Which makes `template_get` load-bearing:
+    it answers with the declarations **in full**, because a read that is lossy under a write that is
+    total is a read that deletes labels.
+265. **Changing what a page is has its own tool, and it cannot write a body.** `content_meta` is
+    `content_save` minus the one expensive thing to lose, and the guarantee is structural rather
+    than a promise in a description -- the method does not read a body, so no phrasing of the
+    arguments produces one. A model asked to file forty pages or fill in a subtitle should not be
+    holding forty bodies it has to hand back unchanged; every one of those is a chance to return
+    something subtly different, which the history would then record as an edit somebody made. The
+    log line says which of the two happened, because "updated /about" reading the same for a
+    retitle and a rewrite is exactly what somebody auditing an agent needs told apart.
+266. **Field values merge; an undeclared name is refused.** One blob holds the template's declared
+    values *and* a listing's own knobs (`page_size`, `sort`, `place_kind`), and a model setting a
+    subtitle is saying nothing about page size -- so replacing the blob would silently reset a
+    listing somebody tuned. That is invariant 30 arriving in a second place. A name the template
+    never declared is refused out loud rather than dropped, the same asymmetry places uses: a form
+    posting an unknown key is noise from a screen that has moved on, but a model passing one has
+    misunderstood something, and dropping it quietly reports success for a write that did not
+    happen.
+
 244. **The connection is a permission, not a rank.** `agent_connect` is granted in a role, so a
     community decides per person; it is not a baseline, because a connection is a standing
     credential held by somebody else's software that can act as that person for a month; and it

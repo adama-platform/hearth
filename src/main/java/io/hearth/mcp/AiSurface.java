@@ -190,8 +190,26 @@ public class AiSurface {
     }
     Map<String, Object> full = summarize(page);
     full.put("body", page.body());
-    full.put("fields", page.fields());
+    // parsed rather than the raw blob: this is the read that sits under content_meta, and handing
+    // back a JSON string the model has to parse and re-serialise is how a value gets mangled on
+    // the way through something that was only asked to change the title
+    full.put("fields", valuesOf(page));
     return full;
+  }
+
+  /** a page's stored field values, as values rather than as the blob they live in */
+  private static Map<String, String> valuesOf(ContentRecord page) {
+    TreeMap<String, String> values = new TreeMap<>();
+    try {
+      com.fasterxml.jackson.databind.JsonNode node =
+          new com.fasterxml.jackson.databind.ObjectMapper()
+              .readTree(page.fields() == null || page.fields().isBlank() ? "{}" : page.fields());
+      node.fieldNames().forEachRemaining(name -> values.put(name, node.get(name).asText("")));
+    } catch (Exception ex) {
+      // an unreadable blob reads as empty rather than failing a read somebody asked for
+      values.clear();
+    }
+    return values;
   }
 
   /**
@@ -202,7 +220,46 @@ public class AiSurface {
    * title, the template and the folder to avoid clearing them, and one that forgets should not
    * silently wipe them.
    */
-  public Map<String, Object> saveContent(String uri, Map<String, Object> changes) throws SQLException, Refused {
+  public Map<String, Object> saveContent(String uri, Map<String, Object> changes)
+      throws SQLException, Refused {
+    return writePage(uri, changes, true);
+  }
+
+  /**
+   * Change what a page <em>is</em> without touching what it <em>says</em>.
+   *
+   * The title, the folder, whether it is published, which template wraps it, and the values of the
+   * fields that template declares. Not the body -- and the guarantee is structural rather than a
+   * promise in a description: this method does not read one, so no phrasing of the arguments can
+   * make it write one.
+   *
+   * That distinction is worth a second tool rather than a flag on the first. A body is the thing a
+   * person wrote and the expensive thing to lose; a model asked to file forty pages into folders,
+   * or to fill in a subtitle a new template started asking for, should not be holding forty bodies
+   * it has to hand back unchanged. Every one of those is a chance to hand back something subtly
+   * different -- a re-wrapped line, a normalised quote -- and the page's history would record it as
+   * an edit somebody made. The narrow tool cannot make that mistake, and the log afterwards says
+   * which of the two things happened.
+   *
+   * It refuses to create: a page that does not exist has no body to preserve, so "meta only" is not
+   * a coherent thing to ask for, and the model wanted content_save.
+   */
+  public Map<String, Object> saveContentMeta(String uri, Map<String, Object> changes)
+      throws SQLException, Refused {
+    if (changes.containsKey("body")) {
+      throw new Refused("content_meta does not write a body -- it is the tool for changing"
+          + " everything else about a page while leaving what it says exactly as it is."
+          + " Use content_save to write a body.");
+    }
+    if (uri != null && accounts.site.store().byUri(uri) == null) {
+      throw new Refused("there is no page at '" + uri + "'. content_meta changes a page that"
+          + " exists; content_save is what creates one.");
+    }
+    return writePage(uri, changes, false);
+  }
+
+  private Map<String, Object> writePage(String uri, Map<String, Object> changes, boolean allowBody)
+      throws SQLException, Refused {
     assertWritable();
     assertCan(io.hearth.auth.Permission.content_write);
     if (uri == null || !uri.startsWith("/") || uri.length() > 512) {
@@ -222,6 +279,8 @@ public class AiSurface {
     if (template != null && !template.isBlank() && accounts.site.store().templateByName(template) == null) {
       throw new Refused("there is no template called '" + template + "'");
     }
+    String fields = mergedValues(existing, kind,
+        kind.wantsTemplate() ? template : null, changes);
     ContentRecord page = new ContentRecord(
         existing == null ? 0 : existing.id(),
         uri,
@@ -229,8 +288,9 @@ public class AiSurface {
         kind,
         kind.wantsTemplate() ? template : null,
         changes.containsKey("folder") ? str(changes, "folder") : (existing == null ? "" : existing.navFolder()),
-        existing == null ? "{}" : existing.fields(),
-        changes.containsKey("body") ? str(changes, "body") : (existing == null ? "" : existing.body()),
+        fields,
+        allowBody && changes.containsKey("body")
+            ? str(changes, "body") : (existing == null ? "" : existing.body()),
         changes.containsKey("published") ? bool(changes, "published") : (existing == null || existing.published()),
         // an agent can never set this bit; only a person at the admin screen can
         existing != null && existing.humanOnly(),
@@ -238,7 +298,116 @@ public class AiSurface {
     ContentRecord saved = accounts.site.store().save(page, actor(), actorEmail);
     Map<String, Object> result = summarize(saved);
     result.put("created", existing == null);
+    // what the values actually are afterwards, rather than what was sent: the merge means those
+    // are different answers, and a model that set one of four fields should be able to see the
+    // other three survived without fetching the page back
+    result.put("fields", valuesOf(saved));
     return result;
+  }
+
+  /**
+   * A page's field values after a write, which is a merge and never a replacement.
+   *
+   * Three things live in one blob and only one of them is usually being changed: the values of the
+   * fields the template declares, and -- on a listing page -- the knobs that decide how many rows
+   * it shows and in what order. A model setting a subtitle is not saying anything about page_size,
+   * so replacing the blob with what it sent would silently reset a listing somebody tuned. This is
+   * invariant 30's rule arriving in a second place: a submission mentions a handful of the keys
+   * that exist, and treating that as the new state of the record erases the rest while looking
+   * like it worked.
+   *
+   * So: start from what is stored, apply what was sent, and leave everything else alone. A key
+   * mapped to null is an erasure, because somebody can legitimately want one.
+   *
+   * A name the template never declared is <b>refused rather than dropped</b>, the same asymmetry
+   * places uses. A form posting an unknown key is noise from a screen that has moved on; a model
+   * passing one has misunderstood something, and dropping it quietly would report success for a
+   * write that did not happen and teach it the field exists.
+   */
+  private String mergedValues(ContentRecord existing, ContentRecord.Kind kind,
+                              String templateName, Map<String, Object> changes)
+      throws SQLException, Refused {
+    LinkedHashMap<String, String> values = new LinkedHashMap<>();
+    if (existing != null) {
+      values.putAll(valuesOf(existing));
+    }
+    List<TemplateField> declared = List.of();
+    if (templateName != null && !templateName.isBlank()) {
+      TemplateRecord template = accounts.site.store().templateByName(templateName);
+      if (template != null) {
+        declared = template.fields();
+      }
+    }
+    if (changes.containsKey("fields")) {
+      Object raw = changes.get("fields");
+      if (!(raw instanceof Map<?, ?> given)) {
+        throw new Refused("fields is an object of value by field name, like"
+            + " {\"subtitle\":\"A quiet week\"}");
+      }
+      for (Map.Entry<?, ?> entry : given.entrySet()) {
+        String key = String.valueOf(entry.getKey());
+        if (!declares(declared, key) && !isListingKnob(kind, key)) {
+          throw new Refused(templateName == null || templateName.isBlank()
+              ? "this page has no template, so it has no fields to set"
+              : "the " + templateName + " template does not declare '" + key + "'. It declares "
+                  + (declared.isEmpty() ? "no fields at all" : String.join(", ", names(declared)))
+                  + " -- add it with template_save if the template should be asking for it.");
+        }
+        values.put(key, entry.getValue() == null ? "" : String.valueOf(entry.getValue()));
+      }
+    }
+    // a field the template asks for and nobody has filled in exists as an empty string, which is
+    // what the page editor stores too -- the required check below is what makes that visible
+    for (TemplateField field : declared) {
+      values.putIfAbsent(field.name(), "");
+    }
+    for (TemplateField field : declared) {
+      if (field.required() && values.getOrDefault(field.name(), "").isBlank()) {
+        throw new Refused("'" + field.labelOr() + "' is required by the " + templateName
+            + " template and is empty. Pass it in fields, like {\"" + field.name()
+            + "\":\"...\"}.");
+      }
+    }
+    com.fasterxml.jackson.databind.node.ObjectNode node =
+        new com.fasterxml.jackson.databind.ObjectMapper().createObjectNode();
+    values.forEach(node::put);
+    return node.toString();
+  }
+
+  private static boolean declares(List<TemplateField> declared, String name) {
+    for (TemplateField field : declared) {
+      if (field.name().equals(name)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * The listing knobs live in the same blob as the declared fields and are not declared anywhere.
+   *
+   * They are a property of one page rather than of its template -- how many rows this listing
+   * shows, in what order -- so a column would be null on every other row in the table. Which means
+   * the "is this key declared" question has a second, smaller answer beside it, and the kind is
+   * what knows.
+   */
+  private static boolean isListingKnob(ContentRecord.Kind kind, String key) {
+    if (!kind.listing) {
+      return false;
+    }
+    return switch (key) {
+      case "page_size", "sort" -> true;
+      case "place_kind" -> kind == ContentRecord.Kind.place_listing;
+      default -> false;
+    };
+  }
+
+  private static List<String> names(List<TemplateField> declared) {
+    ArrayList<String> names = new ArrayList<>();
+    for (TemplateField field : declared) {
+      names.add(field.name());
+    }
+    return names;
   }
 
   public Map<String, Object> deleteContent(String uri) throws SQLException, Refused {
@@ -295,7 +464,7 @@ public class AiSurface {
     LinkedHashMap<String, Object> row = new LinkedHashMap<>();
     row.put("name", template.name());
     row.put("body", template.body());
-    row.put("fields", fieldNames(template));
+    row.put("fields", fieldDeclarations(template));
     row.put("used_by", accounts.site.store().urisUsingTemplate(template.name()));
     return row;
   }
@@ -328,7 +497,15 @@ public class AiSurface {
       throw new Refused("body is required");
     }
     TemplateRecord existing = accounts.site.store().templateByName(name);
-    String parameters = existing == null ? "[]" : existing.parameters();
+    // Absent keeps what is declared, present replaces it wholesale. Absent has to keep, because a
+    // model fixing a typo in a body must not silently strip every box off the page editor -- the
+    // same reason the index half below keeps. Present has to replace rather than merge, because
+    // that is what the admin screen does with the same declarations, and a declaration list whose
+    // meaning depended on which of two screens wrote it is the "two ways to describe a form"
+    // problem this project has already paid for once.
+    String parameters = index.containsKey("fields")
+        ? TemplateField.toBlob(declarationsFrom(index.get("fields")))
+        : (existing == null ? "[]" : existing.parameters());
     boolean directory = index.containsKey("directory") ? bool(index, "directory")
         : existing != null && existing.directory();
     String path = index.containsKey("directory_path") ? str(index, "directory_path")
@@ -425,6 +602,15 @@ public class AiSurface {
         + " listing. Set it when moving old writing in, so 2011 says 2011.");
     spec.put("directory_index", "a template can publish an index of every page using it, at an"
         + " address of its own. It is a second template with its own body -- see template_save.");
+    spec.put("template_fields", "a template can declare fields -- a subtitle, a hero line, a date"
+        + " -- that every page using it is asked for. Declare them with template_save (fields) and"
+        + " use one as {{field_name}} in the template body. A page fills them in with content_save"
+        + " or content_meta (fields); template_get says what a template declares and which are"
+        + " required. A required field left empty refuses the save rather than rendering a hole.");
+    spec.put("changing_details", "content_meta changes a page's title, folder, template, published"
+        + " state or field values and cannot write a body at all. Prefer it whenever the words are"
+        + " not what is changing: there is no way for it to damage what somebody wrote, and the log"
+        + " afterwards says which of the two kinds of edit this was.");
     spec.put("attachments", "uploaded files are served at /attachment/<id>.<ext> and can be"
         + " embedded in any page body.");
     return spec;
@@ -452,6 +638,93 @@ public class AiSurface {
       names.add(field.name() + ":" + field.type().name() + (field.required() ? " (required)" : ""));
     }
     return names;
+  }
+
+  /**
+   * The declarations in full, which is what makes editing them possible.
+   *
+   * The listing gets the one-line form because it is a listing. This is the read that sits under a
+   * write: a model adding one field to a template has to resend the others, so anything this drops
+   * -- the label, the help text -- is something the next save silently deletes. Invariant 248 is
+   * usually about a filter missing from a by-id fetch; the same rule applies to a read that is
+   * lossy where its write is total.
+   */
+  private static List<Map<String, Object>> fieldDeclarations(TemplateRecord template) {
+    ArrayList<Map<String, Object>> rows = new ArrayList<>();
+    for (TemplateField field : template.fields()) {
+      LinkedHashMap<String, Object> row = new LinkedHashMap<>();
+      row.put("name", field.name());
+      row.put("type", field.type().name());
+      row.put("label", field.label() == null ? "" : field.label());
+      row.put("help", field.help() == null ? "" : field.help());
+      row.put("required", field.required());
+      rows.add(row);
+    }
+    return rows;
+  }
+
+  /**
+   * Model-supplied field declarations, checked rather than coerced.
+   *
+   * {@link TemplateField#parse} is deliberately forgiving because it reads a blob this server
+   * wrote and a half-readable declaration should not take a page down. This reads an argument, and
+   * the opposite rule applies: an unusable name or an invented type is refused by name so the model
+   * learns what it did, because {@code Type.of} would quietly turn "boolean" into a text box and
+   * the author would find out from a form that renders wrong.
+   */
+  private static List<TemplateField> declarationsFrom(Object raw) throws Refused {
+    ArrayList<TemplateField> fields = new ArrayList<>();
+    if (raw == null) {
+      return fields;
+    }
+    if (!(raw instanceof List<?> given)) {
+      throw new Refused("fields is a list of declarations, each with a name and a type");
+    }
+    if (given.size() > TemplateField.MAX_FIELDS) {
+      throw new Refused("a template declares at most " + TemplateField.MAX_FIELDS + " fields");
+    }
+    for (Object item : given) {
+      if (!(item instanceof Map<?, ?> map)) {
+        throw new Refused("each field is an object like"
+            + " {\"name\":\"subtitle\",\"type\":\"text\",\"label\":\"Subtitle\"}");
+      }
+      Object name = map.get("name");
+      String fieldName = name == null ? null : String.valueOf(name).trim();
+      if (!TemplateField.isValidName(fieldName)) {
+        throw new Refused("'" + fieldName + "' is not a usable field name -- lowercase letters,"
+            + " digits and underscore, starting with a letter, up to 32 characters");
+      }
+      for (TemplateField already : fields) {
+        if (already.name().equals(fieldName)) {
+          throw new Refused("'" + fieldName + "' is declared twice; each field is named once");
+        }
+      }
+      Object type = map.get("type");
+      TemplateField.Type kind = typeOf(type == null ? null : String.valueOf(type));
+      Object required = map.get("required");
+      fields.add(new TemplateField(fieldName, kind,
+          map.get("label") == null ? "" : String.valueOf(map.get("label")),
+          map.get("help") == null ? "" : String.valueOf(map.get("help")),
+          Boolean.TRUE.equals(required) || "true".equals(String.valueOf(required))));
+    }
+    return fields;
+  }
+
+  private static TemplateField.Type typeOf(String raw) throws Refused {
+    if (raw == null || raw.isBlank()) {
+      return TemplateField.Type.text;
+    }
+    for (TemplateField.Type type : TemplateField.Type.values()) {
+      if (type.name().equalsIgnoreCase(raw.trim())) {
+        return type;
+      }
+    }
+    ArrayList<String> known = new ArrayList<>();
+    for (TemplateField.Type type : TemplateField.Type.values()) {
+      known.add(type.name());
+    }
+    throw new Refused("'" + raw + "' is not a field type here; it is one of "
+        + String.join(", ", known));
   }
 
   // ---- navigation ------------------------------------------------------------------------------

@@ -164,7 +164,7 @@ Above the table:
 
 Below it, the proof block:
 
-> **1675 tests**, and most of them are not unit tests: they boot the whole server on a port and
+> **1698 tests**, and most of them are not unit tests: they boot the whole server on a port and
 > drive it over HTTP, including a client that keeps cookies and does what the page's own script
 > does. `just validate` builds clean, runs all of it, packages the jar, and then makes real requests
 > against that jar running as a server. Nothing here is claimed to work on the strength of a green
@@ -478,7 +478,7 @@ have been approved.
 > Hearth is a single-jar community server: Netty, embedded H2, Mustache, no build step, no CDN, no
 > third-party request of any kind. Virtual hosts resolved from a flat directory of config files at
 > boot into an immutable tree. Every write emits an event; caches invalidate off the bus and the TTL
-> is only a backstop. Certificates over HTTP-01 answered by the same process. 1675 tests, most of
+> is only a backstop. Certificates over HTTP-01 answered by the same process. 1698 tests, most of
 > which boot the real server and talk to it over a socket. MIT.
 
 ---
@@ -502,7 +502,7 @@ carries the full source list and says the same thing about them.
 | Eventbrite 3.7% + $1.79 per ticket plus 2.9% processing | vendor pricing page | `VERIFY` before publication |
 | Meetup+ subscribers jump the waitlist | Meetup help centre | `VERIFY`; it is the sharpest claim about a named competitor on the page |
 | Self-hosted Discourse wants 4GB, two cores, separate SMTP | vendor install docs | `VERIFY` |
-| 1675 tests | the suite; `just validate` checks this number against the surefire reports | kept true by the build |
+| 1698 tests | the suite; `just validate` checks this number against the surefire reports | kept true by the build |
 | 100 to 1,000 people | MISSION.md | a design commitment, not a measurement |
 | MIT licensed | [LICENSE](LICENSE) | true |
 

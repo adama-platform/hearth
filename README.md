@@ -21,7 +21,7 @@ which is the design in two words.
 
 ## What is in the jar
 
-All of it built, and covered by 1675 tests that boot the real server and talk to it over a socket.
+All of it built, and covered by 1698 tests that boot the real server and talk to it over a socket.
 
 | | |
 | --- | --- |
@@ -153,7 +153,7 @@ the decisions are the product.
 
 Three things are worth saying about the state of it rather than the shape.
 
-**1675 tests**, and they are mostly not unit tests. The testkit boots the whole server on an
+**1698 tests**, and they are mostly not unit tests. The testkit boots the whole server on an
 ephemeral port with real databases and drives it over HTTP — including, for the account flows, a
 client that keeps cookies and does what the page's own script does. What is asserted is what an
 operator would get.

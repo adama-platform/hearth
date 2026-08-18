@@ -443,6 +443,19 @@ public class Site {
     model.put("body", body);
     model.put("title", page.title());
     model.put("uri", page.uri());
+    // What this page filled in for the fields its template declared -- and the whole point of
+    // declaring one. Without this the feature was wired at both ends and not in the middle: the
+    // template declares `subtitle`, the editor draws a box, the value is stored on the row, it is
+    // handed to a directory listing's entries and to the feeds, and then `{{subtitle}}` on the
+    // page's own template renders as nothing. Nobody meets that until they have written the
+    // template, filled the box in and reloaded, at which point the obvious suspicion is the
+    // template.
+    //
+    // putIfAbsent, so a field somebody called `title` or `body` cannot shadow the real one. Same
+    // rule the listing rows already use, for the same reason.
+    for (Map.Entry<String, String> field : fieldsOf(page).entrySet()) {
+      model.putIfAbsent(field.getKey(), field.getValue());
+    }
     StringWriter writer = new StringWriter(4096);
     try {
       template.execute(writer, model).flush();

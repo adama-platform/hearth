@@ -51,6 +51,7 @@ public class McpTools {
   private static final java.util.Map<String, io.hearth.auth.Permission> NEEDS =
       java.util.Map.ofEntries(
           java.util.Map.entry("content_save", io.hearth.auth.Permission.content_write),
+          java.util.Map.entry("content_meta", io.hearth.auth.Permission.content_write),
           java.util.Map.entry("content_delete", io.hearth.auth.Permission.content_write),
           java.util.Map.entry("template_list", io.hearth.auth.Permission.content_read),
           java.util.Map.entry("template_get", io.hearth.auth.Permission.content_read),
@@ -137,6 +138,27 @@ public class McpTools {
                 + " each of those needs a particular shape of uri and will be refused without it."),
             prop("template", "string", "the template to wrap it in; ignored when kind is page"),
             prop("folder", "string", "navigation folder; empty leaves it out of the navigation"),
+            objectProp("fields", "values for the fields this page's template declares, as"
+                + " {\"field_name\": \"value\"}. Read them from template_get. Only the ones you"
+                + " pass are changed; a name the template does not declare is refused rather than"
+                + " ignored. On a listing page this also carries page_size and sort."),
+            prop("published", "boolean", "unpublished pages are not served")),
+            "uri")));
+
+    tools.add(new Tool("content_meta", "Change a page's details, not its words",
+        "Retitle a page, move it between navigation folders, publish or unpublish it, change which"
+            + " template wraps it, or fill in the fields that template declares -- while leaving"
+            + " the body exactly as it is. This tool cannot write a body at all, which is the"
+            + " reason to use it: filing pages or filling in a subtitle should not involve handing"
+            + " back somebody's prose and hoping it came through unchanged. Use content_save when"
+            + " the words themselves are what is changing. The page has to exist already.",
+        required(schema(
+            prop("uri", "string", "the page's path, e.g. /about"),
+            prop("title", "string", "shown in the browser tab and available to the template"),
+            prop("template", "string", "the template to wrap it in"),
+            prop("folder", "string", "navigation folder; empty leaves it out of the navigation"),
+            objectProp("fields", "values for the fields the template declares, as"
+                + " {\"field_name\": \"value\"}; only the ones you pass are changed"),
             prop("published", "boolean", "unpublished pages are not served")),
             "uri")));
 
@@ -481,7 +503,9 @@ public class McpTools {
         schema()));
 
     tools.add(new Tool("template_get", "Read a template",
-        "One template's mustache source, plus the uris that depend on it.",
+        "One template's mustache source, the fields it declares in full, and the uris that depend"
+            + " on it. Read this before template_save if you are changing the fields: saving them"
+            + " replaces the declaration wholesale, so send back the ones you are keeping.",
         required(schema(prop("name", "string", "the template's name")), "name")));
 
     tools.add(new Tool("template_save", "Write a template",
@@ -495,10 +519,21 @@ public class McpTools {
             + " its own body. Pass directory_body to write it; leave it out and a working listing"
             + " is written for you. The index is given {{#entries}} (uri, title, at, excerpt,"
             + " folder, and any field this template declares), count, page, pages,"
-            + " prevUrl/nextUrl/firstUrl/lastUrl and {{#numbers}}.",
+            + " prevUrl/nextUrl/firstUrl/lastUrl and {{#numbers}}."
+            + " A template can also **declare fields** -- the things it wants from every page"
+            + " beyond a body, like a subtitle or a hero line. Declaring one puts a box on the"
+            + " page editor and makes {{field_name}} available in this template; pages fill it in"
+            + " with content_save or content_meta. Leave fields out and what is declared stays as"
+            + " it is; pass it and it becomes exactly what you sent, so read template_get first.",
         required(schema(
             prop("name", "string", "letters, digits, underscore or hyphen"),
             prop("body", "string", "the mustache template source"),
+            objectArrayProp("fields", "what every page using this template is asked for, as"
+                + " [{\"name\":\"subtitle\",\"type\":\"text\",\"label\":\"Subtitle\","
+                + "\"help\":\"one line under the title\",\"required\":false}]."
+                + " name is lowercase letters, digits and underscore. type is one of text,"
+                + " multiline, markdown, number, bool, url, date. Removing a field stops pages"
+                + " being asked for it and does not delete what they already recorded."),
             prop("directory", "boolean", "publish an index of every page using this template"),
             prop("directory_path", "string", "where the index lives, e.g. /blog"),
             prop("directory_pattern", "string",
@@ -855,6 +890,14 @@ public class McpTools {
         return new Result(saved, uri,
             (Boolean.TRUE.equals(saved.get("created")) ? "created " : "updated ") + uri);
       }
+      case "content_meta" -> {
+        String uri = optString(args, "uri");
+        Map<String, Object> saved = surface.saveContentMeta(uri, args);
+        // the log line says which of the two kinds of write this was, because "updated /about"
+        // reading the same for a retitle and a rewrite is the thing somebody auditing an agent
+        // afterwards most needs told apart
+        return new Result(saved, uri, "changed the details of " + uri + ", body untouched");
+      }
       case "content_delete" -> {
         String uri = optString(args, "uri");
         return new Result(surface.deleteContent(uri), uri, "deleted " + uri);
@@ -988,6 +1031,23 @@ public class McpTools {
     return node;
   }
 
+  /**
+   * A list of objects, which {@link #prop} cannot express.
+   *
+   * prop() declares {@code items: string} for every array, which is right for the several tools
+   * taking a list of names and wrong for a list of declarations -- and a schema that promises
+   * strings while the handler reads objects is a model told to send the one thing that will be
+   * refused.
+   */
+  private static ObjectNode objectArrayProp(String name, String description) {
+    ObjectNode node = JSON.createObjectNode();
+    node.put("__name", name);
+    node.put("type", "array");
+    node.put("description", description);
+    node.putObject("items").put("type", "object");
+    return node;
+  }
+
   /** a free-form object, for the fields a community invented and this code has never heard of */
   private static ObjectNode objectProp(String name, String description) {
     ObjectNode node = JSON.createObjectNode();
@@ -1029,6 +1089,18 @@ public class McpTools {
       ArrayList<Object> list = new ArrayList<>();
       node.forEach(item -> list.add(unwrap(item)));
       return list;
+    }
+    // An object argument used to fall through to asText(), which for a container node is the empty
+    // string -- so every nested object a tool declared arrived as "". place_save has advertised a
+    // `fields` object since the address book shipped and reads it with an `instanceof Map` that
+    // could never be true, which meant a model filling in a kind's own fields was told it had
+    // worked and nothing was written. That is the precise failure invariant 76 refuses for an
+    // *undeclared* field, arriving through the plumbing instead: silent success for a write that
+    // did not happen. Objects are now objects, and ToolArgumentTests holds both halves down.
+    if (node.isObject()) {
+      LinkedHashMap<String, Object> fields = new LinkedHashMap<>();
+      node.fields().forEachRemaining(entry -> fields.put(entry.getKey(), unwrap(entry.getValue())));
+      return fields;
     }
     return node.asText();
   }

@@ -739,8 +739,9 @@ every clever matching rule in this space has been somebody's advisory.
 |---|---|
 | `content_list`, `content_search`, `content_get` | read the site |
 | `content_save`, `content_delete` | write pages; a save changes only the fields it mentions |
+| `content_meta` | retitle, refile, publish, re-template or fill in a page's fields &mdash; and it cannot write a body at all |
 | `navigation_get` | the folder tree, and which pages sit outside it |
-| `template_list`, `template_get`, `template_save`, `template_delete` | manage templates |
+| `template_list`, `template_get`, `template_save`, `template_delete` | manage templates, including the fields each one asks every page for |
 | `survey_list`, `survey_ask`, `survey_update`, `survey_delete` | shape the survey |
 | `survey_summarize` | every answer, aggregated &mdash; the tool for "what is the community saying" |
 | `task_projects`, `task_project`, `task_project_save` | the person's own projects |
@@ -757,6 +758,14 @@ every clever matching rule in this space has been somebody's advisory.
 
 It cannot touch member accounts, approvals, emails, bans, or anything marked human only. Set
 `"read-only": true` to take away the writes as well.
+
+**Two tools write a page and the difference is worth knowing.** `content_save` writes the body and
+everything else; `content_meta` writes everything *except* the body, and has no parameter for one.
+An assistant asked to file forty pages into folders, or to fill in a subtitle a new template
+started asking for, should be using the second: there is no phrasing of its arguments that damages
+what somebody wrote, and the AI log afterwards says which of the two kinds of edit happened rather
+than showing forty identical "updated" lines. A template's declared fields are set by name through
+either one, and a name the template does not declare is refused rather than quietly dropped.
 
 ### It can only do what its person can
 
@@ -2145,6 +2154,13 @@ the page row, so removing a field hides it rather than destroying it.
 
 This is the whole reason an operator can ask for a headline on every landing page without anybody
 touching the schema.
+
+A connected assistant works the same seam from the other side: `template_save` declares the fields,
+`template_get` reads back what a template declares, and `content_save` or `content_meta` fills them
+in on a page by name. Declaring the fields and filling them in were both impossible until
+recently — a template written by a model got no declarations whatever it sent, and a page written
+by one got no values — so a site an assistant built came out with every box empty and nothing
+saying why.
 
 A page naming a template that doesn't exist serves the body alone rather than failing. A template
 that doesn't parse does the same. An operator typo should not take a site down.
