@@ -65,6 +65,15 @@ public class Accounts {
   public final io.hearth.push.PushSubs pushSubs;
   /** the colours this community chose, for the site and for the admin */
   public final io.hearth.theme.Themes themes;
+
+  /**
+   * What this community decided about itself, as opposed to what its operator did.
+   *
+   * Lives beside the other per-database caches because that is what it is. The values it holds are
+   * applied by rebuilding the domain's whole {@link io.hearth.vhost.DomainConfig}, so nothing here
+   * is read on a request path -- readers go on holding a finished config object.
+   */
+  public final io.hearth.settings.SettingStore settings;
   /** the terms and the privacy policy: what this community said, or what the software ships */
   public final io.hearth.legal.LegalDocs legal;
   /** what every message says, in this community's words when it has written any */
@@ -80,6 +89,16 @@ public class Accounts {
   public final SurveyIndexer survey;
   /** the database itself, for the one caller that has to write across several tables at once */
   public final Store store;
+
+  /**
+   * This account space's clock, which an administrator can now change.
+   *
+   * Volatile and not final because the timezone is a setting: it decides what "today" means to
+   * everybody reading a page, and a copy taken at boot would go on being a few hours wrong until
+   * somebody restarted the server. {@link io.hearth.auth.AuthSystem#applySettings} moves it in the
+   * same breath as it swaps the rebuilt config in.
+   */
+  private volatile java.time.ZoneId zone;
 
   public Accounts(Store store, String databaseDomain, LoginSecurity security,
                   java.util.Set<String> bootstrapAdmins, Caches caches, EventBus events,
@@ -123,13 +142,15 @@ public class Accounts {
     this.availability = new io.hearth.availability.Availability(store);
     this.attachments = new io.hearth.attach.Attachments(store);
     this.themes = new io.hearth.theme.Themes(store);
+    this.settings = new io.hearth.settings.SettingStore(store);
     this.legal = new io.hearth.legal.LegalDocs(store);
     this.messages = new io.hearth.mail.SystemTemplates(store);
     this.sessions.cascadeTo(this.pushSubs);
     // after everything it reads from, and given each of them by name rather than given this whole
     // object: a feed page can show the calendar, the address book and the directory, and nothing
     // about that list should be discoverable by a page reaching for whatever is nearby
-    this.feeds = new io.hearth.content.Feeds(databaseDomain, zone, site, site.store(), calendar,
+    this.zone = zone == null ? java.time.ZoneId.systemDefault() : zone;
+    this.feeds = new io.hearth.content.Feeds(databaseDomain, this::zone, site, site.store(), calendar,
         places, users, people, access, caches, events, verbose);
     this.survey = new SurveyIndexer(databaseDomain, people, events, verbose);
   }
@@ -152,6 +173,18 @@ public class Accounts {
     return calendar.adopt(user.id(), user.email(), java.time.LocalDate.now());
   }
 
+  /** what "today" means here */
+  public java.time.ZoneId zone() {
+    return zone;
+  }
+
+  /** moved when the community changes its clock, so nothing holds a copy of the old one */
+  public void clockIs(java.time.ZoneId moved) {
+    if (moved != null) {
+      this.zone = moved;
+    }
+  }
+
   public void start() {
     try {
       // the built-in roles exist before the socket opens, so the first request cannot arrive at a
@@ -162,6 +195,7 @@ public class Accounts {
       // read once, before the socket opens: every page render asks the theme for its colours and
       // every email footer asks where the terms are
       themes.load();
+      settings.load();
       legal.load();
       messages.load();
       // and the merge keys, so an export is a bundle every row of which can be brought back

@@ -335,6 +335,9 @@ src/main/java/io/hearth/
   places/Places.java       the address book; kinds of place declare their own fields
   places/PlaceRoutes.java  /places, one kind, one place; the type names the template
   places/PlacesConfig.java whether a domain keeps an address book
+  settings/Setting.java    one thing a community may decide, and how a form asks for it
+  settings/Settings.java   the closed catalogue: what moved to the database, and what it means
+  settings/SettingStore.java  the config table; a row exists only where somebody decided something
   theme/Theme.java         six colours twice, and the CSS every layout interpolates
   theme/Themes.java        the palettes for one community, cached because every render asks
   legal/LegalDoc.java      the two documents, and the text they ship with
@@ -380,9 +383,17 @@ aggregator (413), malformed requests 400.
 
 ## Invariants — do not break these without saying so out loud
 
-1. **Configs load at boot, before the socket opens.** `DomainScanner` runs once; `DomainTree` is
-   immutable. Nothing on the request path opens a file to learn about a domain. If a feature seems
-   to need runtime config reload, that's a conversation, not a patch.
+1. **Configs load at boot, before the socket opens.** `DomainScanner` runs once; the *shape* of
+   `DomainTree` -- which domains exist, what covers what, which names are junctions -- is immutable.
+   Nothing on the request path opens a file to learn about a domain.
+
+   **The product half of a domain's config is now a database table and can change while the server
+   runs** (invariants 267-272). That was the conversation this clause asked for, and the way it was
+   settled keeps what the clause was actually protecting: a write rebuilds the whole immutable
+   `DomainConfig` once and swaps it into the tree, so a reader still takes a reference to a finished
+   object and never reads a file, or a table, to learn about a domain. The work is on the write, the
+   same trade the theme cache makes. What stays in the file is everything security-bearing, and that
+   is still boot-only.
 2. **A domain is served only if it has a `<domain>.cfg`.** There is no default host and no fallback
    site. Unconfigured means refused.
 3. **Config problems are fatal at boot.** Bad JSON, wrong types, unknown keys, filenames that
@@ -517,11 +528,13 @@ forever with nothing to communicate back.
     save, no event, no version. A tool that pushed a repository on every commit would otherwise fill
     the history with edits nobody made -- and `?dry=1` answers the same JSON without writing, because
     a diff nobody can see before it lands is a diff nobody reviews.
-194. **The settings screen is a report, and everything on it names its key.** Configuration is read
-    once before the socket opens and never again (invariant 1), which means an operator cannot see
-    it -- the values exist only as fields on objects in a running process. No credential is ever
-    printed: `set` or `not set` is the half worth knowing, because a credential on a screen is a
-    credential in a screenshot.
+194. **`/admin/system/settings` is a report, and everything on it names its key.** The *operator's*
+    configuration is read once before the socket opens and never again, which means an operator
+    cannot otherwise see it -- those values exist only as fields on objects in a running process. No
+    credential is ever printed: `set` or `not set` is the half worth knowing, because a credential
+    on a screen is a credential in a screenshot. This is still true of everything that stayed in the
+    file; `/admin/configuration` is the other screen, and it is an editor because what is on it is
+    the community's rather than the operator's.
 
 26. **An agent is a session with a bit set, never a parallel notion of identity.** An MCP token is
     a row in `sessions` belonging to the admin who authorized it, with `robot = true` and the
@@ -2115,6 +2128,45 @@ against the real jar instead. Raise the floor when the honest number moves up; d
     something subtly different, which the history would then record as an edit somebody made. The
     log line says which of the two happened, because "updated /about" reading the same for a
     retitle and a rewrite is exactly what somebody auditing an agent needs told apart.
+267. **What moved to the database is decided by what a setting is about, not by how awkward it is
+    to change.** Product and presentation are the community's: its name, its clock, which parts of
+    the product exist, how long a conversation lives, what an invitation says. Anything that decides
+    who gets in, what a credential is, what a program connecting here may do, or how many bytes a
+    request may carry is the operator's and stays in a file -- reviewed by reading it, changed by
+    somebody with access to the machine, and out of reach of a browser session that has been taken
+    over. `admin_emails` is the sharpest case and it stays: invariant 66 says the escape hatch must
+    not read the thing it exists to rescue you from.
+268. **A setting's key is the path it had in the config file, and that is the mechanism.** A value
+    is applied by writing it into a copy of the file's JSON and parsing the whole thing again, so
+    the check that refuses a bad value at boot is the same check that refuses one typed into the
+    admin section, in the same words. The alternative was a validator per setting -- thirty chances
+    to disagree with the one that decides whether the server starts. It also means a settings row
+    can only reach a key the catalogue knows, because `Setting` is the only thing that knows where a
+    key goes.
+269. **The file seeds; the database overrides; clearing reverts.** A row exists only where somebody
+    decided something, so an upgrade is safe for every community that already has these keys in a
+    file, and "has anybody actually chosen this" stays answerable. A blank value deletes the row
+    rather than storing an empty string -- otherwise a community that emptied a box could never get
+    the default back. **The rebuild always starts from the file**, never from the last rebuild:
+    keeping the overridden JSON as the source made each edit layer on the last, and clearing then
+    reverted to the previous edit instead of to what the operator wrote.
+270. **A write rebuilds and swaps; a read is still a field access.** There are a couple of hundred
+    call sites reading `config.board.expiryDays` and friends, most on the request path. Making them
+    ask a table would have been the most-executed query in the server. Instead `DomainTree` holds a
+    slot per domain and a settings write puts a whole new immutable `DomainConfig` in it, so a
+    request sees either all of the old config or all of the new one -- which matters because these
+    values are cross-checked against one another. The rebuild is triggered from the DAO rather than
+    the handler, for the reason invariant 14 gives.
+271. **A shared database is one set of settings, and one clock.** The same rule that makes it one
+    account space. A change made on one of its domains re-applies to all of them, because leaving
+    the others on the old answer until a restart would be the sort of split-brain nobody would think
+    to look for. The clock is the one value something else holds a copy of, so `Accounts` is moved
+    in the same breath rather than keeping the zone it booted with.
+272. **No agent tool reaches any of it, and the proof is that there is no tool.** Not a tool that
+    refuses -- that would appear in a listing, cost a model turns hunting for a phrasing, and leave
+    the next person one parameter away from making it real. What a community *is* is a decision the
+    people in it make, and the cheapest thing in the world for a model to get wrong at scale.
+
 266. **Field values merge; an undeclared name is refused.** One blob holds the template's declared
     values *and* a listing's own knobs (`page_size`, `sort`, `place_kind`), and a model setting a
     subtitle is saying nothing about page size -- so replacing the blob would silently reset a

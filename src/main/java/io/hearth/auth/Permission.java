@@ -60,6 +60,20 @@ public enum Permission {
   places_write("Places", "Keep the address book, and decide what each kind records"),
   places_moderate("Places", "Take down a comment on a place"),
 
+  /**
+   * Change what this community is, as opposed to how the machine it runs on is set up.
+   *
+   * Its own permission rather than folded into {@code appearance_write} because the two are not the
+   * same decision: the colours are decoration, and this is the name, the clock, which parts of the
+   * product exist and what every invitation says. A community might well hand somebody the palette
+   * without handing them the switch that turns the board off.
+   *
+   * It reaches nothing in the config file. Sign-in policy, credentials and what a program may do are
+   * the operator's and are not editable from a browser at all -- so this is not a way to become an
+   * administrator, and there is nothing behind it that could be.
+   */
+  config_write("Look", "Change the community's settings, and run the setup"),
+
   appearance_write("Look", "Choose the colours the site, the emails and the legal pages use"),
   legal_write("Look", "Write the terms of service and the privacy policy"),
 

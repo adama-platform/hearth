@@ -353,6 +353,7 @@ public class SchemaUpgraderTests {
 
   /** NOT NULL, no default, present since the table was created; never added by ALTER */
   private static final List<String> FOUNDING = List.of(
+      "config.name", "config.value_text",
       "emails.email", "sessions.token_hash", "sessions.user_id",
       "roles.user_id", "roles.role_name", "templates.name", "content.uri",
       "profiles.user_id", "answers.user_id", "bans.email", "oauth_clients.client_id",

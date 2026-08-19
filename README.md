@@ -21,7 +21,7 @@ which is the design in two words.
 
 ## What is in the jar
 
-All of it built, and covered by 1698 tests that boot the real server and talk to it over a socket.
+All of it built, and covered by 1718 tests that boot the real server and talk to it over a socket.
 
 | | |
 | --- | --- |
@@ -153,7 +153,7 @@ the decisions are the product.
 
 Three things are worth saying about the state of it rather than the shape.
 
-**1698 tests**, and they are mostly not unit tests. The testkit boots the whole server on an
+**1718 tests**, and they are mostly not unit tests. The testkit boots the whole server on an
 ephemeral port with real databases and drives it over HTTP — including, for the account flows, a
 client that keeps cookies and does what the page's own script does. What is asserted is what an
 operator would get.
@@ -741,6 +741,33 @@ Conversion happens on sign-up rather than on click — a click proves a link was
 invitation is for is a member. Inviting one person three times and having them join once is one
 conversion, not three.
 
+### Two places configuration lives
+
+Some of what a community runs on is a fact about the machine and some is a fact about the community,
+and they are kept apart deliberately.
+
+**The operator's** stays in a config file, read once before the socket opens: sign-in policy,
+credentials, what a program connecting here may do, what a request may carry, routing, and the list
+of addresses that are administrators by fiat. That last one is the sharpest case — an escape hatch
+you can edit from inside the thing it rescues you from is not one. These are reviewed by reading a
+file and changed by somebody with access to the box.
+
+**The community's** lives in its own database and is edited at `/admin/configuration`: what it is
+called, its clock, miles or kilometres, which parts of the product it has at all, how long a
+conversation lives, and every line that goes on an invitation. No restart, and a form with the
+meaning of each setting written beside it.
+
+The trick that makes it safe is that a setting's key is the path it already had in the config file,
+so applying one means writing it into a copy of that file's JSON and parsing the whole thing again
+— **the value is checked by exactly the parser that decides whether the server boots**, and a bad
+one is refused in the same words with nothing written. A file value is the starting point and a
+database row overrides it, so an existing install keeps working and clearing a box puts the file's
+answer back.
+
+`/admin/configuration/setup` is a four-screen walkthrough for the settings where the default is a
+guess about a community this software has never met. **No model can touch any of it** — there is no
+agent tool for the settings, not even one that refuses.
+
 ### Colours, and what every email carries
 
 A community picks six colours for a light screen and six for a dark one, and they land everywhere at
@@ -875,6 +902,7 @@ locked page repeatedly is worth seeing.
 - **Survey** — ask the community something, with **Retired** under it for the cleanup
 - **Projects** — that somebody keeps one, and how recently; never what is in it
 - **Engagement** — every rule for getting somebody here and getting them back, in one place
+- **Settings** — what this community *is*, with **Setup** under it: the walkthrough for a new one
 - **Customization** — **Appearance**, **Legal** and **Messages**: the colours, the promises, the wording
 - **System** — **Machine**, **Settings**, **Events**, **Analytics**, **Caching**, **Async**, **AI**, **Log**
 

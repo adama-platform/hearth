@@ -146,6 +146,10 @@ public class TestServer implements AutoCloseable {
         new io.hearth.live.LiveRoutes(live, verbose),
         challenges, tls, accessLog, verbose);
     auth.start();
+    // the same step the real boot does: settings are read by auth.start(), and applying them
+    // rebuilds each domain's config before anything serves. A testkit that skipped it would be a
+    // testkit where every settings test passed against a server nobody configured.
+    auth.applyAllSettings(verbose);
     availabilities.start();
     async.start();
     this.thread = new Thread(server, "test-web-server");

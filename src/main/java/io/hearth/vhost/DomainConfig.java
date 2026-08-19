@@ -112,6 +112,23 @@ public class DomainConfig {
   /** account routes for this domain, path to route, resolved once */
   public final Map<String, SiteUrls.Route> routes;
 
+  /**
+   * The file this was parsed from, kept so it can be parsed again.
+   *
+   * The product half of a community's configuration lives in the database now, and applying it
+   * means writing those values into a copy of this and re-reading the result -- so every check
+   * that refuses a bad value at boot is the same check that refuses one typed into the admin
+   * section. Keeping the source is what makes that possible without a second parser.
+   *
+   * It is the file's words rather than the running values, which is the point: the overrides are
+   * applied to it fresh each time, so clearing one in the editor puts the file's answer back
+   * rather than whatever happened to be in memory.
+   */
+  private final com.fasterxml.jackson.databind.node.ObjectNode source;
+  private final String where;
+  private final File configsRoot;
+  private final java.time.ZoneId fallbackZone;
+
   private DomainConfig(String domain, File configFile, String name, boolean enabled,
                        java.time.ZoneId zone, boolean imperial, boolean wildcard,
                        String useDatabaseDomain, java.util.List<String> adminEmails,
@@ -125,7 +142,9 @@ public class DomainConfig {
                        io.hearth.people.InviteConfig invites,
                        io.hearth.places.PlacesConfig places,
                        java.util.Set<Surface> disabled,
-                       java.util.List<String> subdomains, boolean acceptsMail) {
+                       java.util.List<String> subdomains, boolean acceptsMail,
+                       com.fasterxml.jackson.databind.node.ObjectNode source, String where,
+                       File configsRoot, java.time.ZoneId fallbackZone) {
     this.domain = domain;
     this.configFile = configFile;
     this.name = name;
@@ -151,6 +170,10 @@ public class DomainConfig {
     this.subdomains = java.util.List.copyOf(subdomains);
     this.acceptsMail = acceptsMail;
     this.routes = Map.copyOf(urls.routes());
+    this.source = source;
+    this.where = where;
+    this.configsRoot = configsRoot;
+    this.fallbackZone = fallbackZone;
   }
 
   public static DomainConfig of(String domain, File configsRoot, File configFile,
@@ -166,6 +189,20 @@ public class DomainConfig {
    */
   public static DomainConfig of(String domain, File configsRoot, File configFile,
                                 ConfigObject config, java.time.ZoneId fallbackZone)
+      throws ConfigException {
+    return of(domain, configsRoot, configFile, config, fallbackZone, null);
+  }
+
+  /**
+   * @param rememberSource the JSON to keep for a later rebuild, when it is not the JSON being
+   *     parsed. A rebuild parses the file's words with settings written over them, and the result
+   *     has to remember the *file's* words rather than the overridden copy -- otherwise each
+   *     rebuild would layer on the last and clearing a setting in the editor would revert to the
+   *     previous edit instead of to what the operator wrote.
+   */
+  private static DomainConfig of(String domain, File configsRoot, File configFile,
+                                 ConfigObject config, java.time.ZoneId fallbackZone,
+                                 com.fasterxml.jackson.databind.node.ObjectNode rememberSource)
       throws ConfigException {
     String name = config.strOf("name", domain);
     java.time.ZoneId zone = io.hearth.common.ServerConfig.zoneOf(
@@ -254,7 +291,45 @@ public class DomainConfig {
         wildcard, useDatabaseDomain,
         admins, loginSecurity, caches, urls, mcp, api, availability, attachments, ses, board,
         calendar, invites, places,
-        disabled, subdomains, acceptsMail);
+        disabled, subdomains, acceptsMail,
+        rememberSource != null ? rememberSource : config.node.deepCopy(),
+        configFile.getName(), configsRoot, fallbackZone);
+  }
+
+  /**
+   * The same community, with what it has decided about itself applied.
+   *
+   * Settings are written into a copy of the file's own JSON and the whole thing is parsed again,
+   * which is deliberately the long way round. The short way -- reaching into the parsed objects and
+   * replacing fields -- would need every block to know how to be edited, and would skip the
+   * cross-checks at the end of {@link #of} that catch a path collision or an enabled endpoint with
+   * nobody who could authorize it. This way a value from the database is exactly as suspect as a
+   * value from the file, and is refused in the same words.
+   *
+   * Security-bearing keys are absent from the settings catalogue, so there is nothing in the map
+   * that could reach one. This is the second half of that: what arrives here is applied to a copy
+   * of the file, so even a row somebody wrote into the database by hand can only change a key the
+   * catalogue knows, because {@link io.hearth.settings.Setting} is what knows where a key goes.
+   */
+  public DomainConfig with(java.util.Map<String, String> overrides) throws ConfigException {
+    if (source == null || overrides == null || overrides.isEmpty()) {
+      return this;
+    }
+    com.fasterxml.jackson.databind.node.ObjectNode copy = source.deepCopy();
+    boolean touched = false;
+    for (java.util.Map.Entry<String, String> entry : overrides.entrySet()) {
+      io.hearth.settings.Setting setting = io.hearth.settings.Settings.byKey(entry.getKey());
+      if (setting == null || io.hearth.settings.Settings.isMeta(entry.getKey())) {
+        continue;
+      }
+      setting.applyTo(copy, entry.getValue());
+      touched = true;
+    }
+    if (!touched) {
+      return this;
+    }
+    return of(domain, configsRoot, configFile,
+        new io.hearth.common.ConfigObject(copy, where), fallbackZone, source);
   }
 
   /** the domain whose database this one uses; itself unless it delegates */

@@ -29,7 +29,7 @@ import java.util.List;
  */
 public class Schema {
   /** bumped whenever the tables below change; recorded in schema_meta for the boot audit */
-  public static final int VERSION = 38;
+  public static final int VERSION = 39;
 
   public static final String EMAILS = "emails";
   public static final String SESSIONS = "sessions";
@@ -70,6 +70,7 @@ public class Schema {
   public static final String CALENDAR_LINKS = "calendar_links";
   public static final String CALENDAR_CACHE = "calendar_cache";
   public static final String ATTACHMENTS = "attachments";
+  public static final String CONFIG = "config";
   public static final String META = "schema_meta";
 
   public static final Table EMAILS_TABLE = Table.named(EMAILS)
@@ -373,6 +374,36 @@ public class Schema {
    * lookup and nothing else. No account row, no pending code, no outbound mail, no row in the
    * signup table for an admin to look at later.
    */
+  /**
+   * What this community decided about itself, as name and value.
+   *
+   * The product half of a domain's configuration lives here rather than in the file, so the people
+   * running a community can change what it is called, how long a conversation lives and what an
+   * invitation says without an SSH key. The security half deliberately does not: sign-in policy,
+   * credentials, what a program may do and how many bytes a request may carry stay in a file an
+   * operator owns and reviews by reading.
+   *
+   * A name is the dotted path that value has in a config file, which is what lets a row be applied
+   * by writing it into a copy of the file's JSON and re-parsing -- so the check that refuses a bad
+   * value at boot is the same check that refuses it in the admin section. A row exists only where
+   * somebody has actually decided something; absent means the file's value, or the built-in.
+   */
+  public static final Table CONFIG_TABLE = Table.named(CONFIG)
+      .column(Column.id("id"))
+      .column(Column.of("name", "VARCHAR(128)").notNull().unique())
+      // Not "value": H2 runs in MODE=STRICT, which reserves the SQL standard's keywords, and VALUE
+      // is one of them. The name is uglier and the alternative is a column this schema could not
+      // create on any database that follows the standard.
+      //
+      // VARCHAR rather than CLOB for the same reason every other long field here is: H2 reports a
+      // CLOB back as CHARACTERLARGEOBJECT, which the upgrader reads as a type that has changed
+      // under it and refuses to start on. The ceiling matches the other prose columns.
+      .column(Column.of("value_text", "VARCHAR(1048576)").notNull().withDefault("''"))
+      .column(Column.of("updated_at", "TIMESTAMP").notNull().withDefault("CURRENT_TIMESTAMP"))
+      .column(Column.of("updated_by", "BIGINT"))
+      .index("idx_config_name", "name")
+      .build();
+
   public static final Table BANS_TABLE = Table.named(BANS)
       .column(Column.id("id"))
       .column(Column.of("email", "VARCHAR(320)").notNull().unique())
@@ -1457,7 +1488,7 @@ public class Schema {
           PLACES_TABLE, THEMES_TABLE, LEGAL_TABLE, SIGNALS_TABLE, SYSTEM_TEMPLATES_TABLE,
           PUBLIC_RSVPS_TABLE, AVAILABILITY_TABLE, CALENDAR_LINKS_TABLE, CALENDAR_CACHE_TABLE,
           ATTACHMENTS_TABLE, POLLS_TABLE, POLL_OPTIONS_TABLE, POLL_VOTES_TABLE,
-          PROJECTS_TABLE, TASK_DEFS_TABLE, TASKS_TABLE, TASK_ENTRIES_TABLE);
+          PROJECTS_TABLE, TASK_DEFS_TABLE, TASKS_TABLE, TASK_ENTRIES_TABLE, CONFIG_TABLE);
 
   private Schema() {
   }

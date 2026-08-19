@@ -440,6 +440,10 @@ public class Server {
     }, "shutdown"));
 
     auth.start();
+    // settings are read by auth.start(); applying them rebuilds each domain's config from its file
+    // plus what the community decided, before the socket opens. Nothing is serving yet, so the
+    // first request already sees the community's own answers rather than the file's.
+    auth.applyAllSettings(verbose);
     notifier.start();
     async.start();
     // after the databases are open, so the first build has something to read, and before the socket

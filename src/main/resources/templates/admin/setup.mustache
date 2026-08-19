@@ -1,0 +1,47 @@
+{{<shell}}{{$content}}
+<h1>Setup</h1>
+<p class="hint">Four screens. These are the settings where the default is a guess about a community
+  this software has never met, and where being wrong is visible to everybody. Everything else has a
+  sensible default and can be found on the <a href="{{settingsUrl}}">settings page</a> whenever you
+  want it.</p>
+
+<ol class="steps">
+  {{#crumbs}}
+  <li>{{#here}}<strong>{{n}}. {{title}}</strong>{{/here}}{{^here}}<a href="{{url}}">{{n}}. {{title}}</a>{{/here}}</li>
+  {{/crumbs}}
+</ol>
+
+<h2>{{stepTitle}}</h2>
+<p class="hint">{{stepBlurb}}</p>
+
+<form method="post" action="{{action}}">
+  <input type="hidden" name="csrf" value="{{csrf}}">
+  <input type="hidden" name="action" value="save">
+  <input type="hidden" name="step" value="{{step}}">
+  {{#settings}}
+  <div class="field">
+    <label for="{{field}}"><strong>{{label}}</strong></label>
+    {{#isText}}<input type="text" id="{{field}}" name="{{field}}" value="{{value}}">{{/isText}}
+    {{#isNumber}}<input type="number" id="{{field}}" name="{{field}}" value="{{value}}">{{/isNumber}}
+    {{#isMultiline}}<textarea id="{{field}}" name="{{field}}" rows="4">{{value}}</textarea>{{/isMultiline}}
+    {{#isChoice}}
+    <select id="{{field}}" name="{{field}}">
+      {{#options}}<option value="{{value}}"{{#selected}} selected{{/selected}}>{{value}}</option>{{/options}}
+    </select>
+    {{/isChoice}}
+    {{#isBool}}
+    <label class="check"><input type="checkbox" id="{{field}}" name="{{field}}"{{#checked}} checked{{/checked}}> on</label>
+    {{/isBool}}
+    <p class="hint">{{help}}</p>
+  </div>
+  {{/settings}}
+  <div class="rowactions">
+    {{#hasPrev}}<a class="button quiet" href="{{prevUrl}}">Back</a>{{/hasPrev}}
+    <button type="submit">{{#isLast}}Finish{{/isLast}}{{^isLast}}Save and continue{{/isLast}}</button>
+  </div>
+</form>
+
+<p class="hint">Each screen saves as it goes, so stopping half way keeps what you have answered.
+  {{#setupDone}}This community has been through the setup already; going through it again changes
+  nothing you do not change yourself.{{/setupDone}}</p>
+{{/content}}{{/shell}}

@@ -274,6 +274,8 @@ public class AdminRoutes {
         case templates -> actOnTemplate(accounts, form, me);
         case survey -> actOnQuestion(accounts, form, me);
         case retired -> actOnRetiredQuestion(accounts, form, me);
+        case configuration -> actOnConfiguration(config, accounts, form, me);
+        case setup -> actOnSetup(config, accounts, form, me);
         case appearance -> actOnAppearance(accounts, form, me);
         case legal -> actOnLegal(accounts, form, me);
         case messages -> actOnMessage(config, accounts, form, me);
@@ -1369,6 +1371,8 @@ public class AdminRoutes {
         model.put("retiredUrl", AdminView.Section.retired.path(config));
       }
       case navigation -> navigation(model, accounts, config);
+      case configuration -> configuration(model, config, accounts);
+      case setup -> setupWizard(model, config, accounts, req);
       case appearance -> appearance(model, accounts);
       case engagement -> engagement(model, config, accounts);
       case legal -> legal(model, config, accounts);
@@ -3330,6 +3334,210 @@ public class AdminRoutes {
    * site's colours and saving the admin's are separate decisions and a single Save covering twelve
    * pickers is a button nobody presses with confidence.
    */
+  // ---- settings ---------------------------------------------------------------------------------
+
+  /**
+   * One box per setting, with what it means beside it.
+   *
+   * Drawn entirely from {@link io.hearth.settings.Settings}, so a setting added to that list gets a
+   * form, a label and its explanation here without anybody editing a template -- and cannot be
+   * added without an explanation, because the catalogue has nowhere to put one that is missing.
+   *
+   * Each box shows what is <em>in force</em> rather than what is in the table, and says which of
+   * the two it is. "Set here" means somebody typed it; anything else is the config file or the
+   * built-in, and clearing a box puts that back rather than storing an empty value.
+   */
+  private void configuration(Map<String, Object> model, DomainConfig config, Accounts accounts) {
+    Map<String, String> decided = accounts.settings.overrides();
+    ArrayList<Map<String, Object>> groups = new ArrayList<>();
+    for (String group : io.hearth.settings.Settings.groups()) {
+      LinkedHashMap<String, Object> block = new LinkedHashMap<>();
+      block.put("group", group);
+      ArrayList<Map<String, Object>> rows = new ArrayList<>();
+      for (io.hearth.settings.Setting setting
+          : io.hearth.settings.Settings.inGroup(group)) {
+        rows.add(settingRow(setting, config, decided));
+      }
+      block.put("settings", rows);
+      groups.add(block);
+    }
+    model.put("groups", groups);
+    model.put("setupDone", accounts.settings.isSetupComplete());
+    model.put("setupUrl", AdminView.Section.setup.path(config));
+    model.put("configFile", config.configFile == null ? "" : config.configFile.getName());
+  }
+
+  private Map<String, Object> settingRow(io.hearth.settings.Setting setting, DomainConfig config,
+                                         Map<String, String> decided) {
+    LinkedHashMap<String, Object> row = new LinkedHashMap<>();
+    String current = io.hearth.settings.Settings.currentValue(config, setting.key());
+    boolean overridden = decided.containsKey(setting.key());
+    row.put("key", setting.key());
+    row.put("field", setting.field());
+    row.put("label", setting.label());
+    row.put("help", setting.help());
+    row.put("value", current);
+    row.put("overridden", overridden);
+    row.put("isText", setting.kind() == io.hearth.settings.Setting.Kind.text);
+    row.put("isMultiline", setting.kind() == io.hearth.settings.Setting.Kind.multiline
+        || setting.kind() == io.hearth.settings.Setting.Kind.words
+        || setting.kind() == io.hearth.settings.Setting.Kind.numbers);
+    row.put("isNumber", setting.kind() == io.hearth.settings.Setting.Kind.integer);
+    row.put("isBool", setting.kind() == io.hearth.settings.Setting.Kind.bool);
+    row.put("isChoice", setting.kind() == io.hearth.settings.Setting.Kind.choice);
+    row.put("checked", "true".equalsIgnoreCase(current));
+    ArrayList<Map<String, Object>> options = new ArrayList<>();
+    for (String choice : setting.choices()) {
+      LinkedHashMap<String, Object> option = new LinkedHashMap<>();
+      option.put("value", choice);
+      option.put("selected", choice.equalsIgnoreCase(current));
+      options.add(option);
+    }
+    row.put("options", options);
+    row.put("anyOptions", !options.isEmpty());
+    return row;
+  }
+
+  /**
+   * The walkthrough, one screen at a time.
+   *
+   * A step is a path (`/admin/configuration/setup?step=2`) rather than everything on one page,
+   * because the point of a wizard is that somebody reads four questions instead of skimming thirty
+   * -- and because each step saves as it goes, so somebody interrupted half way through has kept
+   * what they answered rather than losing the lot.
+   */
+  private void setupWizard(Map<String, Object> model, DomainConfig config, Accounts accounts,
+                           io.netty.handler.codec.http.FullHttpRequest req) {
+    java.util.List<io.hearth.settings.Settings.Step> steps =
+        io.hearth.settings.Settings.walkthrough();
+    int step = (int) longOr(Forms.query(req.uri(), "step"), 1);
+    if (step < 1) {
+      step = 1;
+    }
+    if (step > steps.size()) {
+      step = steps.size();
+    }
+    io.hearth.settings.Settings.Step current = steps.get(step - 1);
+    Map<String, String> decided = accounts.settings.overrides();
+    ArrayList<Map<String, Object>> rows = new ArrayList<>();
+    for (io.hearth.settings.Setting setting : current.settings()) {
+      rows.add(settingRow(setting, config, decided));
+    }
+    model.put("stepTitle", current.title());
+    model.put("stepBlurb", current.blurb());
+    model.put("settings", rows);
+    model.put("step", step);
+    model.put("steps", steps.size());
+    model.put("isLast", step == steps.size());
+    model.put("hasPrev", step > 1);
+    model.put("prevUrl", AdminView.Section.setup.path(config) + "?step=" + (step - 1));
+    model.put("setupDone", accounts.settings.isSetupComplete());
+    model.put("settingsUrl", AdminView.Section.configuration.path(config));
+    ArrayList<Map<String, Object>> crumbs = new ArrayList<>();
+    for (int k = 0; k < steps.size(); k++) {
+      LinkedHashMap<String, Object> crumb = new LinkedHashMap<>();
+      crumb.put("n", k + 1);
+      crumb.put("title", steps.get(k).title());
+      crumb.put("here", k + 1 == step);
+      crumb.put("url", AdminView.Section.setup.path(config) + "?step=" + (k + 1));
+      crumbs.add(crumb);
+    }
+    model.put("crumbs", crumbs);
+  }
+
+  private Outcome actOnConfiguration(DomainConfig config, Accounts accounts, Forms form,
+                                     UserRecord me) throws SQLException {
+    String action = String.valueOf(form.get("action"));
+    if (action.equals("reset")) {
+      String key = form.get("key");
+      if (!io.hearth.settings.Settings.isKnown(key)) {
+        return Outcome.refused("That is not a setting this server has.");
+      }
+      accounts.settings.clear(key, me.id());
+      return Outcome.done("Back to what the config file says.",
+          c -> AdminView.Section.configuration.path(c));
+    }
+    if (!action.equals("save")) {
+      return Outcome.refused("That is not something this page can do.");
+    }
+    Outcome refused = saveSettings(config, accounts, form, me,
+        io.hearth.settings.Settings.all());
+    if (refused != null) {
+      return refused;
+    }
+    return Outcome.done("Saved.", c -> AdminView.Section.configuration.path(c));
+  }
+
+  private Outcome actOnSetup(DomainConfig config, Accounts accounts, Forms form, UserRecord me)
+      throws SQLException {
+    java.util.List<io.hearth.settings.Settings.Step> steps =
+        io.hearth.settings.Settings.walkthrough();
+    int step = (int) longOr(form.get("step"), 1);
+    if (step < 1 || step > steps.size()) {
+      return Outcome.refused("That is not a step of the setup.");
+    }
+    Outcome refused = saveSettings(config, accounts, form, me, steps.get(step - 1).settings());
+    if (refused != null) {
+      return refused;
+    }
+    if (step < steps.size()) {
+      int next = step + 1;
+      return Outcome.done("Saved.",
+          c -> AdminView.Section.setup.path(c) + "?step=" + next);
+    }
+    accounts.settings.set(io.hearth.settings.Settings.SETUP_DONE, "true", me.id());
+    return Outcome.done("Setup finished. Everything here can still be changed.",
+        c -> AdminView.Section.configuration.path(c));
+  }
+
+  /**
+   * Write a batch of settings, refusing the whole batch if the result would not parse.
+   *
+   * The rebuild is attempted <b>before</b> anything is committed, which is the difference between a
+   * form that says no and a community that is briefly running on a configuration nobody checked. It
+   * is the same parse the server does at boot, so the message somebody reads here is the message
+   * they would have got from a bad config file.
+   */
+  private Outcome saveSettings(DomainConfig config, Accounts accounts, Forms form, UserRecord me,
+                               java.util.List<io.hearth.settings.Setting> settings)
+      throws SQLException {
+    Map<String, String> wanted = new java.util.LinkedHashMap<>(accounts.settings.overrides());
+    Map<String, String> writing = new java.util.LinkedHashMap<>();
+    for (io.hearth.settings.Setting setting : settings) {
+      if (io.hearth.settings.Settings.isMeta(setting.key())) {
+        continue;
+      }
+      String value;
+      if (setting.kind() == io.hearth.settings.Setting.Kind.bool) {
+        // an unticked box posts nothing at all, so "off" has to be written down rather than read
+        // as "say nothing about this" -- otherwise a community could never turn one off again
+        value = form.get(setting.field()) != null ? "true" : "false";
+      } else {
+        value = form.text(setting.field());
+      }
+      value = value == null ? "" : value.trim();
+      writing.put(setting.key(), value);
+      if (value.isEmpty()) {
+        wanted.remove(setting.key());
+      } else {
+        wanted.put(setting.key(), value);
+      }
+    }
+    Outcome oversized = oversized(form);
+    if (oversized != null) {
+      return oversized;
+    }
+    try {
+      config.with(wanted);
+    } catch (io.hearth.common.ConfigException ex) {
+      return Outcome.refused(ex.getMessage());
+    }
+    for (Map.Entry<String, String> entry : writing.entrySet()) {
+      accounts.settings.set(entry.getKey(), entry.getValue(), me.id());
+    }
+    return null;
+  }
+
   private void appearance(Map<String, Object> model, Accounts accounts) {
     ArrayList<Map<String, Object>> scopes = new ArrayList<>();
     for (Theme.Scope scope : Theme.Scope.values()) {

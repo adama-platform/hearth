@@ -1,0 +1,56 @@
+{{<shell}}{{$content}}
+<h1>Settings</h1>
+<p class="hint">What this community is, as opposed to how the machine it runs on is set up. Everything
+  here is kept in this community's own database and can be changed from this page.</p>
+<p class="hint">Sign-in policy, credentials, what a program connecting here may do, and the limits on
+  what a request may carry are deliberately <strong>not</strong> here. Those live in
+  {{#configFile}}<code>{{configFile}}</code>{{/configFile}}{{^configFile}}the config file{{/configFile}},
+  where they are changed by somebody with access to the machine and reviewed by reading a file &mdash;
+  a browser session that has been taken over must not be able to move any of them.</p>
+
+{{^setupDone}}
+<div class="notice">
+  <p><strong>Nobody has been through the setup here yet.</strong> This community is running on
+    defaults that were guessed rather than chosen. The walkthrough is four screens and asks only
+    about the ones where being wrong is visible to everybody.</p>
+  <p><a class="button" href="{{setupUrl}}">Go through the setup</a></p>
+</div>
+{{/setupDone}}
+
+<form method="post" action="{{action}}">
+  <input type="hidden" name="csrf" value="{{csrf}}">
+  <input type="hidden" name="action" value="save">
+  {{#groups}}
+  <h2>{{group}}</h2>
+  {{#settings}}
+  <div class="field">
+    <label for="{{field}}"><strong>{{label}}</strong></label>
+    {{#isText}}<input type="text" id="{{field}}" name="{{field}}" value="{{value}}">{{/isText}}
+    {{#isNumber}}<input type="number" id="{{field}}" name="{{field}}" value="{{value}}">{{/isNumber}}
+    {{#isMultiline}}<textarea id="{{field}}" name="{{field}}" rows="4">{{value}}</textarea>{{/isMultiline}}
+    {{#isChoice}}
+    <select id="{{field}}" name="{{field}}">
+      {{#options}}<option value="{{value}}"{{#selected}} selected{{/selected}}>{{value}}</option>{{/options}}
+    </select>
+    {{/isChoice}}
+    {{#isBool}}
+    <label class="check"><input type="checkbox" id="{{field}}" name="{{field}}"{{#checked}} checked{{/checked}}> on</label>
+    {{/isBool}}
+    <p class="hint">{{help}}</p>
+    <p class="dim"><code>{{key}}</code>
+      {{#overridden}}<span class="pill blue">set here</span>{{/overridden}}
+      {{^overridden}}<span class="pill">from the config file, or the built-in default</span>{{/overridden}}
+    </p>
+  </div>
+  {{/settings}}
+  {{/groups}}
+  <div class="rowactions">
+    <button type="submit">Save settings</button>
+  </div>
+</form>
+
+<h2>Putting one back</h2>
+<p class="hint">Clearing a box and saving removes this community's answer, so whatever the config
+  file says &mdash; or the built-in default &mdash; comes back. Nothing is stored as an empty value,
+  because a community that emptied a box could then never get the default again.</p>
+{{/content}}{{/shell}}

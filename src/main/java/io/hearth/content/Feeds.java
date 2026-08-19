@@ -78,7 +78,15 @@ public class Feeds {
 
   private final String domain;
   /** the community's clock: what "today" and "upcoming" mean on a listing */
-  private final java.time.ZoneId zone;
+  /**
+   * The community's clock, asked for rather than held.
+   *
+   * It is a setting now, so somebody can change it from the admin section, and a copy taken when
+   * this was built would keep answering with the zone the server booted with. Every use of it here
+   * is deciding what "today" is on a page somebody is looking at, which is exactly the thing that
+   * would be quietly wrong until the next restart.
+   */
+  private final java.util.function.Supplier<java.time.ZoneId> clock;
   private final Site site;
   private final ContentStore content;
   private final Calendar calendar;
@@ -97,11 +105,17 @@ public class Feeds {
    */
   private volatile List<ContentRecord> shapes;
 
-  public Feeds(String domain, java.time.ZoneId zone, Site site, ContentStore content,
+  private java.time.ZoneId zone() {
+    java.time.ZoneId zone = clock.get();
+    return zone == null ? java.time.ZoneId.systemDefault() : zone;
+  }
+
+  public Feeds(String domain, java.util.function.Supplier<java.time.ZoneId> clock, Site site,
+               ContentStore content,
                Calendar calendar, Places places, Users users, PeopleStore people, Access access,
                Caches policies, EventBus events, Verbose verbose) {
     this.domain = domain;
-    this.zone = zone == null ? java.time.ZoneId.systemDefault() : zone;
+    this.clock = clock == null ? java.time.ZoneId::systemDefault : clock;
     this.site = site;
     this.content = content;
     this.calendar = calendar;
@@ -312,7 +326,7 @@ public class Feeds {
 
   private Map<String, Object> events(ContentRecord row, int page, Viewer viewer)
       throws SQLException {
-    LocalDate today = LocalDate.now(zone);
+    LocalDate today = LocalDate.now(zone());
     ArrayList<Calendar.Event> all = new ArrayList<>();
     for (Calendar.Event event : calendar.upcoming(today, CEILING)) {
       if (!event.live()) {
@@ -347,7 +361,7 @@ public class Feeds {
       return null;
     }
     Map<String, Object> model = shell(row, "events", null);
-    model.putAll(eventRow(event, LocalDate.now(zone)));
+    model.putAll(eventRow(event, LocalDate.now(zone())));
     model.put("body_html", Markdown.toSafeHtml(event.body()));
     return model;
   }

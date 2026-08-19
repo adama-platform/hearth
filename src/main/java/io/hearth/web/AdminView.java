@@ -58,6 +58,12 @@ public final class AdminView {
     // were three top-level entries competing with People and Content for somebody's eye, and none
     // of them is opened weekly -- a colour, a policy and the wording of an email are things
     // somebody sets down once and comes back to on purpose.
+    // Top level rather than under Customization, which needs appearance_write: a child whose
+    // parent somebody may not open is a sidebar entry that cannot be drawn, and these two are a
+    // different decision from the colours anyway -- the name, the clock, and what this community
+    // has at all.
+    configuration("configuration", "Settings", "star", null, Permission.config_write),
+    setup("configuration/setup", "Setup", "star", configuration, Permission.config_write),
     look("look", "Customization", "star", null, Permission.appearance_write),
     appearance("appearance", "Appearance", "star", look, Permission.appearance_write),
     legal("legal", "Legal", "content", look, Permission.legal_write),

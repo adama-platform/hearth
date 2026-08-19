@@ -71,7 +71,8 @@ public class Templates {
       "admin/caching", "admin/caching_panel",
       "admin/async", "admin/async_panel",
       "admin/logs", "admin/logs_panel",
-      "admin/appearance", "admin/engagement", "admin/legal", "admin/legal_form",
+      "admin/appearance", "admin/configuration", "admin/setup",
+      "admin/engagement", "admin/legal", "admin/legal_form",
       "admin/messages", "admin/messages_form",
       "admin/attachments", "admin/attachments_panel", "admin/unused",
       "admin/settings");

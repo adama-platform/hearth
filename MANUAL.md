@@ -613,6 +613,61 @@ click approve, and there would be nobody who could.
 
 ---
 
+## Two places configuration lives, and why
+
+Some of what a community runs on is a fact about the **machine** and some is a fact about the
+**community**. They are kept apart on purpose, and the line between them is a security boundary
+rather than a matter of taste.
+
+**In the config file, changed by somebody with access to the box.** Sign-in policy and everything
+under `login_security`. Credentials: the `ses` block, `gps.key`. What a program connecting here may
+do: the whole `mcp` and `api` blocks. What a request may carry: the attachment allow list and its
+ceilings, `max-request-bytes`. Routing and identity: `wildcard`, `subdomains`,
+`use_database_domain`, `accepts-mail`, `enabled`, and the account paths under `urls`. And
+`admin_emails`, which is the sharpest case of all — the list of people who are administrators by
+fiat is the escape hatch for a community that has locked itself out, and an escape hatch you can
+edit from inside the thing it rescues you from is not one.
+
+These are read once, before the socket opens, and never again. Changing one means editing the file
+and restarting. `/admin/system/settings` shows you what the running server is using, and never
+prints a credential — `set` or `not set` is the half worth knowing.
+
+**In the database, changed at `/admin/configuration` by anybody holding *Change the community's
+settings*.** What the community is called, its clock, whether it uses miles or kilometres, which
+parts of the product it has at all, how long a conversation lives, whether members may suggest
+events, and every line that goes on an invitation. These take effect immediately — there is nothing
+to restart.
+
+### How the two fit together
+
+A key that has moved is still legal in a config file, and there it is the **starting value**. A row
+is written only when somebody actually changes something in the admin section, and that row wins.
+Clearing a box removes the row, so the file's answer — or the built-in default — comes back. So an
+existing install keeps working untouched, and an operator who prefers to keep a value in the file can.
+
+Every value typed into that screen is checked by exactly the parser that decides whether the server
+boots. Type a timezone that is not one and you get the same complaint a bad config file gets, the
+whole save is refused, and the community keeps running on what it was running on. Nothing is written
+until the result is known to parse.
+
+The screen names the key for every box, says what it means, and says where the value is coming from
+— `set here` or `from the config file, or the built-in default`.
+
+### The walkthrough
+
+`/admin/configuration/setup` is four screens: who you are, what this community has, how people find
+out about it, and getting together. It exists because a fresh install is running on defaults that
+were guessed about a community this software has never met, and the ones it asks about are those
+where being wrong is visible to everybody. Each screen saves as it goes, so stopping half way keeps
+what you answered. Finishing records that somebody has been through it, which is what stops the
+settings page from saying nobody has.
+
+### A model cannot touch any of this
+
+There is no agent tool for the settings — not one that refuses, none at all. What a community is,
+which parts of it exist, and what it says to people who have never heard of it are decisions for
+the people in it.
+
 ## Sending real email
 
 Without this, codes and links print to the terminal the server runs in — fine for a development box,
@@ -2590,6 +2645,8 @@ Every page is a real server load with its own URL, so bookmarks and the back but
 | `/admin/survey` | **Survey** | ask the community something |
 | `/admin/calendar` | **Events** | what is on, and what members have suggested |
 | `/admin/engagement` | **Engagement** | every rule for getting somebody here and getting them back |
+| `/admin/configuration` | **Settings** | what this community is: its name, its clock, what it has, what an invitation says |
+| `/admin/configuration/setup` | **Setup** | the walkthrough, four screens of the settings worth choosing rather than inheriting |
 | `/admin/appearance` | **Appearance** | the colours, for the community and for the administration |
 | `/admin/legal` | **Legal** | the terms of service and the privacy policy |
 | `/admin/messages` | **Messages** | every message this server sends, in your words |

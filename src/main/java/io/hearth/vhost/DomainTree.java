@@ -42,6 +42,23 @@ public class DomainTree {
    */
   private final Map<String, DomainConfig> aliases;
 
+  /**
+   * The current config for a domain, where it differs from the one the file produced.
+   *
+   * The tree's *shape* is still built once at boot and never changes -- which domains exist, what
+   * covers what, which names are junctions. What can change is the product half of one config,
+   * because that now lives in the database and an administrator can edit it. Rather than make every
+   * reader ask a settings table (there are a couple of hundred of them, on the request path), a
+   * write rebuilds the whole immutable {@link DomainConfig} once and drops it in here.
+   *
+   * So invariant 1 still holds where it was actually protecting something: nothing on the request
+   * path reads a file, or a database, to learn about a domain. A reader takes a reference to a
+   * finished object exactly as it did before; the work happens on the write, which is the same
+   * trade the theme cache makes.
+   */
+  private final java.util.concurrent.ConcurrentHashMap<String, DomainConfig> current =
+      new java.util.concurrent.ConcurrentHashMap<>();
+
   private DomainTree(Node root, Map<String, DomainConfig> byDomain,
                      Map<String, DomainConfig> aliases) {
     this.root = root;
@@ -59,7 +76,7 @@ public class DomainTree {
       return null;
     }
     // an explicitly named subdomain is the most specific answer there is: somebody wrote it down
-    DomainConfig named = aliases.get(domain);
+    DomainConfig named = latest(aliases.get(domain));
     if (named != null) {
       return named.enabled ? named : null;
     }
@@ -76,7 +93,35 @@ public class DomainTree {
         best = node.config;
       }
     }
-    return best;
+    return latest(best);
+  }
+
+  /**
+   * The live config for a domain, which is the rebuilt one where anything has been decided.
+   *
+   * A plain map lookup on a map that is empty for a community nobody has configured from the admin
+   * section, which is most of them and all of them on a fresh install.
+   */
+  private DomainConfig latest(DomainConfig config) {
+    if (config == null || current.isEmpty()) {
+      return config;
+    }
+    DomainConfig swapped = current.get(config.domain);
+    return swapped == null ? config : swapped;
+  }
+
+  /**
+   * Install a rebuilt config for a domain.
+   *
+   * Called after a settings write, with a config that has already been parsed and validated -- so
+   * the tree never holds something that would not have booted. Atomic by being a single map put:
+   * a request either sees the whole old config or the whole new one, never half of each, which
+   * matters because these values are cross-checked against one another.
+   */
+  public void replace(DomainConfig updated) {
+    if (updated != null) {
+      current.put(updated.domain, updated);
+    }
   }
 
   /**
@@ -103,7 +148,7 @@ public class DomainTree {
 
   /** the config installed at exactly this domain, ignoring wildcards */
   public DomainConfig exact(String domain) {
-    return domain == null ? null : byDomain.get(domain);
+    return domain == null ? null : latest(byDomain.get(domain));
   }
 
   /**
@@ -157,7 +202,11 @@ public class DomainTree {
 
   /** every configured domain, sorted, for the boot report */
   public TreeMap<String, DomainConfig> all() {
-    return new TreeMap<>(byDomain);
+    TreeMap<String, DomainConfig> live = new TreeMap<>();
+    for (Map.Entry<String, DomainConfig> entry : byDomain.entrySet()) {
+      live.put(entry.getKey(), latest(entry.getValue()));
+    }
+    return live;
   }
 
   /** "junior.example.org" -> ["junior", "example", "com"] */
