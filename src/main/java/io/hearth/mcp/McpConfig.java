@@ -77,7 +77,7 @@ public class McpConfig {
         throw new ConfigException("mcp.extra-redirect-prefixes must all start with 'https://';"
             + " got '" + prefix + "'");
       }
-      extra.add(trimmed);
+      extra.add(endAtABoundary(trimmed, prefix));
     }
     this.extraRedirectPrefixes = List.copyOf(extra);
 
@@ -91,6 +91,35 @@ public class McpConfig {
       throw new ConfigException("mcp is enabled but no vendor and no redirect prefix is allowed,"
           + " so nothing could ever connect; list a vendor or a prefix");
     }
+  }
+
+  /**
+   * A prefix has to stop at a boundary, or it is not naming the host somebody thinks it is.
+   *
+   * The match is `startsWith`, so a prefix that ends in the middle of a hostname matches whatever
+   * an attacker cares to append to it: `https://connector.example.com` accepts
+   * `https://connector.example.com.evil.net/cb` and `https://connector.example.com@evil.net/cb`,
+   * and an authorization code sent to either is an agent token handed to whoever owns that host.
+   * The shipped vendor prefixes all end in a slash and were never exposed to this; an operator
+   * typing the obvious thing was.
+   *
+   * A prefix with no path at all means "this origin", which is unambiguous, so the slash is added
+   * rather than the config refused -- there is nothing to guess about what was meant. One that
+   * already has a path is left alone: `https://host/cb` matching `https://host/cbx` is a different
+   * page on a host that was already trusted, which is not a boundary being crossed.
+   *
+   * A port is part of the authority, so `https://host:8443` is normalized the same way.
+   */
+  private static String endAtABoundary(String trimmed, String raw) throws ConfigException {
+    String rest = trimmed.substring("https://".length());
+    if (rest.isEmpty()) {
+      throw new ConfigException("mcp.extra-redirect-prefixes has '" + raw
+          + "', which names no host");
+    }
+    if (rest.indexOf('/') < 0) {
+      return trimmed + "/";
+    }
+    return trimmed;
   }
 
   /** every redirect prefix this domain will accept, vendor profiles plus operator additions */

@@ -100,8 +100,19 @@ public class CommunityMailReceiver implements MailReceiver {
     if (lower.contains("dmarc=fail")) {
       return false;
     }
-    // no DMARC record at all is the common case for a personal domain, so fall back to the two
-    // that stand on their own: either one passing is enough to believe an address
-    return lower.contains("spf=pass") || lower.contains("dkim=pass") || lower.contains("=none");
+    // No DMARC record at all is the common case for a personal domain, so fall back to the two that
+    // stand on their own: either one *passing* is enough to believe an address.
+    //
+    // There used to be an `|| contains("=none")` on the end of this, and it undid the rest of the
+    // line. The stamp always carries `dmarc=none` for a domain with no policy -- which is exactly
+    // the case this fallback exists to decide -- so the clause was true whenever it was reached,
+    // and SPF and DKIM stopped counting. A forged From: on any domain without a DMARC record was
+    // "authenticated", and invariant 157's other half is the only thing that was still standing
+    // between that and somebody accepting an invitation on another member's behalf.
+    //
+    // Nothing vouching for a message is not the same as nothing objecting to it. An answer that
+    // cannot be authenticated does not register, and the nudge asks that person again -- which is
+    // invariant 158 working as intended rather than a failure.
+    return lower.contains("spf=pass") || lower.contains("dkim=pass");
   }
 }

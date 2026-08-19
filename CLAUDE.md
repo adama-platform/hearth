@@ -30,7 +30,11 @@ further, take the simple one and say why in a comment.
   with a test that fails before and passes after, and say in the comment what the wrong version did.
 - **What has never been verified is listed under [Not verified](#not-verified) below**, because that
   is different from a defect and gets a different kind of attention.
-- This repository is **Hearth**. Edit `CLAUDE.md`, `README.md`, `MANUAL.md`, `API.md`,
+- This repository is **Hearth**. `AUDIT.md` is the security review: what was found, what was fixed,
+  what was walked and found sound, and -- the half that matters most -- where the review stopped.
+  A finding there follows the same rule as any other, so the reasoning lives in the comment above
+  the clause that does the work and the file is only the index. Edit `CLAUDE.md`, `README.md`,
+  `MANUAL.md`, `API.md`, `AUDIT.md`,
   `LANDING.md` and
   `MISSION.md` here as things change. `LANDING.md` is the source copy for the public site, written
   for somebody who has never seen this software: it is checked by `just docs` like the rest, and a

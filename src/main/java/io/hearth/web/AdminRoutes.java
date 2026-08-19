@@ -564,8 +564,36 @@ public class AdminRoutes {
         : Outcome.refused("Could not send to " + result.email() + ": " + result.detail());
   }
 
+  /**
+   * What each button on the content screens actually requires.
+   *
+   * Invariant 86 again, and this section is the worst case of it: `/admin/content` opens for
+   * `content_read` -- "See pages and their history" -- which is the mildest thing anybody on that
+   * screen can hold, and every button on it posts to the section's own path. `save` and `suggest`
+   * asked for what they needed. **`delete` and `restore` asked for nothing**, so a member given
+   * read-only access to the content section could remove any page on the site, or overwrite one
+   * with any earlier version of it.
+   *
+   * An action nobody listed requires `everything`, so a new button fails closed.
+   */
+  private static Permission neededForContent(String action) {
+    return switch (action) {
+      case "suggest" -> Permission.content_propose;
+      // a restore is a save (invariant 58) and a delete is the end of one, so both are writing
+      case "save", "delete", "restore", "import" -> Permission.content_write;
+      default -> Permission.everything;
+    };
+  }
+
   private Outcome actOnContent(Accounts accounts, Forms form, UserRecord me) throws SQLException {
     String action = String.valueOf(form.get("action"));
+    if (!accounts.access.can(me, neededForContent(action))) {
+      // the message for a save names the thing they *can* do, because somebody who may only suggest
+      // is looking at a button they were shown and needs pointing at the other one
+      return Outcome.refused(action.equals("save")
+          ? "You are not able to save pages. You can suggest a change instead."
+          : "You are not able to do that to a page.");
+    }
     if (action.equals("delete")) {
       Long id = longOf(form.get("id"));
       if (id == null) {
@@ -606,14 +634,6 @@ public class AdminRoutes {
     boolean suggesting = action.equals("suggest");
     if (!action.equals("save") && !suggesting) {
       return Outcome.refused("That is not something this page can do.");
-    }
-    if (suggesting && !accounts.access.can(me, Permission.content_propose)) {
-      return Outcome.refused("You are not able to suggest edits.");
-    }
-    if (!suggesting && !accounts.access.can(me, Permission.content_write)) {
-      // somebody who may only suggest cannot save by posting the other action; the button they see
-      // is a courtesy, this is the rule
-      return Outcome.refused("You are not able to save pages. You can suggest a change instead.");
     }
     String uri = form.get("uri");
     if (uri == null || !uri.startsWith("/") || uri.length() > 512) {
@@ -4336,6 +4356,23 @@ public class AdminRoutes {
     }
     if (old == null) {
       return Outcome.refused("There is no version " + version + " of that page.");
+    }
+    // A version is the whole page, published flag included (invariant 43), so restoring one moves
+    // that flag -- and this was a way straight past `content_publish`. The save path is careful
+    // about exactly this transition and checks it *on the change*; going around it meant somebody
+    // who may write but not publish could take a page down, restore the version before it, and have
+    // it live again. It works the other way too: restoring an unpublished version takes a live page
+    // down.
+    //
+    // The whole restore is refused rather than the words being restored without the flag. A partial
+    // restore that looked like a whole one is the kind of thing nobody checks afterwards.
+    if (old.published() != current.published()
+        && !accounts.access.can(me, Permission.content_publish)) {
+      return Outcome.refused(old.published()
+          ? "That version was published and this page is not, so restoring it would put the page"
+              + " live -- which you are not able to do. Ask somebody who can publish."
+          : "That version was not published and this page is, so restoring it would take the page"
+              + " down -- which you are not able to do.");
     }
     ContentRecord restored = new ContentRecord(current.id(), current.uri(), old.title(), old.kind(),
         old.templateName(), old.navFolder(), old.fields(), old.body(), old.published(),
