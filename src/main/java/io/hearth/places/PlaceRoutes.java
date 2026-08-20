@@ -230,7 +230,10 @@ public class PlaceRoutes {
 
     Map<String, Object> model = base(config, accounts, req, place.name());
     model.putAll(row(config, type, place));
-    model.put("bodyHtml", Markdown.toHtml(place.body()));
+    // Safe for the same reason an event body is: a place is written by whoever keeps the address
+    // book, but one can also be created by IcsRequests from a location line in a mailed-in event,
+    // and a page that is sometimes a member's words is a page that is always rendered as such.
+    model.put("bodyHtml", Markdown.toSafeHtml(place.body()));
     model.put("backUrl", config.urls.places + "/" + type.slug());
     model.put("label", type.labelOr());
     model.put("plural", type.pluralOr());

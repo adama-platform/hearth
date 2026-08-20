@@ -164,6 +164,7 @@ src/main/java/io/hearth/
   common/Verbose.java      the --verbose channel; lazy suppliers on the request path
   common/ConfigObject.java strict typed reader over Jackson; unknown keys are fatal
   common/ConfigException.java
+  common/PublicAddress.java  is a host on the public internet? asked by every outbound url
   vhost/Hosts.java         Host header canonicalization; a security boundary
   vhost/DomainConfig.java  one loaded .cfg file, immutable; has() is the one surface question
   vhost/Surface.java       the parts of the product a community can switch off in one word

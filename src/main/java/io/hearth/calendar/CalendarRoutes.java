@@ -398,7 +398,19 @@ public class CalendarRoutes {
     LocalDate today = LocalDate.now(config.zone);
     Map<String, Object> model = base(config, accounts, req, event.title(), csrf);
     model.putAll(row(config, accounts, event, me, today));
-    model.put("bodyHtml", Markdown.toHtml(event.body()));
+    // The member's renderer, not the operator's.
+    //
+    // Invariant 91 picks by who held the pen, and an event body is not reliably an operator's:
+    // `calendar.suggestions` is on by default and lets any approved member put one forward, body
+    // and all, and accepting a suggestion changes a word on the row rather than rewriting the text.
+    // The same body also arrives from IcsRequests, out of an email. So this is read by an
+    // administrator who is obliged to open it and then by every member, which is exactly the shape
+    // the stored-injection fix exists for.
+    //
+    // The consequence worth knowing: the member safelist drops <img>, so an event body cannot
+    // carry a picture. Putting same-origin attachment images back is a deliberate change to what a
+    // member may write, not something to slip in behind a security fix.
+    model.put("bodyHtml", Markdown.toSafeHtml(event.body()));
     model.put("action", config.urls.calendar);
     model.put("backUrl", config.urls.calendar);
     model.put("draft", !event.published());

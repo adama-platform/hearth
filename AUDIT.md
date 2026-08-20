@@ -137,6 +137,83 @@ finding onto the front of the message and `Envelope.headers()` keeps the first o
 so a forged `Authentication-Results` further down is never the one read. That is now a test rather
 than a property of a `putIfAbsent` nobody was watching.
 
+### 6. An event body written by a member was rendered as raw HTML
+
+**Severity: high.** Stored HTML injection by any approved member, landing on administrators and on
+every member.
+
+Invariant 91 picks a renderer by *who held the pen*: `Markdown.toHtml` passes raw HTML through,
+which is right for somebody who could replace the whole document anyway, and `toSafeHtml` is for
+anything a member typed. The event page used the operator's renderer for the event body — and an
+event body is not reliably an operator's:
+
+- `calendar.suggestions` is **on by default** and lets any approved member put an event forward,
+  body and all (invariant 115).
+- Accepting a suggestion changes a word on the row; it does not rewrite the text. So the member's
+  markup is what gets published.
+- The same body also arrives from `IcsRequests`, out of an email.
+
+The Content Security Policy stops an injected `<script>` from running — `script-src` is `'self'`
+plus a nonce, never `'unsafe-inline'` — which is real defence in depth and not a reason to leave it.
+A policy is one header away from being wrong, an injected `<meta http-equiv="refresh">` or `<style>`
+needs no script at all, and defacing the page a reviewer is obliged to open is a problem on its own.
+
+**The codebase already contained the right answer**: `Feeds` renders exactly the same event and
+place bodies with `toSafeHtml` for the operator-authored listing pages. The two paths disagreed and
+the built-in page was the wrong one.
+
+*Fixed:* event and place bodies both render through `toSafeHtml`. Place bodies for the same reason —
+a place can be created by `IcsRequests` from a location line in a mailed-in event.
+
+*Consequence worth knowing:* the member safelist drops `<img>`, so an event body can no longer carry
+a picture. Putting same-origin attachment images back is a deliberate decision about what a member
+may write, and does not belong inside a security fix.
+
+*Also checked and already right:* the suggestion review screen prints the body with `{{body}}`,
+which escapes — so the reviewer always saw the markup as text. That is now a test rather than a
+property nobody was watching.
+
+*Test:* `EventInjectionTests`
+
+### 7. A push endpoint was an unchecked outbound request
+
+**Severity: medium.** Server-side request forgery by any approved member.
+
+A push subscription carries an endpoint URL the browser hands over, and this server then POSTs to it
+on its own, from a background thread, for as long as the subscription lives. The entire check was
+that the string began with `https://`.
+
+The availability grid, one seam away, already does this properly: invariant 202 says a
+member-supplied url is an instruction to make a request, and `CalendarFetch` resolves the name and
+refuses every private range. Push did not. So an approved member could subscribe with
+`https://10.0.0.5/`, `https://169.254.169.254/` or a name of their own resolving inside, and have
+the server knock on it repeatedly.
+
+It is blind — the response never reaches the member — and https-only means TLS has to validate, so
+the practical version needs a hostname the attacker controls with a real certificate pointed at an
+internal address. That is a known and unremarkable technique, not a reason to make the request.
+
+*Fixed:* the range check moved to `common/PublicAddress`, so both callers ask the same question and
+a third has somewhere obvious to ask it. The endpoint is refused at subscribe time and checked again
+in `WebPush` immediately before the request — a row can outlive the check that wrote it, and a name
+that resolved outside in March can resolve inside today.
+
+The two callers ask it slightly differently, and the difference is deliberate. The calendar asks
+`refuse`, which also turns away a name that will not resolve: somebody typed that url and an
+immediate "that does not resolve" is the useful answer. Push asks `isPrivate`, which turns away only
+what is *known* to be inside — the browser chose that endpoint, there is nobody to tell, and a
+nameserver having a bad minute would otherwise switch somebody's notifications off silently. Nothing
+is lost by the looser question: what cannot be resolved cannot be reached, and the check runs again
+before every send. The first attempt at this fix used the stricter question for both and broke five
+existing push tests, which is exactly the operational failure it would have caused in production.
+
+*Written down while there:* neither path can close the gap between resolving here and the HTTP
+client resolving again a moment later. What actually stops that on both is https-only plus
+certificate verification. **Relaxing either re-opens something this check only appears to close**,
+and that is now said in the class rather than assumed.
+
+*Test:* `PushEndpointTests`
+
 ---
 
 ## Reviewed and sound
@@ -252,6 +329,26 @@ whose it is.
   equal the sender, the UID must name an event here, and the sequence must not be older than ours. A
   `COUNTER` is recorded as a suggestion and never applied, so one attendee cannot move everybody
   else's evening. Finding 5 was in the authentication predicate, not in any of these.
+
+### Uploads, paths and secrets
+
+- **No image is ever decoded.** Uploaded bytes are stored and served verbatim; `ImageIO` appears
+  only in `AppIcon`, drawing the home-screen icon. That removes decompression bombs and image-parser
+  bugs as a class rather than defending against them.
+- **The allow list is closed and `svg` is deliberately not on it**, with the reason written down: it
+  is a document that can carry script and arrives looking like a picture. Nothing is ever served as
+  `text/html`, `nosniff` is set on every attachment, and anything not embeddable is a download.
+- **`/3rd` turns a request path into a classpath lookup** and is the one place that matters. It
+  refuses empty segments, refuses a segment that is entirely dots, and allows characters from a
+  small set — character by character rather than by normalizing.
+- **An attachment's path is computed, never parsed**: an id and an extension from a closed table.
+  The filename somebody chose is stored to show and to name a download, and never used as a path.
+- **Tokens** are 32 random bytes from `SecureRandom` for a session and 18 for a flow handle, stored
+  as SHA-256, compared with `MessageDigest.isEqual`. Emailed codes are compared in constant time,
+  bound to the purpose they were minted for, single use, and burn after the configured wrong guesses.
+- **`Flash`** — which carries a freshly minted API token through a redirect (invariant 191) — is
+  keyed by the SHA-256 of the session token, from one place, so it is neither guessable nor shared
+  between two people on one browser profile.
 
 ### Observations, not findings
 

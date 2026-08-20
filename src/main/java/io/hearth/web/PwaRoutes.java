@@ -418,9 +418,34 @@ public class PwaRoutes {
       Responses.send(ctx, req, HttpResponseStatus.BAD_REQUEST, null, Responses.EMPTY);
       return;
     }
+    // A push endpoint is a url this server will POST to, on its own, from a background thread, for
+    // as long as the subscription lives -- which makes it the same kind of thing as a calendar link
+    // and it was not being checked like one. `https://` was the whole test, so an approved member
+    // could point it at a private address and have this server knock on it. Invariant 202 is
+    // written about a calendar url and it is a rule about *any* url somebody hands over.
+    // `isPrivate` rather than `refuse`: only an address this server can see is inside gets turned
+    // away. A push service whose name will not resolve for a minute is not something to refuse --
+    // the browser chose that endpoint and there is nobody here to tell, so a nameserver having a
+    // bad minute would quietly switch somebody's notifications off. Anything that cannot be
+    // resolved cannot be reached either, and WebPush checks again before every request.
+    if (io.hearth.common.PublicAddress.isPrivate(hostOf(endpoint.trim()))) {
+      verbose.detail(() -> "push: refused an endpoint on a private address");
+      recorder.status(400);
+      Responses.send(ctx, req, HttpResponseStatus.BAD_REQUEST, null, Responses.EMPTY);
+      return;
+    }
     accounts.pushSubs.subscribe(session.id(), session.userId(), endpoint.trim(), p256dh, auth);
     verbose.detail(() -> "push: session " + session.id() + " subscribed");
     ok(ctx, req, recorder);
+  }
+
+  /** the host of a url that has already been checked for its scheme, or null if it has none */
+  private static String hostOf(String url) {
+    try {
+      return java.net.URI.create(url).getHost();
+    } catch (IllegalArgumentException ex) {
+      return null;
+    }
   }
 
   private void ok(ChannelHandlerContext ctx, FullHttpRequest req, WebHandler.Recorder recorder) {

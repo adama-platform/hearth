@@ -116,37 +116,15 @@ public final class CalendarFetch {
    * more useful now.
    */
   public static String refusePrivate(String host) {
-    InetAddress[] addresses;
-    try {
-      addresses = InetAddress.getAllByName(host);
-    } catch (IOException ex) {
-      return "that address does not resolve";
+    // the ranges themselves live in PublicAddress, because the push endpoint a browser hands over
+    // is the same question asked one seam away and used to have a different answer
+    String refused = io.hearth.common.PublicAddress.refuse(host);
+    if (refused == null) {
+      return null;
     }
-    if (addresses.length == 0) {
-      return "that address does not resolve";
-    }
-    for (InetAddress address : addresses) {
-      if (address.isAnyLocalAddress() || address.isLoopbackAddress() || address.isLinkLocalAddress()
-          || address.isSiteLocalAddress() || address.isMulticastAddress()
-          || isUniqueLocal(address) || isCarrierGrade(address)) {
-        return "that address is on a private network, and this server only fetches calendars from"
-            + " the public internet";
-      }
-    }
-    return null;
-  }
-
-  /** fc00::/7, which Java does not have a question for */
-  private static boolean isUniqueLocal(InetAddress address) {
-    byte[] bytes = address.getAddress();
-    return bytes.length == 16 && (bytes[0] & 0xFE) == 0xFC;
-  }
-
-  /** 100.64.0.0/10: a provider's own space, and just as much "inside" as a private range */
-  private static boolean isCarrierGrade(InetAddress address) {
-    byte[] bytes = address.getAddress();
-    return bytes.length == 4 && (bytes[0] & 0xFF) == 100
-        && (bytes[1] & 0xFF) >= 64 && (bytes[1] & 0xFF) <= 127;
+    return refused.equals("that address is on a private network")
+        ? refused + ", and this server only fetches calendars from the public internet"
+        : refused;
   }
 
   /** the real one: one request, no redirects, bounded in time and in size */

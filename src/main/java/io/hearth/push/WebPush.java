@@ -74,6 +74,14 @@ public class WebPush {
       byte[] body = PushCrypto.encrypt(plaintext, PushCrypto.unb64(sub.p256dh()),
           PushCrypto.unb64(sub.auth()), sub.keys(), PushCrypto.randomBytes(16));
 
+      // checked again here, not only where it was subscribed. A row can outlive the check that
+      // wrote it -- this one predates the check entirely -- and a name that resolved to the public
+      // internet in March can resolve inside today. This is the last point before the request.
+      if (!sub.endpoint().startsWith("https://")
+          || io.hearth.common.PublicAddress.isPrivate(host(sub.endpoint()))) {
+        // not retryable: nothing about waiting makes a private address public
+        return new Outcome(false, true, "endpoint is not on the public internet");
+      }
       HttpRequest request = HttpRequest.newBuilder(URI.create(sub.endpoint()))
           .timeout(Duration.ofSeconds(15))
           .header("TTL", "86400")
