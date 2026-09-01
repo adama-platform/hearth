@@ -130,39 +130,7 @@ public class EscalationTests {
 
   // ---- the other sections where one permission opens several actions ---------------------------
 
-  @Test
-  public void suggestingAnEditDoesNotLetYouApproveOne() throws Exception {
-    // the suggestions section needs content_propose; approving needs content_review, and the
-    // difference between them is the entire point of having a queue
-    give("mild@example.com", "suggester", Permission.content_propose);
-    assertEquals(200, mild.get("/admin/content/proposals").status());
 
-    boss.submitToAndFollow("/admin/content", Map.of("action", "save", "kind", "markdown",
-        "template_name", "", "published", "on", "uri", "/about", "title", "About", "body", "one"));
-    long id = accounts().site.store().byUri("/about").id();
-    mild.submitToAndFollow("/admin/content", Map.of("action", "suggest", "kind", "markdown",
-        "template_name", "", "id", Long.toString(id), "uri", "/about", "title", "About",
-        "body", "two"));
-    long proposal = accounts().site.store().proposals().open(5).get(0).id();
-
-    mild.submitToAndFollow("/admin/content/proposals",
-        Map.of("action", "approve", "id", Long.toString(proposal)));
-    assertEquals("one is not the other", "one", accounts().site.store().byId(id).body());
-  }
-
-  @Test
-  public void invitingOneDoesNotLetYouInviteAThousand() throws Exception {
-    give("mild@example.com", "greeter", Permission.invites_send);
-    StringBuilder addresses = new StringBuilder();
-    for (int k = 0; k < 20; k++) {
-      addresses.append("person").append(k).append("@example.com\n");
-    }
-
-    mild.submitToAndFollow("/admin/invites",
-        Map.of("action", "bulk", "addresses", addresses.toString()));
-    assertEquals("bulk is its own permission because it is its own kind of mistake",
-        0, accounts().invites.count());
-  }
 
   private Browser signIn(String email) throws Exception {
     Browser browser = new Browser(server.port, "example.org");

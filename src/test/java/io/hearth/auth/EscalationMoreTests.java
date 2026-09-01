@@ -57,70 +57,9 @@ public class EscalationMoreTests {
     accounts().roles.grant(accounts().users.byEmail(email).id(), role, null);
   }
 
-  @Test
-  public void decidingOnSuggestionsDoesNotLetYouDeleteTheCalendar() throws Exception {
-    // /admin/calendar/suggestions opens for calendar_review -- "decide what members put forward".
-    // Every button on both event screens posts under it, so a handler checking only the section
-    // would have let a reviewer delete an event and everybody's answers with it.
-    boss.submitToAndFollow("/admin/calendar", Map.of("action", "save", "title", "Supper club",
-        "starts_on", "2030-04-09", "published", "on"));
-    long id = accounts().calendar.all(10).get(0).id();
-    give("mild@example.com", "reviewer", Permission.calendar_review);
 
-    assertEquals("the queue itself is theirs", 200,
-        mild.get("/admin/calendar/suggestions").status());
 
-    mild.submitToAndFollow("/admin/calendar/suggestions",
-        Map.of("action", "delete", "id", Long.toString(id)));
-    assertNotNull("deciding is not deleting", accounts().calendar.byId(id));
 
-    mild.submitToAndFollow("/admin/calendar/suggestions",
-        Map.of("action", "cancel", "id", Long.toString(id)));
-    assertFalse("nor calling something off", accounts().calendar.byId(id).cancelled());
-
-    mild.submitToAndFollow("/admin/calendar/suggestions",
-        Map.of("action", "save", "id", Long.toString(id), "title", "Renamed",
-            "starts_on", "2030-04-09"));
-    assertEquals("nor rewriting it", "Supper club", accounts().calendar.byId(id).title());
-  }
-
-  @Test
-  public void aReviewerCanStillDoTheirJob() throws Exception {
-    Browser ana = signIn("ana@example.com");
-    boss.submitToAndFollow("/admin/people", Map.of("action", "approve",
-        "user", Long.toString(accounts().users.byEmail("ana@example.com").id())));
-    ana.submitToAndFollow("/events", Map.of("action", "suggest", "title", "Karaoke",
-        "starts_on", "2030-04-09"));
-    long id = accounts().calendar.suggestions(10).get(0).id();
-    give("mild@example.com", "reviewer", Permission.calendar_review);
-
-    mild.submitToAndFollow("/admin/calendar/suggestions",
-        Map.of("action", "accept", "id", Long.toString(id)));
-    assertTrue(accounts().calendar.byId(id).live());
-  }
-
-  @Test
-  public void nobodyCanGiveAwayAPowerTheyDoNotHave() throws Exception {
-    // people_roles was the whole server by a longer route: invent a role holding everything except
-    // the word `everything`, grant it to yourself, and you are an administrator in all but name.
-    give("mild@example.com", "granter", Permission.people_roles);
-
-    mild.submitToAndFollow("/admin/roles", Map.of("action", "save", "name", "sneaky",
-        "label", "Sneaky", "p_content_write", "1", "p_places_write", "1"));
-    assertEquals("the role is not created at all", null, accounts().roleDefs.byName("sneaky"));
-
-    // and what they do hold, they can still delegate -- otherwise the permission does nothing
-    mild.submitToAndFollow("/admin/roles", Map.of("action", "save", "name", "helper",
-        "label", "Helper", "p_people_roles", "1"));
-    assertNotNull(accounts().roleDefs.byName("helper"));
-  }
-
-  @Test
-  public void anAdminCanStillGiveAwayAnything() throws Exception {
-    boss.submitToAndFollow("/admin/roles", Map.of("action", "save", "name", "editor",
-        "label", "Editor", "p_content_write", "1", "p_places_write", "1"));
-    assertNotNull(accounts().roleDefs.byName("editor"));
-  }
 
   @Test
   public void theMembersDirectoryIsForMembers() throws Exception {

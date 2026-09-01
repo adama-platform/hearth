@@ -26,32 +26,14 @@ public class SiteUrls {
   public final String resetPassword;
   /** the admin section; approving people lives here */
   public final String admin;
-  /** the dashboard a signed-in member lands on: what to do, what is being said, what is coming */
-  public final String home;
   /** where somebody reviews their own profile and answers */
   public final String self;
-  /** the community's questions, and this person's answers to them */
-  public final String survey;
-  /** projects and what is on them */
-  public final String tasks;
-  /** the first few minutes: a name, then the questions */
-  public final String orientation;
-  /** who else is here */
-  public final String members;
-  /** the discussion board */
-  public final String board;
-  /** what is happening, and who is coming */
-  public final String calendar;
-  /** the address book */
-  public final String places;
-  /** when this person can come, and -- for whoever plans things -- when everybody can */
-  public final String availability;
   /**
-   * Where to send somebody after a successful sign-in.
+   * Where a successful sign-in lands.
    *
-   * The dashboard rather than `/`, because `/` is the community's own front page and most of them
-   * will put something there aimed at whoever arrives rather than at the person who just signed in.
-   * An operator who wants the old behaviour sets this to `/`.
+   * The community's own front page. There used to be a member dashboard at `/home` and this pointed
+   * at that; the dashboard was a read of the board, the calendar and the survey, and it went when
+   * they did rather than staying on as a page with nothing to say.
    */
   public final String afterLogin;
 
@@ -62,17 +44,8 @@ public class SiteUrls {
     this.forgotPassword = path(config, "forgot-password", "/forgot-password");
     this.resetPassword = path(config, "reset-password", "/reset-password");
     this.admin = path(config, "admin", "/admin");
-    this.home = path(config, "home", "/home");
     this.self = path(config, "self", "/self");
-    this.survey = path(config, "survey", "/survey");
-    this.tasks = path(config, "tasks", "/tasks");
-    this.orientation = path(config, "orientation", "/welcome");
-    this.members = path(config, "members", "/members");
-    this.board = path(config, "board", "/board");
-    this.calendar = path(config, "calendar", "/events");
-    this.places = path(config, "places", "/places");
-    this.availability = path(config, "availability", "/when");
-    this.afterLogin = path(config, "after-login", home);
+    this.afterLogin = path(config, "after-login", "/");
     config.assertKnownKeys();
     checkForCollisions();
   }
@@ -86,16 +59,7 @@ public class SiteUrls {
     routes.put(forgotPassword, Route.forgot_password);
     routes.put(resetPassword, Route.reset_password);
     routes.put(admin, Route.admin);
-    routes.put(home, Route.home);
     routes.put(self, Route.self);
-    routes.put(survey, Route.survey);
-    routes.put(tasks, Route.tasks);
-    routes.put(orientation, Route.orientation);
-    routes.put(members, Route.members);
-    routes.put(board, Route.board);
-    routes.put(calendar, Route.calendar);
-    routes.put(places, Route.places);
-    routes.put(availability, Route.availability);
     return routes;
   }
 
@@ -107,11 +71,8 @@ public class SiteUrls {
   private void checkForCollisions() throws ConfigException {
     String[][] pairs = {
         {"register", register}, {"login", login}, {"logout", logout},
-        {"forgot-password", forgotPassword}, {"reset-password", resetPassword}, {"admin", admin},
-        {"home", home}, {"self", self}, {"survey", survey}, {"tasks", tasks},
-        {"orientation", orientation},
-        {"members", members}, {"board", board}, {"calendar", calendar}, {"places", places},
-        {"availability", availability}};
+        {"forgot-password", forgotPassword}, {"reset-password", resetPassword},
+        {"admin", admin}, {"self", self}};
     for (int a = 0; a < pairs.length; a++) {
       for (int b = a + 1; b < pairs.length; b++) {
         if (pairs[a][1].equals(pairs[b][1])) {
@@ -164,16 +125,7 @@ public class SiteUrls {
     forgot_password,
     reset_password,
     admin,
-    home,
-    self,
-    survey,
-    orientation,
-    members,
-    board,
-    calendar,
-    places,
-    tasks,
-    availability;
+    self;
 
     /**
      * Is this a form this server renders, rather than a section with a handler of its own?
@@ -191,18 +143,16 @@ public class SiteUrls {
      * May somebody who has not been approved yet reach this?
      *
      * <b>A closed list, and it used to be "is it in the table at all".</b> That answered yes for
-     * the board, the calendar and the address book -- the community itself, which is the one thing
-     * approval exists to gate -- so a stranger who had proved an email address could read every
-     * discussion in it -- found by a review, reproduced from the outside, and now covered by
-     * `HomeTests.somebodyWaitingForApprovalSeesNoneOfTheCommunity`.
+     * every surface there was -- the community itself, which is the one thing approval exists to
+     * gate -- so a stranger who had proved an email address could read all of it. Found by a
+     * review and reproduced from the outside.
      *
-     * What is on the list is what somebody waiting has any business with: their own account, the
-     * welcome, the questions, their own page. The admin section is here because it does its own,
-     * stricter check and answers 404 to anybody who is not an administrator.
+     * What is on the list is what somebody waiting has any business with: their own account and
+     * their own page, which is what an administrator reads before saying yes. The admin section is
+     * here because it does its own, stricter check and answers 404 to anybody who is not one.
      */
     public boolean isReachableUnapproved() {
-      return isAccountPage() || this == admin || this == self || this == survey
-          || this == orientation;
+      return isAccountPage() || this == admin || this == self;
     }
   }
 }

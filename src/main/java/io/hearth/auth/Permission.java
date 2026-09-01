@@ -24,8 +24,6 @@ public enum Permission {
   content_read("Content", "See pages and their history"),
   content_write("Content", "Write and edit pages"),
   content_publish("Content", "Publish a page, or take one down"),
-  content_propose("Content", "Suggest an edit for somebody else to approve"),
-  content_review("Content", "Approve or decline suggested edits"),
   templates_write("Content", "Write templates and the fields they ask for"),
   navigation_write("Content", "Arrange the navigation"),
   attachments_write("Content", "Upload files, and organise or remove what is there"),
@@ -35,30 +33,7 @@ public enum Permission {
   people_remove("People", "Reject, disable or ban somebody"),
   people_roles("People", "Give and take away roles"),
 
-  invites_send("Invites", "Invite somebody by email"),
-  invites_bulk("Invites", "Invite many people at once"),
 
-  board_read("Board", "Read the board"),
-  board_write("Board", "Start a conversation, reply, and put a vote in one"),
-  board_vote("Board", "Vote in a poll on the board"),
-  board_moderate("Board", "Pin, lock and remove conversations, and take down a comment"),
-  calendar_write("Calendar", "Create, edit and cancel events"),
-  calendar_review("Calendar", "Accept or decline what members suggest"),
-  calendar_moderate("Calendar", "Take down a comment on an event"),
-  survey_write("Survey", "Ask the community questions"),
-  /**
-   * Writing into the community's shared library, rather than into your own.
-   *
-   * Everybody keeps their own projects and their own definitions without anybody granting them
-   * anything -- a training log is nobody's business but its owner's, and asking permission to write
-   * a todo list would be absurd. What this gates is the shared half: the community's project, and
-   * the library of definitions everybody else adopts from. A library anybody may add to is a
-   * library nobody can find anything in.
-   */
-  tasks_use("Tasks", "Keep projects and routines of your own"),
-  tasks_share("Tasks", "Keep the community's projects and its shared library"),
-  places_write("Places", "Keep the address book, and decide what each kind records"),
-  places_moderate("Places", "Take down a comment on a place"),
 
   /**
    * Change what this community is, as opposed to how the machine it runs on is set up.
@@ -124,8 +99,7 @@ public enum Permission {
    * words -- moderating -- is not in it.
    */
   public static final java.util.Set<Permission> MEMBER_BASELINE =
-      java.util.Collections.unmodifiableSet(
-          java.util.EnumSet.of(board_read, board_write, board_vote, tasks_use));
+      java.util.Collections.unmodifiableSet(java.util.EnumSet.noneOf(Permission.class));
 
   /** is this one of the things being approved is enough for? */
   public boolean isMemberBaseline() {
@@ -164,7 +138,7 @@ public enum Permission {
     java.util.EnumSet<Permission> also = isMemberBaseline() || this == agent_connect
         ? java.util.EnumSet.of(this) : java.util.EnumSet.of(admin_enter, this);
     switch (this) {
-      case content_write, content_publish, content_propose, content_review, templates_write,
+      case content_write, content_publish, templates_write,
            navigation_write -> {
         also.add(content_read);
         if (this == content_write) {
@@ -172,22 +146,13 @@ public enum Permission {
         }
       }
       case people_approve, people_remove, people_roles -> also.add(people_read);
-      case board_write, board_vote -> also.add(board_read);
       // moderating implies reading, and moderating is the one of the four that is not a baseline:
       // it acts on somebody else's words
-      case board_moderate -> also.add(board_read);
       // somebody who writes pages can put a photograph in one; the reverse is deliberately not
       // true, so a community can hand somebody the camera without handing them the website
-      case invites_bulk -> also.add(invites_send);
       case attachments_write -> also.add(content_read);
       // keeping a section implies being able to keep it tidy; the reverse is deliberately not
       // true, so a community can hand somebody the moderating without handing them the editing
-      case calendar_write -> {
-        also.add(calendar_review);
-        also.add(calendar_moderate);
-      }
-      case places_write -> also.add(places_moderate);
-      case tasks_share -> also.add(tasks_use);
       // somebody who administers the connectors can obviously have one; the reverse is the whole
       // point of the split and is deliberately not true
       case ai_manage -> also.add(agent_connect);

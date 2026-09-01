@@ -85,75 +85,7 @@ public class AttachmentSweepTests {
     assertTrue(swept.usesOf(id).stream().anyMatch(use -> use.source().equals("page history")));
   }
 
-  @Test
-  public void aSuggestedEditCountsBeforeAnybodyHasAcceptedIt() throws Exception {
-    long id = upload("proposed.jpg");
-    long page = page("/about", "nothing here yet");
-    Browser writer = memberWho("writer@example.com", io.hearth.auth.Permission.content_propose);
-    writer.get("/admin/content/edit/" + page);
-    writer.submitTo("/admin/content", Map.of("action", "suggest", "id", Long.toString(page),
-        "uri", "/about", "title", "About", "kind", "markdown", "template_name", "",
-        "nav_folder", "", "body", "how about ![this](/attachment/" + id + ".jpg)",
-        "note", "a picture"));
 
-    AttachmentSweep.Result swept = sweep();
-    assertTrue("an edit waiting in the queue is a reference before the fact",
-        swept.referenced().contains(id));
-  }
-
-  @Test
-  public void everywhereElseAReferenceCanHide() throws Exception {
-    long onBoard = upload("board.jpg");
-    long inComment = upload("comment.jpg");
-    long onPlace = upload("place.jpg");
-    long onEvent = upload("event.jpg");
-    long inProfile = upload("profile.jpg");
-    long inTemplate = upload("template.jpg");
-    long inFields = upload("fields.jpg");
-
-    admin.get("/board");
-    admin.submitTo("/board", Map.of("action", "post", "title", "Saturday",
-        "body", "look: ![it](/attachment/" + onBoard + ".jpg)"));
-    long post = server.auth.forDomain("example.org").board.all(10).get(0).id();
-    admin.get("/board/" + post);
-    admin.submitTo("/board", Map.of("action", "reply", "post", Long.toString(post),
-        "body", "and ![this](/attachment/" + inComment + ".jpg)"));
-
-    admin.get("/admin/places/new");
-    admin.submitTo("/admin/places", Map.of("action", "save", "type_slug", "unsorted",
-        "name", "The Oak", "slug", "the-oak", "address", "1 High Street",
-        "body", "![outside](/attachment/" + onPlace + ".jpg)", "published", "on"));
-
-    java.time.LocalDate day = java.time.LocalDate.now().plusDays(3);
-    admin.get("/admin/calendar/new");
-    admin.submitTo("/admin/calendar", Map.of("action", "save", "title", "Supper",
-        "body", "![poster](/attachment/" + onEvent + ".jpg)", "location", "", "place_id", "",
-        "starts_on", day.toString(), "ends_on", day.toString(), "start_time", "",
-        "capacity", "", "published", "on"));
-
-    admin.get("/self");
-    admin.submitTo("/self", Map.of("action", "profile", "display_name", "The Boss",
-        "headline", "", "about", "me: ![face](/attachment/" + inProfile + ".jpg)",
-        "location", "", "links", ""));
-
-    admin.get("/admin/templates/new");
-    admin.submitTo("/admin/templates", Map.of("action", "save", "name", "wrapper",
-        "body", "<header><img src=\"/attachment/" + inTemplate + ".jpg\" alt=\"\"></header>"
-            + "{{{body}}}"));
-
-    // a template field's value, which lives in a JSON blob on the content row
-    content().save(new io.hearth.content.ContentRecord(0, "/fields", "Fields",
-        io.hearth.content.ContentRecord.Kind.markdown, null, "",
-        "{\"hero\":\"/attachment/" + inFields + ".jpg\"}", "words", true, false, null, null, null),
-        null);
-
-    AttachmentSweep.Result swept = sweep();
-    for (long id : new long[]{onBoard, inComment, onPlace, onEvent, inProfile, inTemplate,
-        inFields}) {
-      assertTrue("nothing pointing at " + id + " was found", swept.referenced().contains(id));
-    }
-    assertEquals("and nothing at all is rubbish", 0, swept.unused().size());
-  }
 
   @Test
   public void aReferenceInAnyShapeCounts() throws Exception {
@@ -170,17 +102,6 @@ public class AttachmentSweepTests {
 
   // ---- the sweeping --------------------------------------------------------------------------
 
-  @Test
-  public void nothingUploadedTodayIsEverOffered() throws Exception {
-    // a file uploaded twenty minutes ago is very likely on somebody's clipboard, on its way into a
-    // page that does not exist yet
-    upload("just-now.jpg");
-    assertEquals(0, AttachmentSweep.run(accounts(), AttachmentSweep.GRACE, Instant.now())
-        .unused().size());
-    assertEquals("and it is offered once it is old enough",
-        1, AttachmentSweep.run(accounts(), Duration.ZERO, Instant.now().plusSeconds(60))
-            .unused().size());
-  }
 
   @Test
   public void theScreenListsThemAndTheButtonTakesThemAway() throws Exception {

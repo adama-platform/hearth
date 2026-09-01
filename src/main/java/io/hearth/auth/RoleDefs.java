@@ -67,55 +67,16 @@ public class RoleDefs {
     }
   }
 
-  /**
-   * Put the built-in roles in place.
-   *
-   * Called at boot, and idempotent. admin is rewritten every time -- if somebody has edited that
-   * row by hand, the next restart puts it back, because it is the one role whose meaning is not a
-   * community's to change. editor is only *created*, never rewritten: it is a starting point, and a
-   * community that has decided its editors should also run the calendar should keep that decision.
-   */
-  /** the three jobs a community hands out, seeded once and editable like any other role */
-  public static final String ORGANISER = "organiser";
-  public static final String MODERATOR = "moderator";
   public static final String PLACES = "place-manager";
 
   public void seed() throws SQLException {
     upsert(ADMIN, "Administrator", "Everything, always. Cannot be edited or removed.",
         EnumSet.of(Permission.everything), true, "purple", true);
     if (byName(EDITOR) == null) {
-      upsert(EDITOR, "Editor", "Writes and publishes the site, and reviews suggested edits.",
+      upsert(EDITOR, "Editor", "Writes and publishes the site.",
           EnumSet.of(Permission.admin_enter, Permission.content_read, Permission.content_write,
-              Permission.content_publish, Permission.content_propose, Permission.content_review,
-              Permission.templates_write, Permission.navigation_write),
-          false, "blue", false);
-    }
-    // The three jobs a community actually hands out, ready to give somebody.
-    //
-    // Not built in, so a community can edit or delete any of them -- what they are is a starting
-    // point, seeded once. The alternative was every community assembling the same three roles out
-    // of a grid of thirty checkboxes and getting one of them subtly wrong, usually by forgetting
-    // that whoever keeps the calendar also needs to see the suggestions.
-    if (byName(ORGANISER) == null) {
-      upsert(ORGANISER, "Community organiser",
-          "Puts events on, decides what members suggest, and invites people.",
-          EnumSet.of(Permission.admin_enter, Permission.calendar_write, Permission.calendar_review,
-              Permission.calendar_moderate, Permission.invites_send, Permission.people_read,
-              Permission.attachments_write, Permission.content_read),
-          false, "blue", false);
-    }
-    if (byName(MODERATOR) == null) {
-      upsert(MODERATOR, "Board moderator",
-          "Keeps the conversations civil: pin, lock, take down, and clear flags.",
-          EnumSet.of(Permission.admin_enter, Permission.board_moderate,
-              Permission.calendar_moderate, Permission.places_moderate, Permission.people_read),
-          false, "purple", false);
-    }
-    if (byName(PLACES) == null) {
-      upsert(PLACES, "Place manager",
-          "Keeps the address book, and decides what each kind of place records.",
-          EnumSet.of(Permission.admin_enter, Permission.places_write, Permission.places_moderate,
-              Permission.attachments_write),
+              Permission.content_publish, Permission.templates_write,
+              Permission.navigation_write, Permission.attachments_write),
           false, "blue", false);
     }
   }

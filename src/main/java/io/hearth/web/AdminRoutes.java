@@ -16,7 +16,6 @@ import io.hearth.cache.TtlCache;
 import io.hearth.common.Verbose;
 import io.hearth.content.ContentRecord;
 import io.hearth.content.ContentVersions;
-import io.hearth.content.Proposals;
 import io.hearth.content.TextPatch;
 import io.hearth.mail.Mailer;
 import io.hearth.content.TemplateField;
@@ -233,6 +232,8 @@ public class AdminRoutes {
     String where = outcome.goTo() == null ? section.path(config) : outcome.goTo().apply(config);
     // redirect after every POST, so a refresh cannot repeat it and the URL stays clean
     recorder.status(303);
+    Responses.send(ctx, req, HttpResponseStatus.SEE_OTHER, null, Responses.EMPTY,
+        new String[]{HttpHeaderNames.LOCATION.toString(), where});
   }
 
   /**
@@ -287,7 +288,7 @@ public class AdminRoutes {
         for (io.hearth.push.PushSubs.Sub sub : accounts.pushSubs.forUser(target.id())) {
           io.hearth.push.WebPush.Message message = new io.hearth.push.WebPush.Message(
               config.name, "A test from " + me.email() + ". Nothing is wrong.",
-              config.urls.home, "test", target.id());
+              "/", "test", target.id());
           if (new io.hearth.push.WebPush(verbose).send(sub, message,
               "mailto:no-reply@" + config.domain).delivered()) {
             accounts.pushSubs.recordSuccess(sub.id());
@@ -425,7 +426,6 @@ public class AdminRoutes {
    */
   private static Permission neededForContent(String action) {
     return switch (action) {
-      case "suggest" -> Permission.content_propose;
       // a restore is a save (invariant 58) and a delete is the end of one, so both are writing
       case "save", "delete", "restore", "import" -> Permission.content_write;
       default -> Permission.everything;
@@ -435,11 +435,7 @@ public class AdminRoutes {
   private Outcome actOnContent(Accounts accounts, Forms form, UserRecord me) throws SQLException {
     String action = String.valueOf(form.get("action"));
     if (!accounts.access.can(me, neededForContent(action))) {
-      // the message for a save names the thing they *can* do, because somebody who may only suggest
-      // is looking at a button they were shown and needs pointing at the other one
-      return Outcome.refused(action.equals("save")
-          ? "You are not able to save pages. You can suggest a change instead."
-          : "You are not able to do that to a page.");
+      return Outcome.refused("You are not able to do that to a page.");
     }
     if (action.equals("delete")) {
       Long id = longOf(form.get("id"));
@@ -478,8 +474,7 @@ public class AdminRoutes {
           ? Outcome.refused(report.describe())
           : Outcome.done(report.describe(), site -> AdminView.Section.content.path(site));
     }
-    boolean suggesting = action.equals("suggest");
-    if (!action.equals("save") && !suggesting) {
+    if (!action.equals("save")) {
       return Outcome.refused("That is not something this page can do.");
     }
     String uri = form.get("uri");
@@ -522,7 +517,7 @@ public class AdminRoutes {
       ContentRecord existing = accounts.site.store().byId(id);
       publishedNow = existing != null && existing.published();
     }
-    if (!suggesting && wantsPublished != publishedNow
+    if (wantsPublished != publishedNow
         && !accounts.access.can(me, Permission.content_publish)) {
       return Outcome.refused(wantsPublished
           ? "You are able to write pages but not to publish them. Save it unpublished and ask"
@@ -542,16 +537,6 @@ public class AdminRoutes {
     Outcome refused = oversized(form);
     if (refused != null) {
       return refused;
-    }
-    if (suggesting) {
-      // stored as the same canonical document a version is, so approving it is a plain save and
-      // the reviewer sees exactly what the page will become
-      int base = id == null ? 0 : accounts.site.store().versions().latestVersion(id);
-      accounts.site.store().proposals().propose(id, uri, page.title(),
-          ContentVersions.documentOf(page), base, form.text("suggestion_note"), me.id(),
-          me.email());
-      return Outcome.done("Suggested. Somebody who can publish will take a look.",
-          config -> AdminView.Section.content.path(config));
     }
     accounts.site.store().save(page, me.id(), me.email());
     return Outcome.done(uri + " saved.", config -> AdminView.Section.content.path(config));
@@ -663,6 +648,10 @@ public class AdminRoutes {
 
     if (target.kind() == AdminView.Target.Kind.panel) {
       recorder.status(200);
+      Responses.send(ctx, req, HttpResponseStatus.OK, "text/html; charset=utf-8",
+          renderPanel(section, config, accounts, req, csrf, me),
+          new String[]{HttpHeaderNames.SET_COOKIE.toString(),
+              Cookies.csrf(accounts.security, csrf)});
       return;
     }
 
@@ -692,6 +681,9 @@ public class AdminRoutes {
         byte[] json = io.hearth.people.DataExport.of(accounts, person, config.name, config.domain);
         verbose.detail("admin: " + me.email() + " exported everything about " + person.email());
         recorder.status(200);
+        Responses.send(ctx, req, HttpResponseStatus.OK, "application/json; charset=utf-8", json,
+            new String[]{"Content-Disposition", "attachment; filename=\"" + person.id()
+                + "-data.json\""});
         return;
       }
       case bundle -> {
@@ -712,6 +704,10 @@ public class AdminRoutes {
         verbose.detail("admin: " + me.email() + " downloaded "
             + (onlyPage == null ? "the whole site" : "page " + onlyPage));
         recorder.status(200);
+        Responses.send(ctx, req, HttpResponseStatus.OK, "application/json; charset=utf-8", json,
+            new String[]{"Content-Disposition", "attachment; filename=\""
+                + config.domain + (onlyPage == null ? "-content" : "-page-" + onlyPage)
+                + ".json\""});
         return;
       }
       case history -> {
@@ -721,11 +717,19 @@ public class AdminRoutes {
       case version -> {
         // the preview: just the version, no shell, so it can go straight into a modal
         recorder.status(200);
+        Responses.send(ctx, req, HttpResponseStatus.OK, "text/html; charset=utf-8",
+            versionPreview(config, accounts, target.id(), csrf),
+            new String[]{HttpHeaderNames.SET_COOKIE.toString(),
+                Cookies.csrf(accounts.security, csrf)});
         return;
       }
       case changes -> {
         // the same modal, showing what changed rather than what it became
         recorder.status(200);
+        Responses.send(ctx, req, HttpResponseStatus.OK, "text/html; charset=utf-8",
+            versionChanges(accounts, target.id()),
+            new String[]{HttpHeaderNames.SET_COOKIE.toString(),
+                Cookies.csrf(accounts.security, csrf)});
         return;
       }
       default -> {
@@ -740,6 +744,10 @@ public class AdminRoutes {
     }
 
     recorder.status(200);
+    Responses.send(ctx, req, HttpResponseStatus.OK, "text/html; charset=utf-8",
+        templates.render(template, model),
+        new String[]{HttpHeaderNames.SET_COOKIE.toString(), Cookies.csrf(accounts.security, csrf)},
+        (String) model.get("nonce"));
   }
 
   /** the refreshable part of a section, identical embedded or fetched */
@@ -2251,16 +2259,10 @@ public class AdminRoutes {
           model.put("mergeKey", orEmpty(accounts.site.store().uuidOf(page.id())));
         }
         model.put("canSave", accounts.access.can(me, Permission.content_write));
-        model.put("canSuggest", accounts.access.can(me, Permission.content_propose));
         // the box is only offered to somebody who could act on it: a checkbox that refuses the
         // save is worse than no checkbox, because it looks like a decision they are allowed to make
         model.put("canPublish", accounts.access.can(me, Permission.content_publish));
-        model.put("suggestOnly", !accounts.access.can(me, Permission.content_write)
-            && accounts.access.can(me, Permission.content_propose));
         if (page != null) {
-          model.put("openSuggestions",
-              accounts.site.store().proposals().forContent(page.id(), 20).stream()
-                  .filter(io.hearth.content.Proposals.Proposal::isOpen).count());
         }
         model.put("form_id", page == null ? "" : Long.toString(page.id()));
         model.put("form_uri", page == null ? "" : page.uri());
@@ -2926,14 +2928,7 @@ public class AdminRoutes {
     row(urls, "urls.forgot-password", config.urls.forgotPassword, "");
     row(urls, "urls.reset-password", config.urls.resetPassword, "");
     row(urls, "urls.admin", config.urls.admin, "");
-    row(urls, "urls.home", config.urls.home, "the member's dashboard, which is not the front page");
     row(urls, "urls.self", config.urls.self, "");
-    row(urls, "urls.survey", config.urls.survey, "");
-    row(urls, "urls.orientation", config.urls.orientation, "");
-    row(urls, "urls.members", config.urls.members, "");
-    row(urls, "urls.board", config.urls.board, "");
-    row(urls, "urls.calendar", config.urls.calendar, "");
-    row(urls, "urls.places", config.urls.places, "");
     row(urls, "urls.after-login", config.urls.afterLogin, "where signing in lands somebody");
     groups.add(group("Addresses", file,
         "Every account page has its own path and no two may share one; the server refuses to start"

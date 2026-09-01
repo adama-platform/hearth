@@ -272,23 +272,7 @@ public class ThemeStoreTests {
     assertTrue(html.contains("123456"));
   }
 
-  @Test
-  public void aDigestWithNoSettingsLinkOmitsThatLine() {
-    MailBrand brand = MailBrand.standard("example.org", "Example");
-    Messages.Built built = Messages.digest(to(brand), new Mailer.Digest("today",
-        java.util.List.of(new Mailer.Notice("posted", "ana", "", "x")),
-        "https://example.org/board", null));
-    assertFalse(built.text().contains("Change how often"));
-    assertTrue(built.text().contains("The board:"));
-  }
 
-  @Test
-  public void aNoticeWithNoExcerptDoesNotRenderAnEmptyQuote() {
-    MailBrand brand = MailBrand.standard("example.org", "Example");
-    String html = Messages.boardNotice(to(brand),
-        new Mailer.Notice("replied", "ana", "  ", "https://example.org/board/1")).html();
-    assertFalse(html.contains("border-left:3px solid"));
-  }
 
   @Test
   public void theTextFooterSaysTheSameThingWithoutAReason() {

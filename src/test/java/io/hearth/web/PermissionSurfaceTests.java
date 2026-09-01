@@ -98,37 +98,7 @@ public class PermissionSurfaceTests {
 
   // ---- a permission that is offered has to be asked for --------------------------------------------
 
-  @Test
-  public void aBoardModeratorCanModerateTheBoardItself() throws Exception {
-    Browser ana = memberWith("ana@example.com", "greeter", Permission.board_moderate);
-    Browser bo = memberWith("bo@example.com", "member");
 
-    bo.get("/board");
-    bo.submitTo("/board", Map.of("action", "post", "title", "Nonsense", "body", "..."));
-    long postId = server.auth.forDomain("example.org").board.feed(10).get(0).id();
-
-    // it used to be "is an admin", so a community that handed somebody moderating found they
-    // could only do it from a different screen
-    assertTrue("the button is offered", ana.get("/board/" + postId).contains("remove_post"));
-    ana.submitTo("/board", Map.of("action", "remove_post", "post", Long.toString(postId)));
-    assertTrue("and it works", server.auth.forDomain("example.org").board.postById(postId)
-        .removed());
-  }
-
-  @Test
-  public void anOrdinaryMemberCannotTakeDownSomebodyElsesPost() throws Exception {
-    Browser ana = memberWith("ana@example.com", "member");
-    Browser bo = memberWith("bo@example.com", "other");
-
-    bo.get("/board");
-    bo.submitTo("/board", Map.of("action", "post", "title", "Mine", "body", "..."));
-    long postId = server.auth.forDomain("example.org").board.feed(10).get(0).id();
-
-    assertFalse("no button", ana.get("/board/" + postId).contains("remove_post"));
-    ana.submitTo("/board", Map.of("action", "remove_post", "post", Long.toString(postId)));
-    assertFalse("and posting it by hand does nothing",
-        server.auth.forDomain("example.org").board.postById(postId).removed());
-  }
 
   @Test
   public void awriterCannotPublishAndIsToldWhySoftly() throws Exception {
@@ -203,24 +173,6 @@ public class PermissionSurfaceTests {
     assertTrue(greeter.get("/admin").contains("Here now"));
   }
 
-  @Test
-  public void aLinkIntoASectionSomebodyCannotOpenIsNotDrawn() throws Exception {
-    admin.get("/self");
-    admin.submitToAndFollow("/admin/invites",
-        Map.of("action", "create", "email", "newcomer@example.com", "send", "on"));
-    Browser newcomer = signedIn("newcomer@example.com");
-    assertEquals(200, newcomer.get("/self").status());
-
-    Browser inviter = memberWith("ana@example.com", "inviter", Permission.invites_send);
-    Browser.Page panel = inviter.get("/admin/invites/list");
-    assertEquals(200, panel.status());
-    assertFalse("no link into the people section they cannot open",
-        panel.contains("/admin/people/review/"));
-
-    Browser greeter = memberWith("bo@example.com", "greeter",
-        Permission.invites_send, Permission.people_read);
-    assertTrue(greeter.get("/admin/invites/list").contains("/admin/people/review/"));
-  }
 
   // ---- and the refusals stay refusals ---------------------------------------------------------------
 

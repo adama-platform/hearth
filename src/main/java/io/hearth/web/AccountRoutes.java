@@ -117,7 +117,7 @@ public class AccountRoutes {
         case login -> postLogin(config, accounts, ctx, req, submission);
         case forgot_password -> postForgot(config, accounts, ctx, req, submission);
         case reset_password -> postReset(config, accounts, ctx, req, submission);
-        case admin, board -> showForm(route, config, accounts, ctx, req, null, null, null);
+        case admin, self -> showForm(route, config, accounts, ctx, req, null, null, null);
       }
     } catch (SQLException ex) {
       LOG.error("account-route-failed", ex);
@@ -645,16 +645,7 @@ public class AccountRoutes {
       case forgot_password -> config.urls.forgotPassword;
       case reset_password -> config.urls.resetPassword;
       case admin -> config.urls.admin;
-      case board -> config.urls.board;
-      case calendar -> config.urls.calendar;
-      case places -> config.urls.places;
-      case home -> config.urls.home;
       case self -> config.urls.self;
-      case survey -> config.urls.survey;
-      case tasks -> config.urls.tasks;
-      case orientation -> config.urls.orientation;
-      case members -> config.urls.members;
-      case availability -> config.urls.availability;
     };
   }
 

@@ -211,65 +211,8 @@ public class McpToolTests {
 
   // ---- survey ------------------------------------------------------------------------------------
 
-  @Test
-  public void itCanAskTheCommunitySomething() throws Exception {
-    McpClient.Response asked = grok.call("survey_ask",
-        "prompt", "What should we do in the spring?", "kind", "free");
-    assertEquals(200, asked.status());
-    long id = asked.toolResult().path("id").asLong();
-    assertTrue(id > 0);
 
-    Browser member = new Browser(server.port, "example.org");
-    member.get("/register");
-    member.submit(Map.of("email", "member@example.com"));
-    member.submit(Map.of("code", server.mail().lastCodeFor("member@example.com")));
-    assertTrue("and everybody is asked it", member.get("/survey")
-        .contains("What should we do in the spring?"));
-  }
 
-  @Test
-  public void itCanSummarizeWhatEverybodySaid() throws Exception {
-    grok.call("survey_ask", "prompt", "Why did you join?", "kind", "free");
-    grok.call("survey_ask", "prompt", "How often can you make it?", "kind", "choice",
-        "options", "weekly\nmonthly");
-    var questions = server.auth.forDomain("example.org").people.publishedQuestions();
-    long why = questions.get(0).id();
-    long often = questions.get(1).id();
-
-    for (String email : new String[]{"one@example.com", "two@example.com"}) {
-      Browser member = new Browser(server.port, "example.org");
-      member.get("/register");
-      member.submit(Map.of("email", email));
-      member.submit(Map.of("code", server.mail().lastCodeFor(email)));
-      member.get("/survey");
-      member.submitTo("/survey", Map.of("action", "answers",
-          "q" + why, "a friend brought me", "q" + often, "weekly"));
-    }
-    server.auth.forDomain("example.org").survey.settle(5000);
-
-    JsonNode summary = grok.call("survey_summarize").toolResult();
-    assertEquals(2, summary.path("respondents").asInt());
-    JsonNode free = summary.path("questions").get(0);
-    assertEquals(2, free.path("answered").asInt());
-    assertTrue("free text comes back verbatim, because that is where the substance is",
-        free.path("answers").toString().contains("a friend brought me"));
-    JsonNode choice = summary.path("questions").get(1);
-    assertEquals("and choices come back tallied", 2, choice.path("tally").path("weekly").asInt());
-    assertFalse("nobody is named", summary.toString().contains("one@example.com"));
-  }
-
-  @Test
-  public void retiringAQuestionIsASoftDelete() throws Exception {
-    grok.call("survey_ask", "prompt", "Going away?", "kind", "free");
-    long id = server.auth.forDomain("example.org").people.publishedQuestions().get(0).id();
-    McpClient.Response retired = grok.call("survey_delete", "id", id);
-    assertTrue(retired.toolResult().path("note").asText().contains("admin"));
-
-    assertTrue("it is off the live list",
-        server.auth.forDomain("example.org").people.allQuestions().isEmpty());
-    assertEquals("and waiting for a person to commit the cleanup",
-        1, server.auth.forDomain("example.org").people.deletedQuestions().size());
-  }
 
   // ---- read only ------------------------------------------------------------------------------------
 
@@ -348,76 +291,5 @@ public class McpToolTests {
     assertEquals(5, log.recorded());
   }
 
-  @Test
-  public void aQuestionCanBeReadOnItsOwnSoAgentsCanFanOut() throws Exception {
-    // the shape the work actually has: list the questions, take one each, read everything said
-    // about it, and put the summaries back together
-    grok.call("survey_ask", "prompt", "What would you like more of?", "kind", "free");
-    grok.call("survey_ask", "prompt", "How far do you travel?", "kind", "choice",
-        "options", "walking\ndriving");
-    var questions = server.auth.forDomain("example.org").people.publishedQuestions();
-    long first = questions.get(0).id();
-    long second = questions.get(1).id();
 
-    for (String email : new String[]{"one@example.com", "two@example.com"}) {
-      Browser member = new Browser(server.port, "example.org");
-      member.get("/register");
-      member.submit(Map.of("email", email));
-      member.submit(Map.of("code", server.mail().lastCodeFor(email)));
-      member.get("/survey");
-      member.submitTo("/survey", Map.of("action", "answers",
-          "q" + first, email.startsWith("one") ? "more bread" : "more chairs",
-          "q" + second, "walking"));
-    }
-    server.auth.forDomain("example.org").survey.settle(5000);
-
-    JsonNode one = grok.call("survey_answers", "id", first).toolResult();
-    assertEquals("What would you like more of?", one.path("prompt").asText());
-    assertEquals(2, one.path("answered").asInt());
-    assertTrue(one.path("answers").toString().contains("more bread"));
-    assertTrue(one.path("answers").toString().contains("more chairs"));
-    assertFalse("numbered, never named", one.toString().contains("@example.com"));
-
-    JsonNode two = grok.call("survey_answers", "id", second).toolResult();
-    assertEquals("a choice comes back tallied as well", 2,
-        two.path("tally").path("walking").asInt());
-    assertEquals("and the respondent numbers line up across questions, without naming anybody",
-        one.path("answers").get(0).path("respondent").asInt(),
-        two.path("answers").get(0).path("respondent").asInt());
-  }
-
-  @Test
-  public void anEventComesBackWithItsGuestsAndItsConversationInOrder() throws Exception {
-    // today, so answering is still open and the comment lands "on the day" -- the three phases
-    // themselves are pinned by CommentPhase's own tests
-    java.time.LocalDate day = java.time.LocalDate.now();
-    admin.get("/admin/calendar/new");
-    admin.submitTo("/admin/calendar", Map.of("action", "save", "title", "Supper club",
-        "body", "Bring a chair.", "location", "The hall", "place_id", "",
-        "starts_on", day.toString(), "ends_on", day.toString(), "start_time", "7pm",
-        "capacity", "", "published", "on"));
-    long eventId = server.auth.forDomain("example.org").calendar.all(10).get(0).id();
-
-    Browser member = new Browser(server.port, "example.org");
-    member.get("/register");
-    member.submit(Map.of("email", "ana@example.com"));
-    member.submit(Map.of("code", server.mail().lastCodeFor("ana@example.com")));
-    long anaId = server.auth.forDomain("example.org").users.byEmail("ana@example.com").id();
-    admin.get("/admin/people");
-    admin.submitTo("/admin/people", Map.of("action", "approve", "user", Long.toString(anaId)));
-    member.get("/events/" + eventId);
-    member.submitTo("/events", Map.of("action", "rsvp", "event", Long.toString(eventId),
-        "answer", "going", "party", "1", "note", ""));
-    member.submitTo("/events", Map.of("action", "comment", "event", Long.toString(eventId),
-        "body", "That was good, we should do it again."));
-
-    JsonNode context = grok.call("event_context", "id", eventId).toolResult();
-    assertEquals("Supper club", context.path("title").asText());
-    assertEquals(1, context.path("guests").size());
-    assertEquals("going", context.path("guests").get(0).path("answer").asText());
-    assertEquals(1, context.path("comments").size());
-    assertEquals("a comment on the day is a different conversation from one before or after",
-        "during", context.path("comments").get(0).path("phase").asText());
-    assertTrue(context.path("comments").get(0).path("said").asText().contains("do it again"));
-  }
 }

@@ -51,35 +51,10 @@ public class TestServer implements AutoCloseable {
   /** the ACME challenges this server would answer, for the certificate tests */
   public final io.hearth.certs.Challenges challenges;
   /** the live channel, so a test can watch what a browser would be told */
-  public final io.hearth.live.Live live;
   /** where uploads land in a test: a directory thrown away with everything else */
   public final io.hearth.attach.AttachmentStore attachmentFiles;
   /** the serving route, so a test can look at the cache */
   public final io.hearth.attach.AttachmentRoutes attachments;
-  /**
-   * The availability grids, with a fetcher that answers nothing.
-   *
-   * No test may reach the network, so the seam is filled with a refusal by default; a test about
-   * calendars replaces it with {@link #fetching}, which is exactly the point of the seam.
-   */
-  public final io.hearth.availability.Availabilities availabilities;
-  /** what a fetch answers in this server; a test sets it before adding a link */
-  public static final java.util.concurrent.atomic.AtomicReference<
-      io.hearth.availability.CalendarFetch.Fetcher> fetching =
-          new java.util.concurrent.atomic.AtomicReference<>(
-              io.hearth.availability.CalendarFetch.NONE);
-  /**
-   * The geocoder, which answers nothing unless a test says otherwise.
-   *
-   * The same shape as {@link #fetching} and for the same reason: no test may reach the network, and
-   * a seam filled with a refusal is what makes that true by construction rather than by everybody
-   * remembering.
-   */
-  public static final java.util.concurrent.atomic.AtomicReference<io.hearth.places.Geocoder>
-      geocoding = new java.util.concurrent.atomic.AtomicReference<>(
-          io.hearth.places.Geocoder.NONE);
-  /** the work queue, so a test can wait for it instead of sleeping and hoping */
-  public final io.hearth.async.AsyncQueue async;
   private final WebServer server;
   private final Thread thread;
   private final File ownedStores;
@@ -97,23 +72,9 @@ public class TestServer implements AutoCloseable {
     this.aiLog = new io.hearth.mcp.AiLog();
     this.challenges = new io.hearth.certs.Challenges();
     io.hearth.mcp.AiLog aiLog = this.aiLog;
-    this.live = io.hearth.live.Live.of(tree.all().keySet(), events, verbose);
-    io.hearth.live.Live live = this.live;
-    this.availabilities = io.hearth.availability.Availabilities.of(tree, auth,
-        (url, timeout) -> fetching.get().get(url, timeout), events, verbose);
-    io.hearth.availability.Availabilities availabilities = this.availabilities;
-    AdminRoutes adminRoutes = new AdminRoutes(templates, events, accessLog, aiLog, mailer, live,
-        true, geocoding.get(), io.hearth.common.ServerConfig.defaults(), verbose);
-    adminRoutes.knowsAbout(availabilities);
-    // Paced far faster than the real thing, and backing off in milliseconds rather than minutes:
-    // both constants are promises made to somebody else's service, and this is not talking to one.
-    // The behaviour under test is the shape -- that a failure waits and widens -- not the numbers.
-    this.async = new io.hearth.async.AsyncQueue(verbose, 5, 20);
-    io.hearth.places.Geocodes geocodes =
-        new io.hearth.places.Geocodes(async, geocoding.get(), auth, verbose);
-    adminRoutes.knowsAbout(geocodes);
-    SelfRoutes selfRoutes = new SelfRoutes(templates, mailer, accessLog, verbose);
-    selfRoutes.knowsAbout(geocodes);
+    AdminRoutes adminRoutes = new AdminRoutes(templates, events, accessLog, aiLog, mailer,
+        io.hearth.common.ServerConfig.defaults(), verbose);
+    SelfRoutes selfRoutes = new SelfRoutes(templates, accessLog, verbose);
     // uploads land in a directory of this test's own, thrown away with the databases
     this.attachmentFiles = new io.hearth.attach.DiskAttachments(
         new File(ownedStores != null ? ownedStores : new File(System.getProperty("java.io.tmpdir")),
@@ -130,28 +91,15 @@ public class TestServer implements AutoCloseable {
         adminRoutes,
         selfRoutes,
         new io.hearth.mcp.McpRoutes(templates, aiLog, verbose),
-        new io.hearth.api.ApiRoutes(templates, new io.hearth.web.Flash(), verbose),
-        new io.hearth.availability.AvailabilityRoutes(templates, availabilities, verbose),
         attachmentRoutes,
-        new io.hearth.board.BoardRoutes(templates, verbose),
-        new io.hearth.calendar.CalendarRoutes(templates, verbose),
         new io.hearth.web.PwaRoutes(templates, verbose),
-        new io.hearth.places.PlaceRoutes(templates, verbose),
         new io.hearth.legal.LegalRoutes(templates, verbose),
-        new io.hearth.people.MemberRoutes(templates, verbose),
-        new io.hearth.people.SurveyRoutes(templates, verbose),
-        new io.hearth.tasks.TaskRoutes(templates, verbose),
-        new io.hearth.web.HomeRoutes(templates, verbose),
-        new io.hearth.people.OrientationRoutes(templates, verbose),
-        new io.hearth.live.LiveRoutes(live, verbose),
         challenges, tls, accessLog, verbose);
     auth.start();
     // the same step the real boot does: settings are read by auth.start(), and applying them
     // rebuilds each domain's config before anything serves. A testkit that skipped it would be a
     // testkit where every settings test passed against a server nobody configured.
     auth.applyAllSettings(verbose);
-    availabilities.start();
-    async.start();
     this.thread = new Thread(server, "test-web-server");
     this.thread.setDaemon(true);
     this.thread.start();
@@ -226,8 +174,6 @@ public class TestServer implements AutoCloseable {
     } catch (InterruptedException ex) {
       Thread.currentThread().interrupt();
     }
-    availabilities.shutdown();
-    async.close();
     auth.close();
     stores.close();
     if (ownedStores != null) {

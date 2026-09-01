@@ -348,33 +348,5 @@ public class EditFlowTests {
     assertEquals(about.trim(), profile.about());
   }
 
-  @Test
-  public void aLongSurveyQuestionCanBeAsked() throws Exception {
-    String prompt = "What brings you here? " + prose(2);
-    admin.get("/admin/survey/new");
-    admin.submitToAndFollow("/admin/survey", Map.of("action", "save", "prompt", prompt,
-        "kind", "free", "options", "", "position", "0", "min", "1", "max", "5", "published", "on"));
 
-    var questions = server.auth.forDomain("example.org").people.allQuestions();
-    assertEquals(1, questions.size());
-    assertEquals("a long question used to be refused as if it were blank",
-        prompt.trim(), questions.get(0).prompt().trim());
-  }
-
-  @Test
-  public void aLongAnswerSurvives() throws Exception {
-    admin.get("/admin/survey/new");
-    admin.submitToAndFollow("/admin/survey", Map.of("action", "save", "prompt", "Tell us about you",
-        "kind", "free", "options", "", "position", "0", "min", "1", "max", "5", "published", "on"));
-    long id = server.auth.forDomain("example.org").people.allQuestions().get(0).id();
-
-    Browser member = signIn("member@example.com");
-    String answer = prose(5);
-    member.get("/survey");
-    member.submitTo("/survey", Map.of("action", "answers", "q" + id, answer));
-
-    assertEquals(answer.trim(), server.auth.forDomain("example.org").people.answersOf(
-        server.auth.forDomain("example.org").users.byEmail("member@example.com").id())
-        .answerTo(id).trim());
-  }
 }

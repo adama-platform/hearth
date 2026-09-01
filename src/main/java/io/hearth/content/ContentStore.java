@@ -38,15 +38,6 @@ public class ContentStore {
 
   // ---- content -------------------------------------------------------------------------------
 
-  private Proposals proposals;
-
-  /** suggested edits waiting for somebody to say yes */
-  public synchronized Proposals proposals() {
-    if (proposals == null) {
-      proposals = new Proposals(store, this);
-    }
-    return proposals;
-  }
 
   public ContentVersions versions() {
     return versions;

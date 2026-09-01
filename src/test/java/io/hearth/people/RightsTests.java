@@ -87,56 +87,9 @@ public class RightsTests {
     return server.auth.forDomain("example.org").users.byEmail(email).id();
   }
 
-  /** everything ana can put into the database, so an erasure has something to fail to remove */
-  private long aFullLife() throws Exception {
-    ana.get("/board");
-    ana.submitTo("/board", Map.of("action", "post", "title", "Bread day", "body", "Who is baking?"));
-    long postId = server.auth.forDomain("example.org").board.feed(10).get(0).id();
-    ana.get("/board/" + postId);
-    ana.submitTo("/board", Map.of("action", "reply", "post", Long.toString(postId),
-        "body", "I will bring the flour."));
-
-    LocalDate day = LocalDate.now().plusDays(3);
-    admin.get("/admin/calendar/new");
-    admin.submitTo("/admin/calendar", Map.of("action", "save", "title", "Supper", "body", "",
-        "location", "The hall", "place_id", "", "starts_on", day.toString(),
-        "ends_on", day.toString(), "start_time", "7pm", "capacity", "", "published", "on"));
-    long eventId = server.auth.forDomain("example.org").calendar
-        .upcoming(LocalDate.now(), 5).get(0).id();
-    ana.get("/events/" + eventId);
-    ana.submitTo("/events", Map.of("action", "rsvp", "event", Long.toString(eventId),
-        "answer", "going", "party", "2", "note", "bringing my brother"));
-
-    admin.get("/admin/survey/new");
-    admin.submitTo("/admin/survey", Map.of("action", "save", "prompt", "Why did you join?",
-        "kind", "free", "options", "", "position", "0", "min", "1", "max", "5", "published", "on"));
-    long questionId = server.auth.forDomain("example.org").people.allQuestions().get(0).id();
-    ana.get("/survey");
-    ana.submitTo("/survey", Map.of("action", "answers", "q" + questionId, "a friend brought me"));
-    return postId;
-  }
 
   // ---- a copy of it ----------------------------------------------------------------------------
 
-  @Test
-  public void somebodyCanDownloadEverythingHeldAboutThem() throws Exception {
-    aFullLife();
-    Browser.Page file = ana.get("/self?tab=data&download=export");
-    assertEquals(200, file.status());
-
-    JsonNode data = JSON.readTree(file.body());
-    assertEquals("ana@example.com", data.path("about").asText());
-    assertEquals("Ana Rivera", data.path("profile").path("display_name").asText());
-    assertEquals("I make bread.", data.path("profile").path("about").asText());
-    assertEquals("a friend brought me", data.path("answers").get(0).path("answer").asText());
-    assertEquals("Bread day", data.path("posts").get(0).path("title").asText());
-    assertTrue(data.path("comments").get(0).path("body").asText().contains("flour"));
-    assertEquals("going", data.path("events_you_answered").get(0).path("answer").asText());
-    assertEquals(1, data.path("sessions").size());
-
-    assertFalse("a copy of somebody's data is not a way to resume their session",
-        file.body().contains("token"));
-  }
 
   @Test
   public void theExportIsTheirsAndNobodyElsesToAsk() throws Exception {
@@ -156,61 +109,8 @@ public class RightsTests {
 
   // ---- and getting rid of it -------------------------------------------------------------------
 
-  @Test
-  public void somebodyCanDeleteThemselvesAndTheAddressIsGoneFromEveryTable() throws Exception {
-    long postId = aFullLife();
-    long anaId = idOf("ana@example.com");
 
-    ana.get("/self?tab=data");
-    Browser.Page gone = ana.submitTo("/self", Map.of("action", "leave", "confirm", "delete"));
-    assertEquals(303, gone.status());
-    assertEquals("/", gone.location());
 
-    assertNull("the account", server.auth.forDomain("example.org").users.byEmail("ana@example.com"));
-    assertNull(ana.cookie("hearth_session"));
-    assertTrue("the profile", server.auth.forDomain("example.org").people.profileOf(anaId)
-        .displayName().isEmpty());
-    assertEquals("the answers", 0,
-        server.auth.forDomain("example.org").people.answersOf(anaId).answered());
-    assertNull("their answer to the event",
-        server.auth.forDomain("example.org").calendar.rsvpFor(
-            server.auth.forDomain("example.org").calendar.upcoming(LocalDate.now(), 5).get(0).id(),
-            anaId));
-
-    // the words stay, because other people replied to them
-    assertEquals("Bread day",
-        server.auth.forDomain("example.org").board.postById(postId).title());
-    assertFalse(server.auth.forDomain("example.org").board.postById(postId).removed());
-
-    // and this is the test that matters: the address, in every column of every table
-    assertEquals("ana@example.com is still somewhere in the database",
-        java.util.List.of(), rowsMentioning("ana@example.com"));
-  }
-
-  @Test
-  public void anAdministratorCanDoItForSomebodyWhoWroteIn() throws Exception {
-    long postId = aFullLife();
-    long anaId = idOf("ana@example.com");
-
-    admin.get("/admin/people/review/" + anaId);
-    Browser.Page done = admin.submitToAndFollow("/admin/people",
-        Map.of("action", "erase", "user", Long.toString(anaId), "confirm", "delete"));
-    assertTrue(done.body(), done.contains("is gone"));
-    assertNull(server.auth.forDomain("example.org").users.byEmail("ana@example.com"));
-    assertEquals(java.util.List.of(), rowsMentioning("ana@example.com"));
-    assertFalse("what they wrote is still there by default",
-        server.auth.forDomain("example.org").board.postById(postId).removed());
-  }
-
-  @Test
-  public void andCanTakeDownWhatTheyWroteWhenThatIsWhatWasAsked() throws Exception {
-    long postId = aFullLife();
-    long anaId = idOf("ana@example.com");
-    admin.get("/admin/people/review/" + anaId);
-    admin.submitToAndFollow("/admin/people", Map.of("action", "erase",
-        "user", Long.toString(anaId), "confirm", "delete", "and_words", "on"));
-    assertTrue(server.auth.forDomain("example.org").board.postById(postId).removed());
-  }
 
   @Test
   public void aMisclickCannotEndSomebodysMembership() throws Exception {

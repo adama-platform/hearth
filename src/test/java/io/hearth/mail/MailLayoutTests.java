@@ -106,60 +106,8 @@ public class MailLayoutTests {
     assertTrue("one tap should select the whole thing", html.contains("user-select:all"));
   }
 
-  @Test
-  public void allThreeInvitationsRenderOnTheSameLayout() throws Exception {
-    // the invitation used to build its own document, which is how it would have become the one
-    // message that ignored a community's colours
-    for (InviteMail.Touch touch : InviteMail.Touch.values()) {
-      InviteMail.Invitation invitation = new InviteMail.Invitation("Example", "example.org",
-          touch, "https://example.org/register?invite=abc", "https://example.org/p/abc.gif",
-          "Ana suggested I ask you", "ana@example.com",
-          io.hearth.people.InviteConfig.defaults());
-      String html = InviteMail.html(BRAND, invitation);
-      assertTrue(touch.name(), html.contains("legal/terms-of-service"));
-      assertTrue(touch.name(), html.contains("Ana suggested I ask you"));
-      assertTrue(touch.name(), html.contains("<img"));
-      String text = InviteMail.text(BRAND, invitation);
-      assertFalse(touch.name(), text.contains("<"));
-      assertTrue(touch.name(), text.contains("legal/privacy-policy"));
-      assertTrue("and the footer explains an invitation, which needs explaining",
-          text.contains("invited this address"));
-    }
-  }
 
-  @Test
-  public void anInvitationWithNothingOptionalFilledInStillReads() throws Exception {
-    io.hearth.people.InviteConfig bare = new io.hearth.people.InviteConfig(
-        new io.hearth.common.ConfigObject(
-            new com.fasterxml.jackson.databind.ObjectMapper().createObjectNode()
-                .put("tagline", "").put("about", "").put("sign-off", ""), "invites"));
-    InviteMail.Invitation invitation = new InviteMail.Invitation("Example", "example.org",
-        InviteMail.Touch.welcome, "https://example.org/r?invite=abc", null, null, null, bare);
-    String html = InviteMail.html(BRAND, invitation);
-    assertTrue(html.contains("Somebody invited you"));
-    assertFalse("no pixel, no image", html.contains("<img"));
-    assertTrue(InviteMail.text(BRAND, invitation).contains("https://example.org/r?invite=abc"));
-  }
 
-  @Test
-  public void everyFlowSurvivesTheThingsThatCanBeMissing() {
-    // each of these is a real shape: a reset with no link, a notice with nothing quotable, a
-    // digest with a settings link and one without
-    assertTrue(Messages.passwordReset(to(BRAND), "1", "", 10).text().contains("123456".substring(0, 1)));
-    assertFalse(Messages.passwordReset(to(BRAND), "1", "  ", 10).text().contains("Or open"));
-    assertTrue(Messages.passwordReset(to(BRAND), "1", "https://example.org/x", 10).text()
-        .contains("Or open"));
-    assertFalse(Messages.boardNotice(to(BRAND),
-        new Mailer.Notice("replied", "ana", null, "https://example.org/b")).html()
-        .contains("border-left:3px solid"));
-    assertTrue(Messages.boardNotice(to(BRAND),
-        new Mailer.Notice("replied", "ana", "the words", "https://example.org/b")).text()
-        .contains("the words"));
-    assertTrue(Messages.digest(to(BRAND), new Mailer.Digest("this week",
-        java.util.List.of(new Mailer.Notice("posted", "ana", "", "x")),
-        "https://example.org/board", "/self?tab=notifications")).text()
-        .contains("Change how often"));
-  }
 
   @Test
   public void aBrandKnowsWhereEverythingIs() {

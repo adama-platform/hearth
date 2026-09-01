@@ -98,27 +98,8 @@ public final class AttachmentSweep {
         "every version of every page, because restoring one has to still work",
         "SELECT id, CAST(content_id AS VARCHAR), payload, summary FROM "
             + Schema.CONTENT_VERSIONS));
-    sources.add(new Source("suggested edits", "edits waiting for somebody to say yes",
-        "SELECT id, uri, document, note FROM " + Schema.PROPOSALS));
     sources.add(new Source("templates", "what an operator wrote around the pages",
         "SELECT id, name, body, parameters FROM " + Schema.TEMPLATES));
-    sources.add(new Source("board", "posts and the conversations under them",
-        "SELECT id, title, body FROM " + Schema.POSTS));
-    sources.add(new Source("comments", "on the board, on an event, on a place",
-        "SELECT id, CAST(subject_id AS VARCHAR), body FROM " + Schema.COMMENTS));
-    sources.add(new Source("task definitions", "how each thing is done, which is markdown"
-        + " somebody wrote and can hold a picture",
-        "SELECT id, name, summary, instructions FROM " + Schema.TASK_DEFS));
-    sources.add(new Source("tasks", "what is on a project, and the notes on each one",
-        "SELECT id, title, notes FROM " + Schema.TASKS));
-    sources.add(new Source("polls", "what a conversation is deciding, and what is on the table",
-        "SELECT id, question, outcome FROM " + Schema.POLLS));
-    sources.add(new Source("poll options", "the things being voted on",
-        "SELECT id, label, at_time FROM " + Schema.POLL_OPTIONS));
-    sources.add(new Source("places", "the address book, including what each kind records",
-        "SELECT id, name, body, fields FROM " + Schema.PLACES));
-    sources.add(new Source("events", "what an event says about itself",
-        "SELECT id, title, body FROM " + Schema.CALENDAR));
     sources.add(new Source("profiles", "what members wrote about themselves",
         "SELECT id, display_name, about, links FROM " + Schema.PROFILES));
     sources.add(new Source("legal", "the terms and the privacy policy, when a community wrote its own",

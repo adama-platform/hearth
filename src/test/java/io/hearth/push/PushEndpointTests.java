@@ -138,20 +138,6 @@ public class PushEndpointTests {
     assertNotNull(PublicAddress.refuse(""));
   }
 
-  /**
-   * The two callers ask the same question, which is the point of moving it.
-   *
-   * The calendar side adds its own sentence to the refusal, so the wording a member reads still
-   * says what this server was declining to do.
-   */
-  @Test
-  public void theCalendarSideAsksTheSameQuestion() {
-    String refused = io.hearth.availability.CalendarFetch.refusePrivate("127.0.0.1");
-    assertNotNull(refused);
-    assertTrue(refused, refused.contains("private network"));
-    assertTrue(refused, refused.contains("calendars"));
-    assertNull(io.hearth.availability.CalendarFetch.refusePrivate("198.51.100.10"));
-  }
 
   /** and an ordinary public endpoint is still accepted, or the feature is gone */
   @Test

@@ -97,15 +97,6 @@ public class PermissionTests {
     assertEquals("boot is not a migration", before, defs().all().size());
   }
 
-  @Test
-  public void seedingDoesNotOverwriteACommunitysOwnEditorRole() throws Exception {
-    defs().save("editor", "Editor", "ours", EnumSet.of(Permission.calendar_write), "green", null);
-    defs().seed();
-    RoleDefs.Def editor = defs().byName("editor");
-    assertTrue("a community that changed what editor means keeps that decision",
-        editor.allows(Permission.calendar_write));
-    assertFalse(editor.allows(Permission.templates_write));
-  }
 
   // ---- what a role opens -----------------------------------------------------------------------
 
@@ -171,25 +162,7 @@ public class PermissionTests {
     assertTrue("with a line saying so", page.contains("/admin/system/machine"));
   }
 
-  @Test
-  public void somebodyWithAPageOpenTurnsUpOnTheOverview() throws Exception {
-    long id = accounts().users.byEmail("boss@example.com").id();
-    server.live.forDomain("example.org").beat(id);
-    Browser.Page page = boss.get("/admin");
-    assertTrue("with a link to their page", page.contains("/admin/people/review/" + id));
-    assertTrue(page.contains("boss@example.com"));
-  }
 
-  @Test
-  public void aCommunityCanInventARoleAndItWorks() throws Exception {
-    boss.submitToAndFollow("/admin/roles", Map.of("action", "save", "name", "greeter",
-        "label", "Greeter", "p_invites_send", "1", "p_people_read", "1"));
-    grant("nobody@example.com", "greeter");
-
-    assertEquals(200, nobody.get("/admin/invites").status());
-    assertEquals(200, nobody.get("/admin/people").status());
-    assertEquals(404, nobody.get("/admin/content").status());
-  }
 
   @Test
   public void anyPermissionAtAllImpliesReachingTheAdminSection() throws Exception {

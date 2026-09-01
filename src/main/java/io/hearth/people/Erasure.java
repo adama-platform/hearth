@@ -89,52 +89,11 @@ public final class Erasure {
     counts.put("session(s)", accounts.sessions.deleteAllFor(id));
 
     try (Connection connection = accounts.store.connection()) {
-      // an invitation *to* them is a record of their address that nobody needs any more
-      counts.put("invitation(s) to them",
-          update(connection, "DELETE FROM " + Schema.INVITES + " WHERE email = ?",
-              person.email()));
-      // an invitation *from* them stays -- somebody else is on the other end of it, possibly a
-      // member who joined -- with the inviter unnamed
-      counts.put("invitation(s) they sent",
-          update(connection, "UPDATE " + Schema.INVITES + " SET created_by = NULL,"
-              + " created_by_email = '', created_by_name = ? WHERE created_by = ?", GONE, id));
-      // a seat at a supper is not other people's conversation, so it goes
-      counts.put("answer(s) to an event",
-          update(connection, "DELETE FROM " + Schema.RSVPS + " WHERE user_id = ?", id));
-      // including anything they said before they had an account. The address is the only thing
-      // identifying those rows, which is exactly why leaving them would be leaving the address.
-      counts.put("answer(s) from before they joined",
-          update(connection, "DELETE FROM " + Schema.PUBLIC_RSVPS + " WHERE email = ?"
-              + " OR converted_user_id = ?", person.email(), id));
-
-      if (alsoRemoveWhatTheyWrote) {
-        counts.put("post(s) taken down",
-            update(connection, "UPDATE " + Schema.POSTS + " SET removed_at = CURRENT_TIMESTAMP,"
-                + " author_id = 0, author_email = '' WHERE author_id = ?", id));
-        counts.put("comment(s) taken down",
-            update(connection, "UPDATE " + Schema.COMMENTS + " SET removed_at = CURRENT_TIMESTAMP,"
-                + " author_id = 0, author_email = '' WHERE author_id = ?", id));
-      } else {
-        counts.put("post(s) unnamed",
-            update(connection, "UPDATE " + Schema.POSTS
-                + " SET author_id = 0, author_email = '' WHERE author_id = ?", id));
-        counts.put("comment(s) unnamed",
-            update(connection, "UPDATE " + Schema.COMMENTS
-                + " SET author_id = 0, author_email = '' WHERE author_id = ?", id));
-      }
-
-      // and the operator's own trail: who saved a page, who suggested an edit, who put an event on
-      // the calendar. The history stays -- it is a record of what happened to the site rather than
-      // of a person -- with the name taken off it.
+      // and the operator's own trail: who saved a page. The history stays -- it is a record of
+      // what happened to the site rather than of a person -- with the name taken off it.
       counts.put("edit(s) unnamed",
           update(connection, "UPDATE " + Schema.CONTENT_VERSIONS
               + " SET created_by = NULL, created_by_email = ? WHERE created_by = ?", GONE, id));
-      update(connection, "UPDATE " + Schema.PROPOSALS + " SET proposed_by = NULL,"
-          + " proposed_by_email = ? WHERE proposed_by = ?", GONE, id);
-      update(connection, "UPDATE " + Schema.PROPOSALS + " SET decided_by = NULL,"
-          + " decided_by_email = ? WHERE decided_by = ?", GONE, id);
-      update(connection, "UPDATE " + Schema.CALENDAR + " SET created_by = NULL,"
-          + " created_by_email = ? WHERE created_by = ?", GONE, id);
     }
 
     // the request log is in memory and holds an address' worth of identity -- the user id and the

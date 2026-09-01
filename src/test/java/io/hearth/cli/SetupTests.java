@@ -431,39 +431,6 @@ public class SetupTests {
 
   // ---- --setup-gps ------------------------------------------------------------------------------
 
-  @Test
-  public void theGpsWalkthroughSaysWhyTheFamousServicesAreNotOffered() throws Exception {
-    String printed = walk(answers("nominatim", "somebody@example.org"), Setup::gps);
-    assertTrue("the expensive mistake is made before anybody types anything",
-        printed.contains("Google, Mapbox and HERE"));
-    assertTrue(printed.contains("thirty days"));
-    assertTrue("and it says what this server actually does with the answer",
-        printed.contains("writes the coordinate onto the place"));
 
-    JsonNode gps = read(new File(dir, "config.cfg")).get("gps");
-    assertTrue(gps.get("enabled").asBoolean());
-    assertEquals("nominatim", gps.get("service").asText());
-    assertEquals("somebody@example.org", gps.get("contact").asText());
-    assertTrue("no key was asked for", gps.get("key") == null);
-  }
 
-  @Test
-  public void aServiceWithAKeyAsksForOneAndLocksTheFile() throws Exception {
-    walk(answers("opencage", "sk-abc123", "somebody@example.org"), Setup::gps);
-    JsonNode gps = read(new File(dir, "config.cfg")).get("gps");
-    assertEquals("opencage", gps.get("service").asText());
-    assertEquals("sk-abc123", gps.get("key").asText());
-    assertEquals("a key in a file is a file only this user reads",
-        java.util.Set.of(java.nio.file.attribute.PosixFilePermission.OWNER_READ,
-            java.nio.file.attribute.PosixFilePermission.OWNER_WRITE),
-        java.nio.file.Files.getPosixFilePermissions(new File(dir, "config.cfg").toPath()));
-  }
-
-  @Test
-  public void aServiceNobodyOffersChangesNothing() throws Exception {
-    String printed = walk(answers("google"), Setup::gps);
-    assertTrue(printed.contains("not one of them"));
-    assertTrue(printed.contains("nothing was changed"));
-    assertFalse(new File(dir, "config.cfg").isFile());
-  }
 }

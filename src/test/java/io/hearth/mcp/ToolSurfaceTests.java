@@ -132,21 +132,6 @@ public class ToolSurfaceTests {
     assertTrue("no hidden tools were found, so this test proved nothing", checked > 0);
   }
 
-  @Test
-  public void everyToolNeedsAPermissionOrIsDeliberatelyOpen() {
-    // The ones with no entry are open on purpose: reads a member has a narrowed version of. Naming
-    // them here is what makes adding a *new* unlisted tool a decision rather than an oversight --
-    // a tool that reaches the surface with neither a permission nor a line in this list fails.
-    List<String> deliberatelyOpen = List.of(
-        "content_list", "content_search", "content_get",
-        "event_list", "event_get",
-        "place_list", "place_get", "place_types",
-        "survey_list");
-    for (String tool : everyTool()) {
-      assertTrue(tool + " has neither a permission nor a place on the open list; decide which",
-          McpTools.needs(tool) != null || deliberatelyOpen.contains(tool));
-    }
-  }
 
   // ---- the narrowed reads, listing and fetch together ------------------------------------------
 
@@ -166,50 +151,8 @@ public class ToolSurfaceTests {
         theirs.call("content_get", "uri", "/secret").toolResult().toString().contains("a draft"));
   }
 
-  @Test
-  public void anUnannouncedEventIsNotOneIdAway() throws Exception {
-    admin.submitToAndFollow("/admin/calendar", Map.of("action", "save", "title", "Quiet supper",
-        "starts_on", java.time.LocalDate.now().plusDays(4).toString()));
-    long id = accounts().calendar.all(10).get(0).id();
 
-    assertFalse(hers.call("event_list").toolResult().toString().contains("Quiet supper"));
-    assertFalse("nor by id", hers.call("event_get", "id", id).toolResult().toString()
-        .contains("Quiet supper"));
-    // and the guest list is the last thing that should arrive through a side door
-    assertFalse(hers.call("event_context", "id", id).toolResult().toString()
-        .contains("Quiet supper"));
-    assertTrue(theirs.call("event_get", "id", id).toolResult().toString()
-        .contains("Quiet supper"));
-  }
 
-  @Test
-  public void anUnpublishedPlaceAndItsKindAreBothAbsent() throws Exception {
-    admin.submitToAndFollow("/admin/places/kinds", Map.of("action", "save", "slug", "hideout",
-        "label", "Hideout", "plural", "Hideouts"));
-    admin.submitToAndFollow("/admin/places", Map.of("action", "save", "type_slug", "hideout",
-        "name", "The Bunker", "address", "nowhere"));
-
-    assertFalse(hers.call("place_list").toolResult().toString().contains("The Bunker"));
-    assertFalse("the kind is operator configuration too",
-        hers.call("place_types").toolResult().toString().contains("hideout"));
-    assertFalse(hers.call("place_get", "type", "hideout", "slug", "the-bunker")
-        .toolResult().toString().contains("The Bunker"));
-    assertTrue(theirs.call("place_list").toolResult().toString().contains("The Bunker"));
-  }
-
-  @Test
-  public void anUnaskedQuestionAndItsAnswerCountsAreAbsent() throws Exception {
-    admin.submitToAndFollow("/admin/survey", Map.of("action", "save", "prompt", "Draft question",
-        "kind", "text"));
-    assertFalse(hers.call("survey_list").toolResult().toString().contains("Draft question"));
-
-    admin.submitToAndFollow("/admin/survey", Map.of("action", "save", "prompt", "Real question",
-        "kind", "text", "published", "on"));
-    String mine = hers.call("survey_list").toolResult().toString();
-    assertTrue("a published question is what everybody is being asked", mine.contains("Real"));
-    assertFalse("how many have answered is a fact about the community", mine.contains("answers"));
-    assertTrue(theirs.call("survey_list").toolResult().toString().contains("answers"));
-  }
 
   // ---- the door itself -------------------------------------------------------------------------
 

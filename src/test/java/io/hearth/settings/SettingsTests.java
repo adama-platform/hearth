@@ -37,7 +37,7 @@ public class SettingsTests {
   public void setUp() throws Exception {
     configs = Configs.dir().domain("example.org",
         "{\"name\":\"Example Community\",\"admin_emails\":[\"boss@example.com\"],"
-            + "\"board\":{\"expiry-days\":60}}");
+            + "\"units\":\"metric\"}");
     server = TestServer.ofConfigs(configs.file());
     admin = signIn("boss@example.com");
   }
@@ -116,8 +116,7 @@ public class SettingsTests {
         "api.enabled", "api.token-days", "api.max-tokens",
         "attachments.extensions", "attachments.max-bytes", "attachments.check-referrer",
         "attachments.allowed-referrers",
-        "availability.fetch-timeout-seconds",
-        "gps.key", "gps.contact", "urls.login", "urls.admin", "cache.ttl-seconds"};
+        "urls.login", "urls.admin", "cache.ttl-seconds"};
     for (String key : mustNotMove) {
       assertFalse(key + " must stay in the config file", Settings.isKnown(key));
       assertNull(key, Settings.byKey(key));
@@ -226,23 +225,7 @@ public class SettingsTests {
     assertEquals("Example Community", server.tree.exact("example.org").name);
   }
 
-  @Test
-  public void aNumberSettingLandsOnTheTypedConfig() throws Exception {
-    assertEquals(60, server.tree.exact("example.org").board.expiryDays);
-    save(Map.of(field("board.expiry-days"), "14"));
-    assertEquals(14, server.tree.exact("example.org").board.expiryDays);
-  }
 
-  @Test
-  public void switchingASurfaceOffFromTheAdminSectionStopsItAnswering() throws Exception {
-    assertEquals(200, admin.get("/places").status());
-
-    save(Map.of(field("disabled"), "places"));
-
-    assertFalse(server.tree.exact("example.org").has(io.hearth.vhost.Surface.places));
-    assertEquals("a surface switched off here is off everywhere at once",
-        404, admin.get("/places").status());
-  }
 
   @Test
   public void theClockIsASettingAndMovesEverythingThatAsksForIt() throws Exception {
@@ -270,13 +253,6 @@ public class SettingsTests {
     assertTrue(page.body(), page.body().toLowerCase().contains("timezone"));
   }
 
-  @Test
-  public void anUnknownSurfaceNameIsRefusedRatherThanIgnored() throws Exception {
-    save(Map.of(field("disabled"), "bicycles"));
-    assertNull(accounts().settings.get("disabled"));
-    assertTrue("everything is still on",
-        server.tree.exact("example.org").has(io.hearth.vhost.Surface.places));
-  }
 
   // ---- who may ----------------------------------------------------------------------------------
 

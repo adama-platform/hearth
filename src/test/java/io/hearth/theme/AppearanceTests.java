@@ -220,27 +220,6 @@ public class AppearanceTests {
     }
   }
 
-  @Test
-  public void everyKindOfMessageLinksToTheTerms() {
-    MailBrand brand = MailBrand.standard("example.org", "Example Community");
-    for (Messages.Built built : java.util.List.of(
-        Messages.loginCode(to(brand), "123456", 10),
-        Messages.registrationCode(to(brand), "123456", 10),
-        Messages.passwordReset(to(brand), "123456", "https://example.org/reset", 10),
-        Messages.twoFactorCode(to(brand), "123456", 10),
-        Messages.passwordChanged(to(brand)),
-        Messages.boardNotice(to(brand), new io.hearth.mail.Mailer.Notice("replied", "ana", "hi",
-            "https://example.org/board/1")),
-        Messages.digest(to(brand), new io.hearth.mail.Mailer.Digest("today",
-            java.util.List.of(new io.hearth.mail.Mailer.Notice("posted", "ana", "", "x")),
-            "https://example.org/board", null)))) {
-      assertTrue("the html half", built.html().contains("https://example.org/legal/terms-of-service"));
-      assertTrue("and the text half, which is what a filter reads",
-          built.text().contains("https://example.org/legal/terms-of-service"));
-      assertTrue("and it says what the link is for",
-          built.html().contains("means you accept its"));
-    }
-  }
 
   @Test
   public void aPaleAccentGetsDarkTextOnItsButtons() {

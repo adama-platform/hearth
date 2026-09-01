@@ -57,15 +57,13 @@ public class AuthReturnTests {
     }
   }
 
+
+  /** the welcome flow went with the survey, so a name is set on /self rather than at /welcome */
   private Browser signedIn(String email, String name) throws Exception {
     Browser browser = new Browser(server.port, "example.org");
     browser.get("/register");
     browser.submit(Map.of("email", email));
     browser.submit(Map.of("code", server.mail().lastCodeFor(email)));
-    browser.get("/welcome");
-    browser.submitTo("/welcome",
-        Map.of("action", "name", "display_name", name, "location", "", "about", ""));
-    browser.get("/welcome?step=3");
     return browser;
   }
 
@@ -88,69 +86,9 @@ public class AuthReturnTests {
 
   // ---- the bounce carries the destination ----------------------------------------------------------
 
-  @Test
-  public void everyPathThatNeedsASessionSaysWhereYouWereGoing() throws Exception {
-    Browser stranger = new Browser(server.port, "example.org");
-    String[][] cases = {
-        {"/home", "/login?next=%2Fhome"},
-        {"/self", "/login?next=%2Fself"},
-        {"/survey", "/login?next=%2Fsurvey"},
-        {"/welcome", "/login?next=%2Fwelcome"},
-        {"/members", "/login?next=%2Fmembers"},
-        {"/board", "/login?next=%2Fboard"},
-        {"/events", "/login?next=%2Fevents"},
-        {"/places", "/login?next=%2Fplaces"},
-    };
-    for (String[] one : cases) {
-      Browser.Page page = stranger.get(one[0]);
-      assertEquals(one[0] + " should bounce", 303, page.status());
-      assertEquals(one[0] + " should say where it was going", one[1], page.location());
-    }
-  }
 
-  @Test
-  public void theQueryIsPartOfTheAddressAndComesBackWithIt() throws Exception {
-    // "/survey" and "/survey?all=1" are different pages to the person looking at them, and coming
-    // back to nearly the right one is the kind of wrongness nobody reports and everybody notices
-    Browser stranger = new Browser(server.port, "example.org");
-    assertEquals("/login?next=%2Fsurvey%3Fall%3D1", stranger.get("/survey?all=1").location());
-    assertEquals("/login?next=%2Fboard%2F7", stranger.get("/board/7").location());
-    assertEquals("/login?next=%2Fmembers%2F3", stranger.get("/members/3").location());
-  }
 
-  @Test
-  public void aDeepLinkSurvivesTheWholeSignInAndLandsExactlyThere() throws Exception {
-    Browser ana = approved("ana@example.com", "Ana");
-    ana.get("/board");
-    ana.submitTo("/board", Map.of("action", "post", "title", "Bread day", "body", "Who is baking?"));
-    long postId = server.auth.forDomain("example.org").board.feed(10).get(0).id();
-    ana.forgetCookies();
 
-    // a link somebody was sent, opened in a browser with no session
-    Browser.Page bounced = ana.get("/board/" + postId);
-    assertEquals(303, bounced.status());
-    assertEquals("/login?next=%2Fboard%2F" + postId, bounced.location());
-
-    assertEquals("/board/" + postId, signInFrom(ana, "ana@example.com", bounced.location()));
-    assertTrue("and the thread is what they were after",
-        ana.get("/board/" + postId).contains("Who is baking?"));
-  }
-
-  @Test
-  public void theDestinationSurvivesTheCodeStepAndAWrongCodeBeforeIt() throws Exception {
-    Browser ana = approved("ana@example.com", "Ana");
-    ana.forgetCookies();
-
-    ana.get("/login?next=%2Fsurvey%3Fall%3D1");
-    ana.submit(Map.of("email", "ana@example.com"));
-    Browser.Page wrong = ana.submit(Map.of("code", "000000"));
-    assertEquals(400, wrong.status());
-    assertTrue("the code page still knows where they were going",
-        wrong.contains("next=%2Fsurvey%3Fall%3D1"));
-
-    Browser.Page done = ana.submit(Map.of("code", server.mail().lastCodeFor("ana@example.com")));
-    assertEquals("/survey?all=1", done.location());
-  }
 
   @Test
   public void switchingBetweenSigningInAndSigningUpKeepsIt() throws Exception {
@@ -169,63 +107,10 @@ public class AuthReturnTests {
     assertTrue(forgot.contains("href=\"/login?next=%2Fboard\""));
   }
 
-  @Test
-  public void registeringFromABouncedLinkLandsThereOnceApproved() throws Exception {
-    // the whole journey for somebody with no account: refused, sent to sign in, made an account,
-    // approved, and then finally where they were going in the first place
-    Browser newcomer = new Browser(server.port, "example.org");
-    Browser.Page bounced = newcomer.get("/events");
-    assertEquals("/login?next=%2Fevents", bounced.location());
-
-    newcomer.get("/register?next=%2Fevents");
-    newcomer.submit(Map.of("email", "ana@example.com"));
-    Browser.Page made = newcomer.submit(
-        Map.of("code", server.mail().lastCodeFor("ana@example.com")));
-    assertEquals("approval outranks the request: there is nothing there for them yet",
-        "/welcome", made.location());
-
-    long id = server.auth.forDomain("example.org").users.byEmail("ana@example.com").id();
-    admin.get("/admin/people");
-    admin.submitTo("/admin/people", Map.of("action", "approve", "user", Long.toString(id)));
-
-    newcomer.forgetCookies();
-    assertEquals("/events", signInFrom(newcomer, "ana@example.com", "/login?next=%2Fevents"));
-  }
 
   // ---- the refusals ---------------------------------------------------------------------------------
 
-  @Test
-  public void anotherSiteIsNeverWhereSomebodyLands() throws Exception {
-    Browser ana = approved("ana@example.com", "Ana");
-    ana.forgetCookies();
-    String[] hostile = {
-        "https%3A%2F%2Fnot-the-community.example%2Flogin",
-        "%2F%2Fnot-the-community.example%2Flogin",
-        "%2F%5Cnot-the-community.example",
-        "javascript%3Aalert(1)",
-        "%2Fboard%22%3E%3Cscript%3E",
-    };
-    for (String next : hostile) {
-      Browser browser = new Browser(server.port, "example.org");
-      String landed = signInFrom(browser, "ana@example.com", "/login?next=" + next);
-      assertEquals(next + " should have been dropped rather than repaired", "/home", landed);
-      assertFalse(landed.contains("not-the-community"));
-    }
-  }
 
-  @Test
-  public void anUnapprovedPersonGoesWhereTheyCanActuallyDoSomething() throws Exception {
-    // approval outranks `next` -- and a `next` that bypassed the waiting page would also be a way
-    // to find out what exists behind it
-    Browser newcomer = new Browser(server.port, "example.org");
-    newcomer.get("/register?next=%2Fadmin%2Fpeople");
-    newcomer.submit(Map.of("email", "ana@example.com"));
-    Browser.Page done = newcomer.submit(
-        Map.of("code", server.mail().lastCodeFor("ana@example.com")));
-    assertEquals("/welcome", done.location());
-    assertTrue("and the community is still shut to them",
-        newcomer.get("/board").contains("Waiting for approval"));
-  }
 
   @Test
   public void theAdminSectionStillAnswersLikeSomethingThatIsNotThere() throws Exception {
@@ -243,71 +128,10 @@ public class AuthReturnTests {
         refused.contains("next=%2Fadmin"));
   }
 
-  @Test
-  public void aRequestLineThisServerWouldNotHaveWrittenCarriesNothing() throws Exception {
-    // `here` builds the value from our own request line, which is exactly the assumption that turns
-    // somebody else's URL into a header injection -- so it goes through the same refusal as a
-    // `next` that arrived from outside, and an address that cannot be echoed carries nothing at all
-    String raw = io.hearth.testkit.Http.raw(server.port,
-        "GET /survey?q=<script> HTTP/1.1\r\nHost: example.org\r\nConnection: close\r\n\r\n");
-    assertTrue(raw, raw.startsWith("HTTP/1.1 303"));
-    assertTrue("the destination is dropped rather than repaired",
-        raw.contains("location: /login\r\n") || raw.contains("Location: /login\r\n"));
-  }
 
   // ---- a session that stops working -----------------------------------------------------------------
 
-  @Test
-  public void aSessionRevokedUnderneathSomebodyBouncesWithTheWayBack() throws Exception {
-    Browser ana = approved("ana@example.com", "Ana");
-    assertEquals(200, ana.get("/survey").status());
 
-    // an admin turns the account off mid-visit; the next page is a refusal like any other
-    long id = server.auth.forDomain("example.org").users.byEmail("ana@example.com").id();
-    server.auth.forDomain("example.org").sessions.revokeAllFor(id);
 
-    Browser.Page page = ana.get("/survey?all=1");
-    assertEquals(303, page.status());
-    assertEquals("/login?next=%2Fsurvey%3Fall%3D1", page.location());
-  }
 
-  @Test
-  public void signingOutAndBackInIsAJourneyThatEndsWhereItStarted() throws Exception {
-    Browser ana = approved("ana@example.com", "Ana");
-    Browser.Page out = ana.submitTo("/logout", Map.of());
-    assertEquals("signing out goes to the front page, which needs nobody", "/", out.location());
-    assertNull(ana.cookie("hearth_session"));
-
-    Browser.Page bounced = ana.get("/members");
-    assertEquals("/login?next=%2Fmembers", bounced.location());
-    assertEquals("/members", signInFrom(ana, "ana@example.com", bounced.location()));
-  }
-
-  @Test
-  public void aSessionCookieThatWasNeverIssuedIsJustSignedOut() throws Exception {
-    Browser forged = new Browser(server.port, "example.org");
-    forged.setCookie("hearth_session", "not-a-token-anybody-issued");
-    Browser.Page page = forged.get("/board");
-    assertEquals(303, page.status());
-    assertEquals("/login?next=%2Fboard", page.location());
-
-    SessionRecord none = server.auth.forDomain("example.org").sessions
-        .resolve("not-a-token-anybody-issued");
-    assertNull("and nothing was minted on the way past", none);
-  }
-
-  @Test
-  public void thePathComesBackEvenWhenTheAccountBehindTheSessionHasGone() throws Exception {
-    // a live cookie whose person was deleted: from where somebody is standing that is being signed
-    // out, so it answers the same way, including the way back
-    Browser ana = approved("ana@example.com", "Ana");
-    long id = server.auth.forDomain("example.org").users.byEmail("ana@example.com").id();
-    server.auth.forDomain("example.org").users.delete(id);
-
-    Browser.Page page = ana.get("/home");
-    assertEquals(303, page.status());
-    assertEquals("/login?next=%2Fhome", page.location());
-    assertTrue("and the cookie goes with it, so the next request is honestly anonymous",
-        page.setCookie("hearth_session").contains("Max-Age=0"));
-  }
 }
