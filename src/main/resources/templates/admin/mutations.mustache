@@ -1,0 +1,25 @@
+{{<shell}}{{$content}}
+<h1>Mutations</h1>
+<p class="hint">An address that accepts a <strong>POST</strong> and runs a program. A page renders
+  and never writes; this is where writing lives &mdash; a different address, a different method, and
+  a signed-in member with a valid form token. That split is what makes it safe to say a crawler
+  cannot change anything by reading the site.</p>
+
+<div class="doing"><a class="btn" href="{{newUrl}}">New mutation</a></div>
+
+{{^any}}<p class="hint">None yet.</p>{{/any}}
+{{#any}}
+<p class="count">{{count}}</p>
+<table>
+  <thead><tr><th>address</th><th>state</th><th>updated</th><th></th></tr></thead>
+  <tbody>{{#mutations}}<tr>
+    <td class="mono"><a href="{{editUrl}}">{{uri}}</a></td>
+    <td>{{#enabled}}<span class="pill good">answering</span>{{/enabled}}{{^enabled}}<span class="pill dim">off</span>{{/enabled}}</td>
+    <td class="dim mono">{{updated}}</td>
+    <td class="actions"><a href="{{editUrl}}">edit</a></td>
+  </tr>{{/mutations}}</tbody>
+</table>
+{{/any}}
+<p class="hint">Tables are declared under <a href="{{tablesUrl}}">Tables</a>; each one a mutation can
+  change gives it a <code>_merge_by_id</code> function.</p>
+{{/content}}{{/shell}}

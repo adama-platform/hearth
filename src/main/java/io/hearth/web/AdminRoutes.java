@@ -224,6 +224,7 @@ public class AdminRoutes {
         case roles -> actOnRole(accounts, form, me);
         case cleanup -> actOnCleanup(accounts, form, me);
         case tables -> actOnTable(config, accounts, form, me);
+        case mutations -> actOnMutation(config, accounts, form, me);
         default -> Outcome.refused("That is not something this page can do.");
       };
     }
@@ -712,6 +713,34 @@ public class AdminRoutes {
                 + ".json\""});
         return;
       }
+      case rows -> {
+        // /admin/tables/rows/<table>[/list|/new|/row/<id>] -- the panel answers on its own path,
+        // so the filter box refreshes in place using the same script every other listing uses
+        String[] parts = target.id().split("/", 3);
+        String tableName = parts[0];
+        String what = parts.length > 1 ? parts[1] : "";
+        if (what.equals("list")) {
+          recorder.status(200);
+          Responses.send(ctx, req, HttpResponseStatus.OK, "text/html; charset=utf-8",
+              renderNamed("admin/rows_panel", rowsPanelModel(accounts, config, tableName, req)),
+              new String[]{HttpHeaderNames.SET_COOKIE.toString(),
+                  Cookies.csrf(accounts.security, csrf)});
+          return;
+        }
+        if (what.equals("new") || what.equals("row")) {
+          template = "admin/rows_form";
+          rowFormModel(model, accounts, config, tableName,
+              what.equals("row") && parts.length > 2 ? parts[2] : null);
+        } else {
+          template = "admin/rows";
+          model.putAll(rowsPanelModel(accounts, config, tableName, req));
+          model.put("panel", new String(
+              renderNamed("admin/rows_panel", rowsPanelModel(accounts, config, tableName, req)),
+              StandardCharsets.UTF_8));
+          model.put("panelUrl", AdminView.Section.tables.path(config)
+              + "/rows/" + tableName + "/list");
+        }
+      }
       case history -> {
         template = "admin/content_history";
         historyModel(config, accounts, model, target.id());
@@ -911,6 +940,7 @@ public class AdminRoutes {
       case caching -> model.put("capacity", accessLog.capacity());
       case cleanup -> cleanup(model, accounts);
       case tables -> tablesSection(model, accounts, config, req);
+      case mutations -> mutationsSection(model, accounts, config);
       case logs -> {
         model.put("q", orEmpty(Forms.query(req.uri(), "q")));
         model.put("errorsOnly", "1".equals(Forms.query(req.uri(), "errors")));
@@ -1334,6 +1364,142 @@ public class AdminRoutes {
     model.put("count", rows.size());
   }
 
+  private byte[] renderNamed(String template, Map<String, Object> model) {
+    return templates.render(template, model);
+  }
+
+  /**
+   * The rows of one table, filtered, the way every other listing here works.
+   *
+   * <b>The filter is a scan over the page, in Java.</b> Not SQL: the whole point of the table layer
+   * is that a query is a declared index, and a free-text `LIKE '%...%'` over arbitrary columns is
+   * exactly the thing that design refuses to let a *page* do. The admin browsing a few hundred rows
+   * is a different case from a program serving a request, so it gets the honest slow answer rather
+   * than a new query shape nobody declared.
+   *
+   * <b>Everything is shown, hidden rows included</b>, with the flag, because this is the screen
+   * where somebody decides what hidden means.
+   */
+  private Map<String, Object> rowsPanelModel(Accounts accounts, DomainConfig config,
+                                             String tableName, FullHttpRequest req)
+      throws SQLException {
+    LinkedHashMap<String, Object> model = new LinkedHashMap<>();
+    String prefix = AdminView.Section.tables.path(config) + "/rows/" + tableName;
+    model.put("action", prefix);
+    model.put("adminUrl", config.urls.admin);
+    model.put("table", tableName);
+    model.put("newUrl", prefix + "/new");
+    model.put("backUrl", AdminView.Section.tables.path(config));
+    String query = orEmpty(Forms.query(req.uri(), "q")).toLowerCase(Locale.ROOT);
+    String show = orEmpty(Forms.query(req.uri(), "show"));
+    model.put("q", query);
+    model.put("show", show);
+    io.hearth.tables.UserTable table = accounts.tables == null ? null
+        : accounts.tables.byName(tableName);
+    if (table == null) {
+      model.put("missing", true);
+      model.put("rows", new ArrayList<>());
+      model.put("any", false);
+      return model;
+    }
+    ArrayList<Map<String, Object>> columns = new ArrayList<>();
+    for (io.hearth.tables.UserField field : table.fields()) {
+      LinkedHashMap<String, Object> one = new LinkedHashMap<>();
+      one.put("name", field.name());
+      columns.add(one);
+    }
+    model.put("columns", columns);
+    ArrayList<Map<String, Object>> rows = new ArrayList<>();
+    for (Map<String, Object> row : accounts.tables.all(tableName,
+        io.hearth.tables.UserTables.See.everything)) {
+      boolean hidden = Boolean.TRUE.equals(row.get(io.hearth.tables.UserTable.HIDDEN));
+      if (show.equals("hidden") && !hidden) {
+        continue;
+      }
+      if (show.equals("visible") && hidden) {
+        continue;
+      }
+      if (!query.isEmpty() && !matchesRow(row, query)) {
+        continue;
+      }
+      LinkedHashMap<String, Object> one = new LinkedHashMap<>();
+      one.put("id", row.get("id"));
+      one.put("hidden", hidden);
+      ArrayList<Map<String, Object>> cells = new ArrayList<>();
+      for (io.hearth.tables.UserField field : table.fields()) {
+        LinkedHashMap<String, Object> cell = new LinkedHashMap<>();
+        Object value = row.get(field.name());
+        cell.put("value", value == null ? "" : shorten(String.valueOf(value)));
+        cells.add(cell);
+      }
+      one.put("cells", cells);
+      one.put("editUrl", prefix + "/row/" + row.get("id"));
+      rows.add(one);
+    }
+    model.put("rows", rows);
+    model.put("any", !rows.isEmpty());
+    model.put("count", rows.size());
+    return model;
+  }
+
+  private static boolean matchesRow(Map<String, Object> row, String query) {
+    for (Map.Entry<String, Object> entry : row.entrySet()) {
+      if (entry.getValue() != null
+          && String.valueOf(entry.getValue()).toLowerCase(Locale.ROOT).contains(query)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /** a cell in a listing is a glance, not the value; the editor is where the whole thing is */
+  private static String shorten(String value) {
+    return value.length() <= 60 ? value : value.substring(0, 57) + "...";
+  }
+
+  /** the insert form, or one row being edited */
+  private void rowFormModel(Map<String, Object> model, Accounts accounts, DomainConfig config,
+                            String tableName, String rowId) throws SQLException {
+    String prefix = AdminView.Section.tables.path(config) + "/rows/" + tableName;
+    model.put("action", prefix);
+    model.put("backUrl", prefix);
+    model.put("table", tableName);
+    io.hearth.tables.UserTable table = accounts.tables == null ? null
+        : accounts.tables.byName(tableName);
+    if (table == null) {
+      model.put("missing", true);
+      return;
+    }
+    Map<String, Object> row = null;
+    if (rowId != null) {
+      row = accounts.tables.getById(tableName, longOr(rowId),
+          io.hearth.tables.UserTables.See.everything);
+    }
+    model.put("editing", row != null);
+    model.put("form_id", row == null ? "" : String.valueOf(row.get("id")));
+    model.put("heading", row == null ? "New row in " + tableName
+        : tableName + " #" + row.get("id"));
+    model.put("hidden", row != null
+        && Boolean.TRUE.equals(row.get(io.hearth.tables.UserTable.HIDDEN)));
+    ArrayList<Map<String, Object>> fields = new ArrayList<>();
+    for (io.hearth.tables.UserField field : table.fields()) {
+      LinkedHashMap<String, Object> one = new LinkedHashMap<>();
+      one.put("name", field.name());
+      one.put("type", field.type().name());
+      one.put("label", field.name());
+      one.put("isText", field.type() == io.hearth.tables.UserField.Type.text);
+      one.put("isNumber", field.type() == io.hearth.tables.UserField.Type.number
+          || field.type() == io.hearth.tables.UserField.Type.moment);
+      one.put("isFlag", field.type() == io.hearth.tables.UserField.Type.flag);
+      Object value = row == null ? null : row.get(field.name());
+      one.put("value", value == null ? "" : String.valueOf(value));
+      one.put("checked", Boolean.TRUE.equals(value));
+      one.put("hint", field.type().inJavaScript);
+      fields.add(one);
+    }
+    model.put("fields", fields);
+  }
+
   /**
    * The tables this community invented, and the editor for one of them.
    *
@@ -1443,6 +1609,10 @@ public class AdminRoutes {
     }
     String action = String.valueOf(form.get("action"));
     String name = io.hearth.tables.UserTable.normalize(form.get("name"));
+    // the row editor posts to /admin/tables/rows/<table>, which resolves to this same section
+    if (action.equals("row_save") || action.equals("row_delete")) {
+      return actOnRow(config, accounts, form, me, action.equals("row_delete"));
+    }
     try {
       if (action.equals("drop")) {
         long held = accounts.tables.count(name);
@@ -1492,6 +1662,148 @@ public class AdminRoutes {
     } catch (io.hearth.tables.UserTables.Refused refused) {
       return Outcome.refused(refused.getMessage());
     }
+  }
+
+  /**
+   * One row, inserted, changed or deleted from the table editor.
+   *
+   * <b>A checkbox that is not ticked is not submitted, which is the trap here.</b> Reading flags
+   * the way every other field is read would mean an unticked box arriving as "absent" and therefore
+   * "unchanged" -- so a row could be ticked hidden and never unticked. Every declared flag is
+   * written on every save, from whether its box is present.
+   */
+  private Outcome actOnRow(DomainConfig config, Accounts accounts, Forms form, UserRecord me,
+                           boolean deleting) throws SQLException {
+    if (accounts.tables == null) {
+      return Outcome.refused("This community's data file could not be opened.");
+    }
+    String tableName = io.hearth.tables.UserTable.normalize(form.get("table"));
+    io.hearth.tables.UserTable table = accounts.tables.byName(tableName);
+    if (table == null) {
+      return Outcome.refused("There is no table called '" + tableName + "'.");
+    }
+    String rowsPath = AdminView.Section.tables.path(config) + "/rows/" + table.name();
+    long id = longOr(form.get("id"));
+    try {
+      if (deleting) {
+        if (id <= 0 || !accounts.tables.delete(table.name(), id, me.id())) {
+          return Outcome.refused("There is no row " + id + " to delete.");
+        }
+        verbose.detail("admin: " + me.email() + " deleted " + table.name() + " #" + id);
+        return Outcome.done("Row " + id + " is gone.", site -> rowsPath);
+      }
+      Outcome oversized = oversized(form);
+      if (oversized != null) {
+        return oversized;
+      }
+      LinkedHashMap<String, Object> values = new LinkedHashMap<>();
+      for (io.hearth.tables.UserField field : table.fields()) {
+        if (field.type() == io.hearth.tables.UserField.Type.flag) {
+          values.put(field.name(), form.get("v_" + field.name()) != null);
+          continue;
+        }
+        String raw = form.text("v_" + field.name());
+        values.put(field.name(), raw == null ? "" : raw);
+      }
+      values.put(io.hearth.tables.UserTable.HIDDEN,
+          form.get(io.hearth.tables.UserTable.HIDDEN) != null);
+      if (id > 0) {
+        if (!accounts.tables.update(table.name(), id, values, me.id())) {
+          return Outcome.refused("There is no row " + id + " any more.");
+        }
+        return Outcome.done("Row " + id + " saved.", site -> rowsPath + "/row/" + id);
+      }
+      long made = accounts.tables.insert(table.name(), values, me.id());
+      return Outcome.done("Row " + made + " added.", site -> rowsPath + "/row/" + made);
+    } catch (io.hearth.tables.UserTables.Refused refused) {
+      return Outcome.refused(refused.getMessage());
+    }
+  }
+
+  /** the mutations listing */
+  private void mutationsSection(Map<String, Object> model, Accounts accounts, DomainConfig config)
+      throws SQLException {
+    String prefix = AdminView.Section.mutations.path(config);
+    model.put("newUrl", prefix + "/new");
+    ArrayList<Map<String, Object>> rows = new ArrayList<>();
+    for (io.hearth.content.Mutations.Record mutation : accounts.mutations.all()) {
+      LinkedHashMap<String, Object> row = new LinkedHashMap<>();
+      row.put("id", mutation.id());
+      row.put("uri", mutation.uri());
+      row.put("enabled", mutation.enabled());
+      row.put("updated", stamp(mutation.updatedAt()));
+      row.put("editUrl", prefix + "/edit/" + mutation.id());
+      rows.add(row);
+    }
+    model.put("mutations", rows);
+    model.put("any", !rows.isEmpty());
+    model.put("count", rows.size());
+    model.put("tablesUrl", AdminView.Section.tables.path(config));
+  }
+
+  /** the editor for one mutation, or a blank one */
+  private void mutationForm(Map<String, Object> model, Accounts accounts, String id)
+      throws SQLException {
+    io.hearth.content.Mutations.Record mutation = id == null ? null
+        : accounts.mutations.byId(longOr(id));
+    model.put("editing", mutation != null);
+    model.put("heading", mutation == null ? "A new mutation" : mutation.uri());
+    model.put("form_id", mutation == null ? "" : String.valueOf(mutation.id()));
+    model.put("form_uri", mutation == null ? "" : mutation.uri());
+    model.put("form_body", mutation == null ? "" : mutation.body());
+    model.put("form_enabled", mutation != null && mutation.enabled());
+    ArrayList<String> functions = new ArrayList<>();
+    if (accounts.tables != null) {
+      for (io.hearth.tables.UserTable table : accounts.tables.all()) {
+        functions.add(table.name() + "_merge_by_id(id, change)");
+      }
+    }
+    model.put("mergeFunctions", functions);
+    model.put("anyTables", !functions.isEmpty());
+  }
+
+  private Outcome actOnMutation(DomainConfig config, Accounts accounts, Forms form, UserRecord me)
+      throws SQLException {
+    String action = String.valueOf(form.get("action"));
+    long id = longOr(form.get("id"));
+    if (action.equals("delete")) {
+      if (id <= 0) {
+        return Outcome.refused("That is not a mutation this server has.");
+      }
+      accounts.mutations.delete(id, me.id());
+      verbose.detail("admin: " + me.email() + " deleted mutation " + id);
+      return Outcome.done("That mutation is gone.",
+          site -> AdminView.Section.mutations.path(site));
+    }
+    if (!action.equals("save")) {
+      return Outcome.refused("That is not something this page can do.");
+    }
+    Outcome oversized = oversized(form);
+    if (oversized != null) {
+      return oversized;
+    }
+    String uri = io.hearth.content.Mutations.normalize(form.get("uri"));
+    String bad = io.hearth.content.Mutations.checkUri(uri);
+    if (bad != null) {
+      return Outcome.refused(bad);
+    }
+    io.hearth.content.Mutations.Record clash = accounts.mutations.byUri(uri);
+    if (clash != null && clash.id() != id) {
+      return Outcome.refused("There is already a mutation at " + uri + ".");
+    }
+    // An address cannot be both a page and a mutation.
+    //
+    // They answer different methods, so it would technically work -- and it would be a GET and a
+    // POST at one address doing unrelated things, which is exactly the sort of thing nobody
+    // remembers six months later when the page stops rendering.
+    if (accounts.site.store().byUri(uri) != null) {
+      return Outcome.refused("There is already a page at " + uri + ".");
+    }
+    long saved = accounts.mutations.save(id, uri, orEmpty(form.text("body")),
+        form.get("enabled") != null, me.id());
+    verbose.detail("admin: " + me.email() + " saved mutation " + uri);
+    return Outcome.done(uri + " saved.",
+        site -> AdminView.Section.mutations.path(site) + "/edit/" + saved);
   }
 
   /**
@@ -2477,6 +2789,7 @@ public class AdminRoutes {
     switch (section) {
       case tables -> tableForm(model, accounts,
           accounts.tables == null ? null : accounts.tables.byName(id));
+      case mutations -> mutationForm(model, accounts, id);
       case legal -> {
         LegalDoc doc = LegalDoc.bySlug(id);
         if (doc == null) {

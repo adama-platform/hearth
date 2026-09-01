@@ -60,6 +60,27 @@ public class UserTables implements AutoCloseable {
   /** the event table name, so a listener can tell user data from everything else */
   public static final String EVENT_TABLE_PREFIX = "data:";
 
+  /** the physical column behind {@link UserTable#HIDDEN}; prefixed like every declared field */
+  private static final String HIDDEN_COLUMN = "f_" + UserTable.HIDDEN;
+
+  /**
+   * What a read is allowed to see.
+   *
+   * The two are never the same query and are never the same cache entry. A page asking for a row an
+   * admin has hidden must get nothing, and an admin's read must not put that row into the cache the
+   * page reads from -- which is why the key carries this and not a boolean tacked on the end.
+   */
+  public enum See {
+    /** what a program gets: hidden rows absent, and the flag itself not in the row at all */
+    published,
+    /** what the admin's table editor gets: everything, with the flag */
+    everything;
+
+    String where(String prefix) {
+      return this == published ? prefix + HIDDEN_COLUMN + " = FALSE" : "";
+    }
+  }
+
   private final String domain;
   private final File file;
   private final Database database;
@@ -90,6 +111,7 @@ public class UserTables implements AutoCloseable {
     UserTables tables = new UserTables(domain, file, database, events);
     tables.ensureCatalogue();
     tables.reload();
+    tables.ensureHidden();
     return tables;
   }
 
@@ -98,6 +120,36 @@ public class UserTables implements AutoCloseable {
          Statement statement = connection.createStatement()) {
       statement.execute("CREATE TABLE IF NOT EXISTS " + CATALOGUE
           + " (name VARCHAR(64) PRIMARY KEY, definition VARCHAR(65536) NOT NULL)");
+    }
+  }
+
+  /**
+   * Give every table the hidden column, for the ones made before there was one.
+   *
+   * The implicit columns are not in a definition, so nothing else would ever notice they are
+   * missing -- and a table without it would fail every read the moment the filter went in. Additive
+   * and idempotent, which is what makes it safe to run at every open rather than behind a version
+   * number this file does not keep.
+   */
+  private void ensureHidden() throws SQLException {
+    try (Connection connection = database.connection()) {
+      for (UserTable table : all()) {
+        if (hasColumn(connection, table.physical(), HIDDEN_COLUMN)) {
+          continue;
+        }
+        try (Statement statement = connection.createStatement()) {
+          statement.execute("ALTER TABLE " + table.physical() + " ADD COLUMN "
+              + HIDDEN_COLUMN + " BOOLEAN NOT NULL DEFAULT FALSE");
+        }
+      }
+    }
+  }
+
+  private static boolean hasColumn(Connection connection, String table, String column)
+      throws SQLException {
+    try (ResultSet columns = connection.getMetaData().getColumns(null, "PUBLIC",
+        table.toUpperCase(java.util.Locale.ROOT), column.toUpperCase(java.util.Locale.ROOT))) {
+      return columns.next();
     }
   }
 
@@ -159,7 +211,8 @@ public class UserTables implements AutoCloseable {
     // refuses its own AUTO_INCREMENT extension, and the difference between databases belongs in
     // one place -- the same rule the system schema follows
     StringBuilder ddl = new StringBuilder("CREATE TABLE ").append(table.physical())
-        .append(" (id ").append(database.dialect().identityColumn()).append(" PRIMARY KEY");
+        .append(" (id ").append(database.dialect().identityColumn()).append(" PRIMARY KEY")
+        .append(", ").append(HIDDEN_COLUMN).append(" BOOLEAN NOT NULL DEFAULT FALSE");
     for (UserField field : table.fields()) {
       ddl.append(", ").append(field.physical()).append(' ').append(field.type().sql);
       if (field.required()) {
@@ -294,19 +347,24 @@ public class UserTables implements AutoCloseable {
 
   // ---- rows ------------------------------------------------------------------------------------
 
-  /** one row, by id, or null */
+  /** one row a program may see, by id, or null */
   public Map<String, Object> getById(String tableName, long id) throws SQLException {
+    return getById(tableName, id, See.published);
+  }
+
+  public Map<String, Object> getById(String tableName, long id, See see) throws SQLException {
     UserTable table = byName(tableName);
     if (table == null) {
       return null;
     }
-    String key = TableCache.idKey(table.name(), id);
+    String key = TableCache.idKey(table.name(), see, id);
     List<Map<String, Object>> hit = cache.get(key);
     if (hit != null) {
       return hit.isEmpty() ? null : hit.get(0);
     }
-    List<Map<String, Object>> found = query(table,
-        "SELECT * FROM " + table.physical() + " WHERE id = ?", statement ->
+    String filter = see.where(" AND ");
+    List<Map<String, Object>> found = query(table, see,
+        "SELECT * FROM " + table.physical() + " WHERE id = ?" + filter, statement ->
             statement.setLong(1, id), 1);
     cache.put(key, found);
     return found.isEmpty() ? null : found.get(0);
@@ -320,14 +378,15 @@ public class UserTables implements AutoCloseable {
       return List.of();
     }
     UserField field = table.field(index);
-    String key = TableCache.indexKey(table.name(), index, value);
+    String key = TableCache.indexKey(table.name(), See.published, index, value);
     List<Map<String, Object>> hit = cache.get(key);
     if (hit != null) {
       return hit;
     }
-    List<Map<String, Object>> found = query(table,
+    List<Map<String, Object>> found = query(table, See.published,
         "SELECT * FROM " + table.physical() + " WHERE " + field.physical()
-            + " = ? ORDER BY id", statement -> bind(statement, 1, field, value), MAX_PAGE);
+            + " = ?" + See.published.where(" AND ") + " ORDER BY id",
+        statement -> bind(statement, 1, field, value), MAX_PAGE);
     cache.put(key, found);
     return found;
   }
@@ -341,19 +400,24 @@ public class UserTables implements AutoCloseable {
    */
   public List<Map<String, Object>> page(String tableName, long idAfter, int count)
       throws SQLException {
+    return page(tableName, idAfter, count, See.published);
+  }
+
+  public List<Map<String, Object>> page(String tableName, long idAfter, int count, See see)
+      throws SQLException {
     UserTable table = byName(tableName);
     if (table == null) {
       return List.of();
     }
     int limit = Math.max(1, Math.min(MAX_PAGE, count));
-    String key = TableCache.pageKey(table.name(), idAfter, limit);
+    String key = TableCache.pageKey(table.name(), see, idAfter, limit);
     List<Map<String, Object>> hit = cache.get(key);
     if (hit != null) {
       return hit;
     }
-    List<Map<String, Object>> found = query(table,
-        "SELECT * FROM " + table.physical() + " WHERE id > ? ORDER BY id "
-            + database.dialect().limit(limit),
+    List<Map<String, Object>> found = query(table, see,
+        "SELECT * FROM " + table.physical() + " WHERE id > ?" + see.where(" AND ")
+            + " ORDER BY id " + database.dialect().limit(limit),
         statement -> statement.setLong(1, idAfter), limit);
     cache.put(key, found);
     return found;
@@ -361,18 +425,23 @@ public class UserTables implements AutoCloseable {
 
   /** the whole table, up to the ceiling a table is allowed to reach */
   public List<Map<String, Object>> all(String tableName) throws SQLException {
+    return all(tableName, See.published);
+  }
+
+  public List<Map<String, Object>> all(String tableName, See see) throws SQLException {
     UserTable table = byName(tableName);
     if (table == null) {
       return List.of();
     }
-    String key = TableCache.allKey(table.name());
+    String key = TableCache.allKey(table.name(), see);
     List<Map<String, Object>> hit = cache.get(key);
     if (hit != null) {
       return hit;
     }
-    List<Map<String, Object>> found = query(table,
-        "SELECT * FROM " + table.physical() + " ORDER BY id "
-            + database.dialect().limit(UserTable.MAX_ROWS),
+    List<Map<String, Object>> found = query(table, see,
+        "SELECT * FROM " + table.physical()
+            + (see == See.published ? " WHERE " + see.where("") : "")
+            + " ORDER BY id " + database.dialect().limit(UserTable.MAX_ROWS),
         statement -> { }, UserTable.MAX_ROWS);
     cache.put(key, found);
     return found;
@@ -407,14 +476,19 @@ public class UserTables implements AutoCloseable {
         given.add(field);
       }
     }
+    boolean setsHidden = values.containsKey(UserTable.HIDDEN);
     StringBuilder sql = new StringBuilder("INSERT INTO ").append(table.physical()).append(" (");
     StringBuilder marks = new StringBuilder();
     for (int k = 0; k < given.size(); k++) {
       sql.append(k == 0 ? "" : ", ").append(given.get(k).physical());
       marks.append(k == 0 ? "" : ", ").append('?');
     }
-    sql.append(") VALUES (").append(given.isEmpty() ? "" : marks).append(')');
-    if (given.isEmpty()) {
+    if (setsHidden) {
+      sql.append(given.isEmpty() ? "" : ", ").append(HIDDEN_COLUMN);
+      marks.append(given.isEmpty() ? "" : ", ").append('?');
+    }
+    sql.append(") VALUES (").append(given.isEmpty() && !setsHidden ? "" : marks).append(')');
+    if (given.isEmpty() && !setsHidden) {
       sql = new StringBuilder("INSERT INTO " + table.physical() + " (id) VALUES (DEFAULT)");
     }
     long id;
@@ -423,6 +497,9 @@ public class UserTables implements AutoCloseable {
              Statement.RETURN_GENERATED_KEYS)) {
       for (int k = 0; k < given.size(); k++) {
         bind(statement, k + 1, given.get(k), values.get(given.get(k).name()));
+      }
+      if (setsHidden) {
+        statement.setBoolean(given.size() + 1, toBoolean(values.get(UserTable.HIDDEN)));
       }
       statement.executeUpdate();
       try (ResultSet keys = statement.getGeneratedKeys()) {
@@ -446,7 +523,9 @@ public class UserTables implements AutoCloseable {
     if (table == null) {
       throw new Refused("there is no table called '" + tableName + "'");
     }
-    Map<String, Object> before = getById(table.name(), id);
+    // everything, not published: an update has to find a row an admin has hidden, or hiding one
+    // would make it uneditable
+    Map<String, Object> before = getById(table.name(), id, See.everything);
     if (before == null) {
       return false;
     }
@@ -456,12 +535,16 @@ public class UserTables implements AutoCloseable {
         given.add(field);
       }
     }
-    if (given.isEmpty()) {
+    boolean setsHidden = values.containsKey(UserTable.HIDDEN);
+    if (given.isEmpty() && !setsHidden) {
       return true;
     }
     StringBuilder sql = new StringBuilder("UPDATE ").append(table.physical()).append(" SET ");
     for (int k = 0; k < given.size(); k++) {
       sql.append(k == 0 ? "" : ", ").append(given.get(k).physical()).append(" = ?");
+    }
+    if (setsHidden) {
+      sql.append(given.isEmpty() ? "" : ", ").append(HIDDEN_COLUMN).append(" = ?");
     }
     sql.append(" WHERE id = ?");
     try (Connection connection = database.connection();
@@ -470,6 +553,9 @@ public class UserTables implements AutoCloseable {
       for (UserField field : given) {
         bind(statement, at++, field, values.get(field.name()));
       }
+      if (setsHidden) {
+        statement.setBoolean(at++, toBoolean(values.get(UserTable.HIDDEN)));
+      }
       statement.setLong(at, id);
       statement.executeUpdate();
     }
@@ -477,12 +563,128 @@ public class UserTables implements AutoCloseable {
     return true;
   }
 
+  /**
+   * Merge a partial row into an existing one, and say why not if it did not happen.
+   *
+   * <b>The same work as an update, reported differently.</b> It goes through {@link #update} rather
+   * than beside it, so the events, the cache invalidation and the type coercion cannot drift from
+   * the admin path -- two write paths that agree today is a bug scheduled for later.
+   *
+   * <b>A column merge: keys absent are keys untouched.</b> That is what makes it safe to call from a
+   * form that shows three of a row's nine fields. The opposite -- treating the delta as the whole
+   * row -- would blank the six nobody submitted while looking like it worked, which is the same
+   * failure the content field values already refuse.
+   *
+   * <b>Every reason, not the first one.</b> A caller sending four fields with two wrong should be
+   * told about both, because the alternative is finding them one save at a time. Nothing is written
+   * at all unless every field is acceptable: a partial merge would leave a row half-updated with a
+   * `success:false` beside it, which is the worst of both.
+   *
+   * <b>`hidden` is not mergeable.</b> A program must not be able to publish a row an admin held
+   * back, and naming the field is how a caller finds that out rather than wondering why it had no
+   * effect.
+   */
+  public Merged mergeById(String tableName, long id, Map<String, Object> delta, Long actor) {
+    ArrayList<String> reasons = new ArrayList<>();
+    UserTable table = byName(tableName);
+    if (table == null) {
+      return Merged.no("there is no table called '" + tableName + "'");
+    }
+    if (id <= 0) {
+      return Merged.no("an id is needed to merge into a row");
+    }
+    if (delta == null || delta.isEmpty()) {
+      return Merged.no("there is nothing to merge");
+    }
+    LinkedHashMap<String, Object> clean = new LinkedHashMap<>();
+    for (Map.Entry<String, Object> entry : delta.entrySet()) {
+      String key = entry.getKey();
+      if (UserTable.HIDDEN.equals(key)) {
+        reasons.add("'" + UserTable.HIDDEN + "' can only be changed by a person in the admin"
+            + " section");
+        continue;
+      }
+      if ("id".equals(key)) {
+        reasons.add("'id' is what says which row this is; it cannot be part of the change");
+        continue;
+      }
+      UserField field = table.field(key);
+      if (field == null) {
+        reasons.add("'" + tableName + "' has no field called '" + key + "'");
+        continue;
+      }
+      String wrong = checkValue(field, entry.getValue());
+      if (wrong != null) {
+        reasons.add(wrong);
+        continue;
+      }
+      clean.put(key, entry.getValue());
+    }
+    if (!reasons.isEmpty()) {
+      return new Merged(false, reasons);
+    }
+    try {
+      if (!update(tableName, id, clean, actor)) {
+        return Merged.no("there is no row " + id + " in '" + tableName + "'");
+      }
+    } catch (SQLException | Refused ex) {
+      LOG.error("user-table-merge-failed", ex);
+      return Merged.no(String.valueOf(ex.getMessage()));
+    }
+    return new Merged(true, List.of());
+  }
+
+  /**
+   * Is this value something the field can hold?
+   *
+   * Checked before anything is written rather than relying on the coercion in {@code bind}, which
+   * turns anything unparseable into 0 -- silently storing zero for "banana" is a plausible wrong
+   * answer, and this is the one write path where the caller is a program that can be told.
+   */
+  private static String checkValue(UserField field, Object value) {
+    if (value == null) {
+      return null;
+    }
+    return switch (field.type()) {
+      case text -> value instanceof Map || value instanceof List
+          ? "'" + field.name() + "' is text, and that is not a string"
+          : null;
+      case number, moment -> {
+        if (value instanceof Number) {
+          yield null;
+        }
+        try {
+          Double.parseDouble(String.valueOf(value).trim());
+          yield null;
+        } catch (NumberFormatException ex) {
+          yield "'" + field.name() + "' is a number, and '" + value + "' is not one";
+        }
+      }
+      case flag -> {
+        if (value instanceof Boolean) {
+          yield null;
+        }
+        String text = String.valueOf(value).trim();
+        yield text.equalsIgnoreCase("true") || text.equalsIgnoreCase("false")
+            ? null
+            : "'" + field.name() + "' is true or false, and '" + value + "' is neither";
+      }
+    };
+  }
+
+  /** what a merge did, in the shape a program reads it back in */
+  public record Merged(boolean success, List<String> reasons) {
+    static Merged no(String reason) {
+      return new Merged(false, List.of(reason));
+    }
+  }
+
   public boolean delete(String tableName, long id, Long actor) throws SQLException, Refused {
     UserTable table = byName(tableName);
     if (table == null) {
       throw new Refused("there is no table called '" + tableName + "'");
     }
-    Map<String, Object> before = getById(table.name(), id);
+    Map<String, Object> before = getById(table.name(), id, See.everything);
     if (before == null) {
       return false;
     }
@@ -545,24 +747,35 @@ public class UserTables implements AutoCloseable {
     void bind(PreparedStatement statement) throws SQLException;
   }
 
-  private List<Map<String, Object>> query(UserTable table, String sql, Binder binder, int limit)
-      throws SQLException {
+  private List<Map<String, Object>> query(UserTable table, See see, String sql, Binder binder,
+                                          int limit) throws SQLException {
     ArrayList<Map<String, Object>> rows = new ArrayList<>();
     try (Connection connection = database.connection();
          PreparedStatement statement = connection.prepareStatement(sql)) {
       binder.bind(statement);
       try (ResultSet found = statement.executeQuery()) {
         while (found.next() && rows.size() < limit) {
-          rows.add(read(table, found));
+          rows.add(read(table, found, see));
         }
       }
     }
     return rows;
   }
 
-  private static Map<String, Object> read(UserTable table, ResultSet found) throws SQLException {
+  /**
+   * One row.
+   *
+   * A published read does not carry the hidden flag at all, rather than carrying `false`. Absent is
+   * stronger than false: there is nothing for a page to test, so no page can be written that
+   * behaves differently for a row somebody might later hide.
+   */
+  private static Map<String, Object> read(UserTable table, ResultSet found, See see)
+      throws SQLException {
     LinkedHashMap<String, Object> row = new LinkedHashMap<>();
     row.put("id", found.getLong("id"));
+    if (see == See.everything) {
+      row.put(UserTable.HIDDEN, found.getBoolean(HIDDEN_COLUMN));
+    }
     for (UserField field : table.fields()) {
       Object value = switch (field.type()) {
         case text -> found.getString(field.physical());

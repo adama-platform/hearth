@@ -55,6 +55,26 @@ every query is one somebody wrote down. Those tables live in a **file of their o
 accounts database, because their shape is whatever was typed this afternoon and the system schema's
 is not.
 
+**A page reads; a mutation writes.** Writing lives at a different address behind a different method:
+declare one under Content › Mutations and it answers POST, for an approved member with a valid form
+token, running a program that can merge:
+
+```js
+var result = signups_merge_by_id(form('id'), { job: form('job') });
+// { success: true }  or  { success: false, reasons: [...] }
+meta('redirect', '/thanks');
+```
+
+A merge changes only the keys it names, reports *every* reason rather than the first, and writes
+nothing unless all of them pass. Splitting it this way means a crawler, a preloader or a link
+checker cannot change anything by reading the site.
+
+**Every row has a `hidden` flag** an admin can set and no program can see — it is filtered out of
+every read and the flag is not in the rows a page gets, so there is nothing to test against. It is
+how something goes into the system before it is ready to be seen, and it is not a delete: the row
+keeps its id. There is a table editor under Tables for browsing, filtering and editing rows by
+hand.
+
 That is the shortest path from *an idea* to *a thing the group can look at*. No build, no deploy, no
 second service — write it in the admin section and it is live at a URL. Read [what this cannot do
 yet](#the-app-platform-is-a-first-cut) before believing too much of it.
@@ -66,7 +86,8 @@ yet](#the-app-platform-is-a-first-cut) before believing too much of it.
 | **Accounts** | Sign in by emailed code, by password, or both. Every account waits for a human. Roles, permissions, bans. |
 | **A website** | Pages and templates in a database, every save versioned as a whole document, directory indexes so a template behaves like a blog, and the whole site as one JSON file that merges back. |
 | **Dynamic pages** | A body that is a program, run in V8 on every request, with a fresh isolate and a one-second ceiling. |
-| **Tables** | Declare fields and indexes; a page gets read-only functions for them. Cached per question and invalidated per write. |
+| **Tables** | Declare fields and indexes; a page gets read-only functions for them. Cached per question, invalidated per write, with a row editor and a `hidden` flag. |
+| **Mutations** | Addresses that answer POST and run a program. The only thing that writes, behind an approved member and a form token. |
 | **A model endpoint** | MCP with OAuth: content and template tools, off by default, held to what the person who connected it may do. |
 | **Files** | Photographs, video, the PDF of the menu. The extension decides what a thing is; the browser's claim is thrown away. |
 | **Email, both ways** | SES out in the community's colours. SMTP in, with SPF, DKIM and DMARC checked and stamped. |
@@ -125,8 +146,8 @@ domain is served if and only if one exists for it.
 
 - **Overview** — what there is
 - **People** — approve, promote, turn off, reject; with **Bans** and **Roles**
-- **Content** — pages, with **Templates**, **Tables**, **Directories**, **Navigation**, **Files**,
-  **Unused** files and **Import & export** (bundles)
+- **Content** — pages, with **Templates**, **Tables**, **Mutations**, **Directories**,
+  **Navigation**, **Files**, **Unused** files and **Import & export** (bundles)
 - **Settings** — what this community is, with **Setup**
 - **Customization** (look) — **Appearance**, **Legal**, **Messages**
 - **System** — **Machine**, **Settings**, **Events**, **Analytics**, **Caching**, **AI**, **Logs**,
@@ -142,18 +163,20 @@ for every kind, because 40ms means nothing until the markdown page beside it rea
 
 Worth saying plainly, because the pitch above is the easy part.
 
-A dynamic page today gets `render`, `meta`, `query` and its community's table functions, and
-**nothing else**: no network, no timers, no way back into this server, and no way to *write* a
-table. Not because something refuses — because nothing was ever bound. Every execution gets a fresh V8 isolate, so nothing one page defines is
+A dynamic page today gets `render`, `meta`, `query`, `csrf` and its community's table functions, and
+**nothing else**: no network, no timers, no way back into this server, and no way to write. Not
+because something refuses — because nothing was ever bound. Every execution gets a fresh V8 isolate, so nothing one page defines is
 visible to the next; it runs on its own thread pool, created on first use; and it is stopped after a
 second, so `while(true){}` is a page that says so rather than a server that stops answering. **No
 agent may write one**, in either direction — an agent acts as somebody who probably holds
 `content_write` and has no idea they lent anybody an interpreter.
 
-So it validates *ideas*, not products. A page can read what the group has collected and answer
-differently for `?page=2`; it cannot yet know **who is asking** or take **what they submitted**, and
-those are the two that turn this from a CMS into a place that runs code. They need thinking about
-before they need building. The bar has not moved: **can one person enumerate how it fails.**
+So it validates *ideas*, not products. A page can read what the group has collected, answer
+differently for `?page=2`, and post a form to a mutation that changes a row. What it still cannot do
+is know **who is asking** — neither a page nor a mutation is told which member is on the other end,
+so anything per-person is out of reach. That is the next question, and it is the one that turns this
+from a CMS into a place that runs code. The bar has not moved: **can one person enumerate how it
+fails.**
 
 ## Where it is today
 

@@ -1,0 +1,50 @@
+{{<shell}}{{$content}}
+<p class="crumb"><a href="{{backUrl}}">&larr; Mutations</a></p>
+<h1>{{heading}}</h1>
+
+<form class="editor" method="post" action="{{backUrl}}">
+  <input type="hidden" name="csrf" value="{{csrf}}">
+  <input type="hidden" name="action" value="save">
+  {{#editing}}<input type="hidden" name="id" value="{{form_id}}">{{/editing}}
+
+  <div class="field">
+    <label for="m-uri">address</label>
+    <input id="m-uri" type="text" name="uri" value="{{form_uri}}" placeholder="/sign-up" required>
+    <p class="hint">A path. It answers POST only, and it cannot be an address a page already
+      uses.</p>
+  </div>
+
+  <div class="field">
+    <label class="check"><input type="checkbox" name="enabled"{{#form_enabled}} checked{{/form_enabled}}> answering requests</label>
+    <p class="hint">Off until you turn it on, so a half-written mutation is not accepting posts.
+      While it is off the address answers 404 &mdash; whether a draft exists here is not something
+      an anonymous POST should be able to find out.</p>
+  </div>
+
+  <div>
+    <label for="m-body">body</label>
+    <textarea id="m-body" name="body">{{form_body}}</textarea>
+  </div>
+
+  <div class="doing"><button type="submit">Save</button></div>
+</form>
+
+<div class="card">
+  <p class="meta"><span class="dim">what a mutation can call</span></p>
+  <table><tbody>
+    <tr><td class="mono">form(name, fallback)</td><td class="dim">a submitted field, typed &mdash; count=2 arrives as the number 2</td></tr>
+    <tr><td class="mono">query(name, fallback)</td><td class="dim">a query-string parameter, the same way</td></tr>
+    <tr><td class="mono">render(text)</td><td class="dim">answer with HTML instead of JSON</td></tr>
+    <tr><td class="mono">meta('redirect', '/thanks')</td><td class="dim">answer 303 to somewhere, so a refresh cannot repeat the write</td></tr>
+    {{#mergeFunctions}}<tr><td class="mono">{{.}}</td><td class="dim">merge a change into one row</td></tr>{{/mergeFunctions}}
+  </tbody></table>
+  {{^anyTables}}<p class="hint">No tables yet, so there is nothing to merge into.</p>{{/anyTables}}
+</div>
+
+<p class="hint">Every read function a page has is here too. A merge returns
+  <code>{success: true}</code> or <code>{success: false, reasons: [...]}</code> &mdash; every reason,
+  not the first, and nothing is written unless all of them pass. Keys you leave out are left alone,
+  so a form showing three of nine fields does not blank the other six.</p>
+<p class="hint">Answering: <code>meta('redirect', ...)</code> wins, then anything
+  <code>render()</code>ed, and otherwise <code>{"success": true}</code>.</p>
+{{/content}}{{/shell}}

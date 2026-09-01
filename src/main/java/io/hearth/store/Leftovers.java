@@ -24,7 +24,7 @@ import java.util.Set;
  * anything: an operator who upgrades, finds a regression and rolls the jar back must still have
  * their data. This class is reached only from the admin section, by somebody holding every
  * permission there is, pressing a button that names the table and says how many rows are in it.
- * That is the whole design -- the same reasoning as invariant 143, with the human put back in.
+ * That is the whole design -- the same reasoning as invariant 151, with the human put back in.
  *
  * <b>Nothing is hard-coded.</b> There is no list of old feature names here, because a list would be
  * wrong the next time something is removed. A leftover is any table in the database that

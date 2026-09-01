@@ -338,6 +338,12 @@ public class WebHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
       return;
     }
 
+    // a mutation, if this community has declared one at this address
+    if (post && accountsForDomain != null
+        && runMutation(ctx, req, recorder, config, accountsForDomain, path)) {
+      return;
+    }
+
     if (post) {
       verbose.detail("POST to " + uri + " which is not a form endpoint -> 405");
       recorder.status(405);
@@ -348,11 +354,21 @@ public class WebHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
 
     // a page from the content table, if one answers this path
     if (accountsForDomain != null) {
-      Site.Rendered page = accountsForDomain.site.page(path, pageContext(accountsForDomain, req));
+      // Minted before the render, because the page may put it in a form.
+      //
+      // Stable: an existing well-formed cookie is reused, so a member with several tabs open does
+      // not have each one invalidating the others' forms. The cookie goes back on every content
+      // response rather than only when a form was rendered -- the alternative is knowing what the
+      // page produced before deciding a header, which means parsing our own output.
+      String pageCsrf = Cookies.stableToken(req);
+      Site.Rendered page =
+          accountsForDomain.site.page(path, pageContext(accountsForDomain, req, pageCsrf));
       if (page != null) {
         verbose.detail(() -> "content " + path + " -> 200 (" + page.html().length + " bytes)");
         recorder.status(200);
-        Responses.send(ctx, req, HttpResponseStatus.OK, "text/html; charset=utf-8", page.html());
+        Responses.send(ctx, req, HttpResponseStatus.OK, "text/html; charset=utf-8", page.html(),
+            new String[]{HttpHeaderNames.SET_COOKIE.toString(),
+                Cookies.csrf(accountsForDomain.security, pageCsrf)});
         return;
       }
       // and then a listing, if a template publishes one at this address. After the page lookup on
@@ -414,14 +430,120 @@ public class WebHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
    * the empty context -- its pages still render, they just have no tables, which is a far better
    * outcome than the site being down because somebody's table would not load.
    */
+  /**
+   * Run a mutation, if one is declared at this address and this request may run it.
+   *
+   * <b>Three gates, and each is a different question.</b> A signed-in, approved member, because a
+   * public POST that writes is a queue somebody else fills. The CSRF token, because otherwise
+   * another site's form can post here with a member's cookies. And `enabled`, because a mutation
+   * halfway through being written should not be answering anything.
+   *
+   * <b>Returns false when there is no mutation here</b>, so the 405 below still happens for an
+   * address that is a page -- a POST to a page is a mistake and should say so, rather than becoming
+   * a 404 that reads like the page is gone.
+   */
+  private boolean runMutation(ChannelHandlerContext ctx, FullHttpRequest req, Recorder recorder,
+                              DomainConfig config, io.hearth.auth.Accounts accounts, String path) {
+    io.hearth.content.Mutations.Record mutation;
+    io.hearth.auth.UserRecord me;
+    try {
+      mutation = accounts.mutations.byUri(path);
+      if (mutation == null) {
+        return false;
+      }
+      SessionRecord session = AccountRoutes.currentSession(accounts, req);
+      me = session == null ? null : accounts.users.byId(session.userId());
+    } catch (java.sql.SQLException ex) {
+      LOG.error("mutation-lookup-failed", ex);
+      return false;
+    }
+    if (!mutation.enabled()) {
+      // it exists and is switched off. A 404 rather than a 403: whether a draft mutation exists at
+      // this address is not something an anonymous POST should be able to discover.
+      verbose.detail(() -> "mutation " + path + " is not enabled -> 404");
+      recorder.status(404);
+      Responses.send(ctx, req, HttpResponseStatus.NOT_FOUND, "text/html; charset=utf-8",
+          pages.missing(config, accounts, req));
+      return true;
+    }
+    if (me == null || !me.isApproved()) {
+      verbose.detail(() -> "mutation " + path + " refused: not an approved member");
+      recorder.status(403);
+      sendJson(ctx, req, HttpResponseStatus.FORBIDDEN,
+          "{\"success\":false,\"reasons\":[\"you have to be a signed-in member to do that\"]}");
+      return true;
+    }
+    Forms form = Forms.of(req, Forms.MAX_CONTENT_BYTES);
+    if (!Cookies.csrfMatches(form.get(Cookies.CSRF_FIELD),
+        Forms.cookie(req, Cookies.CSRF_COOKIE))) {
+      recorder.status(403);
+      sendJson(ctx, req, HttpResponseStatus.FORBIDDEN,
+          "{\"success\":false,\"reasons\":[\"that form expired; please try again\"]}");
+      return true;
+    }
+    io.hearth.tables.TableBindings bindings = accounts.tables == null ? null
+        : new io.hearth.tables.TableBindings(accounts.tables, true, me.id());
+    String prologue = bindings == null ? "" : bindings.prologue(Forms.queryParameters(req.uri()))
+        + bindings.formPrologue(form.all());
+    io.hearth.js.JavaScript.Run run = io.hearth.js.JavaScript.shared().run(mutation.body(),
+        new io.hearth.js.JavaScript.Page(prologue,
+            bindings == null ? request -> "null" : bindings));
+    verbose.detail(() -> "mutation " + path + " by " + me.email()
+        + (run.failed() ? " failed -- " + run.error() : " ok in " + run.millis() + "ms"));
+    if (run.failed()) {
+      recorder.status(500);
+      sendJson(ctx, req, HttpResponseStatus.INTERNAL_SERVER_ERROR,
+          io.hearth.tables.UserTables.toJson(java.util.Map.of("success", false,
+              "reasons", java.util.List.of(run.error()))));
+      return true;
+    }
+    // Where to go afterwards is the mutation's decision, and both answers are useful.
+    //
+    // meta('redirect', '/thanks') is what a form wants: a 303 so a refresh cannot repeat the write,
+    // which is the same rule every admin POST follows. Rendering something instead is what a script
+    // wants. Neither is the default, because guessing wrong is either a lost answer or a lost page.
+    String redirect = run.meta().get("redirect");
+    if (redirect != null && !redirect.isBlank()) {
+      // through Landing.safe, because "we generated it" is exactly the assumption that turns a
+      // redirect into a header injection -- and this one was written by whoever wrote the mutation
+      String where = Landing.safe(redirect);
+      if (where == null) {
+        where = "/";
+      }
+      recorder.status(303);
+      Responses.send(ctx, req, HttpResponseStatus.SEE_OTHER, null, Responses.EMPTY,
+          new String[]{HttpHeaderNames.LOCATION.toString(), where});
+      return true;
+    }
+    recorder.status(200);
+    if (run.body() != null && !run.body().isEmpty()) {
+      Responses.send(ctx, req, HttpResponseStatus.OK, "text/html; charset=utf-8",
+          run.body().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    } else {
+      sendJson(ctx, req, HttpResponseStatus.OK, "{\"success\":true}");
+    }
+    return true;
+  }
+
+  /** a mutation answers JSON when it does not render or redirect */
+  private static void sendJson(ChannelHandlerContext ctx, FullHttpRequest req,
+                               HttpResponseStatus status, String json) {
+    Responses.send(ctx, req, status, "application/json; charset=utf-8",
+        json.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+  }
+
   private static Site.PageContext pageContext(io.hearth.auth.Accounts accounts,
-                                              FullHttpRequest req) {
+                                              FullHttpRequest req, String csrf) {
     if (accounts.tables == null) {
       return Site.PageContext.NONE;
     }
     io.hearth.tables.TableBindings bindings =
         new io.hearth.tables.TableBindings(accounts.tables);
-    String prologue = bindings.prologue(Forms.queryParameters(req.uri()));
+    // csrf() so a page can render a form that a mutation will accept. A page that never renders one
+    // simply never calls it; handing it over is not a decision, because the token is already in the
+    // reader's own cookie jar and proves nothing about anybody else.
+    String prologue = bindings.prologue(Forms.queryParameters(req.uri()))
+        + "function csrf(){return " + io.hearth.tables.UserTables.toJson(csrf) + ";}";
     return new Site.PageContext() {
       @Override
       public String prologue() {

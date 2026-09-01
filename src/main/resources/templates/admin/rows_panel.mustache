@@ -1,0 +1,11 @@
+<p class="count">{{count}} row(s)</p>
+{{^any}}<p class="hint">Nothing matches.</p>{{/any}}
+{{#any}}<table>
+  <thead><tr><th>id</th>{{#columns}}<th>{{name}}</th>{{/columns}}<th></th><th></th></tr></thead>
+  <tbody>{{#rows}}<tr>
+    <td class="mono"><a href="{{editUrl}}">{{id}}</a></td>
+    {{#cells}}<td class="dim">{{value}}</td>{{/cells}}
+    <td>{{#hidden}}<span class="pill dim">hidden</span>{{/hidden}}</td>
+    <td class="actions"><a href="{{editUrl}}">edit</a></td>
+  </tr>{{/rows}}</tbody>
+</table>{{/any}}

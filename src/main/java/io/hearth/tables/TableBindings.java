@@ -34,9 +34,25 @@ public final class TableBindings implements JavaScript.Host {
   private static final ObjectMapper JSON = new ObjectMapper();
 
   private final UserTables tables;
+  private final boolean mayWrite;
+  private final Long actor;
 
+  /** what a page gets: reads only */
   public TableBindings(UserTables tables) {
+    this(tables, false, null);
+  }
+
+  /**
+   * What a mutation gets: the same reads, plus merge.
+   *
+   * The write half is a constructor argument rather than a method somebody remembers not to call,
+   * so a page's bindings cannot grow one by accident -- the prologue a page is given does not
+   * contain the function at all, which is a stronger statement than a refusal.
+   */
+  public TableBindings(UserTables tables, boolean mayWrite, Long actor) {
     this.tables = tables;
+    this.mayWrite = mayWrite;
+    this.actor = actor;
   }
 
   /**
@@ -67,7 +83,27 @@ public final class TableBindings implements JavaScript.Host {
           .append(name).append("','page',[a,c]);}");
       out.append("function ").append(name).append("_all(){return __call('")
           .append(name).append("','all',[]);}");
+      if (mayWrite) {
+        out.append("function ").append(name)
+            .append("_merge_by_id(i,d){return __call('").append(name)
+            .append("','merge',[i,d]);}");
+      }
     }
+    return out.toString();
+  }
+
+  /**
+   * The extra line a mutation gets: what was submitted.
+   *
+   * Typed the same way a query parameter is, for the same reason -- a form posting `count=2` should
+   * arrive as a number, because the merge that receives it is going into a number column.
+   */
+  public String formPrologue(Map<String, String> fields) {
+    StringBuilder out = new StringBuilder(256);
+    out.append("var __form=").append(queryJson(fields)).append(';');
+    out.append("function form(n,d){var v=__form[n];if(v===undefined||v===null){")
+        .append("return d===undefined?null:d;}")
+        .append("if(d!==undefined&&d!==null&&typeof d!==typeof v){return d;}return v;}");
     return out.toString();
   }
 
@@ -104,12 +140,42 @@ public final class TableBindings implements JavaScript.Host {
         case "page" -> UserTables.toJson(
             tables.page(name, asLong(args.path(0)), (int) asLong(args.path(1))));
         case "all" -> UserTables.toJson(tables.all(name));
+        case "merge" -> {
+          if (!mayWrite) {
+            yield error("a page cannot write; merging is for a mutation");
+          }
+          yield UserTables.toJson(merge(name, args));
+        }
         default -> error("'" + op + "' is not something a page can ask a table for");
       };
     } catch (Exception ex) {
       LOG.error("user-table-read-failed", ex);
       return error("that table could not be read");
     }
+  }
+
+  /**
+   * One merge, as the object a program reads back.
+   *
+   * `{success: true}` or `{success: false, reasons: [...]}` -- always both keys shaped the same way,
+   * so a caller can branch on `success` without checking whether `reasons` is there.
+   */
+  private Map<String, Object> merge(String table, JsonNode args) {
+    LinkedHashMap<String, Object> answer = new LinkedHashMap<>();
+    long id = asLong(args.path(0));
+    JsonNode deltaNode = args.path(1);
+    if (!deltaNode.isObject()) {
+      answer.put("success", false);
+      answer.put("reasons", List.of("the change has to be an object of field names to values"));
+      return answer;
+    }
+    LinkedHashMap<String, Object> delta = new LinkedHashMap<>();
+    deltaNode.fields().forEachRemaining(entry -> delta.put(entry.getKey(),
+        plain(entry.getValue())));
+    UserTables.Merged merged = tables.mergeById(table, id, delta, actor);
+    answer.put("success", merged.success());
+    answer.put("reasons", merged.reasons());
+    return answer;
   }
 
   private static String error(String message) {

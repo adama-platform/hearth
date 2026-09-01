@@ -1,0 +1,23 @@
+{{<shell}}{{$content}}
+<p class="crumb"><a href="{{backUrl}}">&larr; Tables</a></p>
+<h1>{{table}}</h1>
+{{#missing}}<p class="problem">There is no table called <code>{{table}}</code>.</p>{{/missing}}
+{{^missing}}
+<div class="tools">
+  <form class="search" method="get" action="{{action}}" data-filter>
+    <input type="search" name="q" value="{{q}}" placeholder="Find anything in any column" aria-label="filter rows">
+  </form>
+  <select name="show" data-filter-field aria-label="which rows">
+    <option value="">every row</option>
+    <option value="visible">visible only</option>
+    <option value="hidden">hidden only</option>
+  </select>
+  <a class="btn" href="{{newUrl}}">New row</a>
+</div>
+<div class="panel" data-panel="{{panelUrl}}">{{{panel}}}</div>
+<p class="hint">A <strong>hidden</strong> row is in the table and invisible to every page: the
+  JavaScript functions filter it out and do not carry the flag, so no program can tell it is there.
+  It is how something gets into the system before it is ready to be seen, and it is not a delete
+  &mdash; the row keeps its id.</p>
+{{/missing}}
+{{/content}}{{/shell}}

@@ -39,6 +39,7 @@ public final class AdminView {
         Permission.templates_write),
     navigation("navigation", "Navigation", "logs", content, Permission.navigation_write),
     tables("tables", "Tables", "logs", content, Permission.tables_write),
+    mutations("mutations", "Mutations", "logs", content, Permission.tables_write),
     attachments("attachments", "Files", "content", content, Permission.attachments_write),
     bundles("content/bundles", "Import & export", "logs", content, Permission.content_write),
     unused("attachments/unused", "Unused files", "x", attachments, Permission.attachments_write),
@@ -125,7 +126,9 @@ public final class AdminView {
       /** one version of one thing, rendered for a preview */
       version,
       /** what one version changed, line by line, against the one before it */
-      changes
+      changes,
+      /** the rows of one user table: a listing, an insert form, or one row being edited */
+      rows
     }
 
     public boolean isPage() {
@@ -215,6 +218,15 @@ public final class AdminView {
     if (rest.startsWith("edit/")) {
       String id = rest.substring(5);
       return id.isEmpty() ? null : new Target(best, Target.Kind.edit, id);
+    }
+    // The row browser: /admin/tables/rows/<table>, .../new, .../row/<id>, .../list for the panel.
+    //
+    // One Kind carrying a composite id rather than four, because the alternative is four enum
+    // entries and four arms in a switch to say the same thing the path already says. The id is
+    // never spliced into anything -- it is split here and each half looked up.
+    if (rest.startsWith("rows/")) {
+      String id = rest.substring(5);
+      return id.isEmpty() ? null : new Target(best, Target.Kind.rows, id);
     }
     if (rest.startsWith("review/")) {
       String id = rest.substring(7);

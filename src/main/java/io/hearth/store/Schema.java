@@ -29,13 +29,14 @@ import java.util.List;
  */
 public class Schema {
   /** bumped whenever the tables below change; recorded in schema_meta for the boot audit */
-  public static final int VERSION = 41;
+  public static final int VERSION = 42;
 
   public static final String EMAILS = "emails";
   public static final String SESSIONS = "sessions";
   public static final String ROLES = "roles";
   public static final String CONTENT = "content";
   public static final String TEMPLATES = "templates";
+  public static final String MUTATIONS = "mutations";
   public static final String PROFILES = "profiles";
   public static final String BANS = "bans";
   public static final String OAUTH_CLIENTS = "oauth_clients";
@@ -186,6 +187,26 @@ public class Schema {
    * change at runtime. These are the operator's, and changing one invalidates every cached page that
    * named it -- the cascade that makes editing a site layout feel immediate.
    */
+  /**
+   * A uri that accepts a POST and runs a program.
+   *
+   * In the system database rather than the data one, because a mutation is operator machinery like
+   * a template -- somebody with `tables_write` writes it, and it is versioned with the rest of what
+   * the community declared rather than living beside the rows it changes.
+   */
+  public static final Table MUTATIONS_TABLE = Table.named(MUTATIONS)
+      .column(Column.id("id"))
+      .column(Column.of("uri", "VARCHAR(512)").notNull().unique())
+      .column(Column.of("body", "VARCHAR(1048576)").notNull().withDefault("''"))
+      // off is the safe half of the switch: a mutation somebody is midway through writing should
+      // not be answering POSTs, and deleting it to stop it would lose the draft
+      .column(Column.of("enabled", "BOOLEAN").notNull().withDefault("FALSE"))
+      .column(Column.of("created_at", "TIMESTAMP").notNull().withDefault("CURRENT_TIMESTAMP"))
+      .column(Column.of("updated_at", "TIMESTAMP").notNull().withDefault("CURRENT_TIMESTAMP"))
+      .column(Column.of("updated_by", "BIGINT"))
+      .index("idx_mutations_uri", "uri")
+      .build();
+
   public static final Table TEMPLATES_TABLE = Table.named(TEMPLATES)
       .column(Column.id("id"))
       .column(Column.of("name", "VARCHAR(64)").notNull().unique())
@@ -571,7 +592,7 @@ public class Schema {
           ROLE_DEFS_TABLE, PUSH_SUBS_TABLE,
           THEMES_TABLE, LEGAL_TABLE, SYSTEM_TEMPLATES_TABLE,
           ATTACHMENTS_TABLE,
-          CONFIG_TABLE);
+          CONFIG_TABLE, MUTATIONS_TABLE);
 
   private Schema() {
   }

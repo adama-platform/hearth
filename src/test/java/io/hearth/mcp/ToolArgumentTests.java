@@ -27,7 +27,7 @@ import static org.junit.Assert.assertTrue;
  * {@code place_save} has advertised a {@code fields} object since the address book shipped and
  * reads it behind an {@code instanceof Map} that could never be true. A model filling in a kind's
  * own fields -- the whole reason a community invents a kind -- was answered with a success and
- * wrote nothing. That is exactly the failure invariant 94 refuses for an *undeclared* field,
+ * wrote nothing. That is exactly the failure invariant 102 refuses for an *undeclared* field,
  * arriving through the transport instead of through the handler: a write that reports success
  * while discarding what it was given teaches a model that it worked.
  *

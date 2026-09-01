@@ -274,7 +274,7 @@ public class AiSurface {
     //
     // The one thing an agent must not be able to do is widen its own reach, which is why there is
     // no tool for making a table -- only for writing a page that reads the ones a person declared.
-    // Same shape as invariant 95: the safety is that the tool does not exist.
+    // Same shape as invariant 103: the safety is that the tool does not exist.
     String template = changes.containsKey("template")
         ? str(changes, "template")
         : (existing == null ? null : existing.templateName());
@@ -573,6 +573,10 @@ public class AiSurface {
         for (io.hearth.tables.UserField field : table.fields()) {
           fields.put(field.name(), field.type().inJavaScript);
         }
+        one.put("hidden_rows", "every table also has a 'hidden' flag an admin can set. Rows with"
+            + " it are absent from every function above and the flag is not in the rows you get,"
+            + " so there is nothing to filter on and nothing to test. Do not write a page that"
+            + " tries to show or count them.");
         one.put("row_shape", fields);
         one.put("functions", table.functions());
         one.put("indexed", table.indexes());
@@ -585,10 +589,36 @@ public class AiSurface {
         + " exists only for fields somebody indexed. <table>_page(idAfter, count) gives the next"
         + " count rows after that id -- start at 0 and pass the last id you saw. <table>_all()"
         + " gives every row. Asking for a table that does not exist throws on that line.");
-    guide.put("no_writes", "there is no way to write a table from a page, and that is deliberate:"
-        + " a dynamic page runs for every request including a crawler's, so a page that could"
-        + " insert would fill its table with whatever fetched it. Tables are written from the admin"
-        + " section.");
+    guide.put("csrf", "csrf() returns the token a form must carry to reach a mutation. Put it in a"
+        + " hidden input called 'csrf'. A form without it is refused.");
+    guide.put("no_writes_from_a_page", "a page cannot write, and the merge function is not even"
+        + " defined in one -- a dynamic page runs for every request including a crawler's, so a"
+        + " page that could insert would fill its table with whatever fetched it. Writing happens"
+        + " at a mutation.");
+    ArrayList<Map<String, Object>> mutations = new ArrayList<>();
+    try {
+      for (io.hearth.content.Mutations.Record mutation : accounts.mutations.all()) {
+        LinkedHashMap<String, Object> one = new LinkedHashMap<>();
+        one.put("uri", mutation.uri());
+        one.put("answering", mutation.enabled());
+        mutations.add(one);
+      }
+    } catch (SQLException ex) {
+      // a guide missing its mutations is worth more than no guide
+    }
+    guide.put("mutations", mutations);
+    guide.put("what_a_mutation_is", "an address that answers POST and runs a program, declared by a"
+        + " person at /admin/mutations. It is the only way anything writes. It gets everything a"
+        + " page gets, plus form(name, fallback) for what was submitted and"
+        + " <table>_merge_by_id(id, change) for each table. You cannot create one; ask an"
+        + " administrator to.");
+    guide.put("merging", "<table>_merge_by_id(id, {field: value}) changes only the keys named and"
+        + " leaves the rest alone, which is what makes it safe from a form showing some of a row."
+        + " It returns {success: true} or {success: false, reasons: [...]} -- every reason, and"
+        + " nothing is written unless all of them pass. It cannot change 'hidden'.");
+    guide.put("mutation_answers", "meta('redirect', '/thanks') answers 303 so a refresh cannot"
+        + " repeat the write, which is what a form wants. Anything render()ed is the response"
+        + " otherwise, and a mutation that does neither answers {\"success\": true}.");
     guide.put("no_reach", "there is no fetch, no require, no filesystem, no timers, and no way back"
         + " into this server. Do not write a page that tries; nothing was bound, so it is a"
         + " ReferenceError rather than a refusal.");

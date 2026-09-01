@@ -47,6 +47,20 @@ public record UserTable(String name, List<UserField> fields, List<String> indexe
     indexes = List.copyOf(indexes);
   }
 
+  /**
+   * The column every table has that a program cannot see.
+   *
+   * <b>A row that is present and not published.</b> An admin sets it; the JavaScript surface filters
+   * it out of every read and does not even carry the field, so there is no way for a page to notice
+   * a hidden row exists, let alone show one. That is the difference between this and a `published`
+   * field somebody could declare themselves: a declared field is data a program can read and get
+   * wrong, and this is a decision the program is not party to.
+   *
+   * Not a delete. The row keeps its id, so an index entry that pointed at it still resolves, the
+   * history of what was collected stays intact, and unhiding is one checkbox rather than retyping.
+   */
+  public static final String HIDDEN = "hidden";
+
   /** the physical table; see the class note about MODE=STRICT */
   public String physical() {
     return "t_" + name;
@@ -76,8 +90,8 @@ public record UserTable(String name, List<UserField> fields, List<String> indexe
       return what + " must be lowercase letters, digits and underscores, starting with a letter,"
           + " and at most 31 characters";
     }
-    if (candidate.equals("id")) {
-      return "'id' is the one field every table already has";
+    if (candidate.equals("id") || candidate.equals(HIDDEN)) {
+      return "'" + candidate + "' is a field every table already has";
     }
     return null;
   }

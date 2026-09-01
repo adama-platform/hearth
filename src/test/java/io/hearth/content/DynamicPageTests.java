@@ -291,7 +291,10 @@ public class DynamicPageTests {
     assertTrue("the table appears the moment it exists", spec.contains("rsvps_get_id(id)"));
     assertTrue("with the index that was declared", spec.contains("rsvps_list_who(value)"));
     assertTrue("and the shape of a row", spec.contains("\"who\":\"a string\""));
-    assertTrue("and that a page cannot write to it", spec.contains("no way to write a table"));
+    assertTrue("and that a page cannot write to it", spec.contains("a page cannot write"));
+    assertTrue("and that hidden rows exist and are not its business",
+        spec.contains("hidden_rows"));
+    assertTrue("and where writing actually happens", spec.contains("merge_by_id"));
   }
 
   @Test

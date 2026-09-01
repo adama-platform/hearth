@@ -1,0 +1,42 @@
+{{<shell}}{{$content}}
+<p class="crumb"><a href="{{backUrl}}">&larr; {{table}}</a></p>
+<h1>{{heading}}</h1>
+{{#missing}}<p class="problem">There is no table called <code>{{table}}</code>.</p>{{/missing}}
+{{^missing}}
+<form class="editor" method="post" action="{{action}}">
+  <input type="hidden" name="csrf" value="{{csrf}}">
+  <input type="hidden" name="action" value="row_save">
+  <input type="hidden" name="table" value="{{table}}">
+  {{#editing}}<input type="hidden" name="id" value="{{form_id}}">{{/editing}}
+
+  {{#fields}}
+  <div class="field">
+    <label for="v-{{name}}">{{label}} <span class="dim">&mdash; {{hint}}</span></label>
+    {{#isText}}<textarea id="v-{{name}}" name="v_{{name}}" rows="3" style="min-height:4rem">{{value}}</textarea>{{/isText}}
+    {{#isNumber}}<input id="v-{{name}}" type="text" name="v_{{name}}" value="{{value}}" inputmode="decimal">{{/isNumber}}
+    {{#isFlag}}<label class="check"><input id="v-{{name}}" type="checkbox" name="v_{{name}}"{{#checked}} checked{{/checked}}> yes</label>{{/isFlag}}
+  </div>
+  {{/fields}}
+
+  <div class="field">
+    <label class="check"><input type="checkbox" name="hidden"{{#hidden}} checked{{/hidden}}> hidden from every page</label>
+    <p class="hint">Kept in the table, filtered out of every read a program can make. Nothing on the
+      site can tell this row exists.</p>
+  </div>
+
+  <div class="doing"><button type="submit">{{#editing}}Save{{/editing}}{{^editing}}Add{{/editing}}</button></div>
+</form>
+
+{{#editing}}
+<form method="post" action="{{action}}" onsubmit="return confirm('Delete row {{form_id}}? This cannot be undone.')">
+  <input type="hidden" name="csrf" value="{{csrf}}">
+  <input type="hidden" name="action" value="row_delete">
+  <input type="hidden" name="table" value="{{table}}">
+  <input type="hidden" name="id" value="{{form_id}}">
+  <div class="doing"><button type="submit" class="quiet">Delete this row</button></div>
+</form>
+<p class="hint">Deleting removes it for good. If you only want it out of sight, tick
+  <strong>hidden</strong> above instead &mdash; that keeps the row and its id.</p>
+{{/editing}}
+{{/missing}}
+{{/content}}{{/shell}}

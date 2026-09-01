@@ -38,6 +38,9 @@ public class Accounts {
   /** the static pages this database serves, and the caches in front of them */
   public final Site site;
 
+  /** addresses that accept a POST and run a program; see {@link io.hearth.content.Mutations} */
+  public final io.hearth.content.Mutations mutations;
+
   /**
    * The tables this community invented, in a database file of their own.
    *
@@ -116,6 +119,7 @@ public class Accounts {
     this.bans = new Bans(store, databaseDomain);
     this.oauthClients = new io.hearth.mcp.OauthClients(store);
     this.site = new Site(databaseDomain, store, caches, events, verbose);
+    this.mutations = new io.hearth.content.Mutations(store);
     io.hearth.tables.UserTables opened = null;
     if (storesRoot != null) {
       try {

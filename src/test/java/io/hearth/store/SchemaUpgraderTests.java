@@ -298,31 +298,21 @@ public class SchemaUpgraderTests {
     }
   }
 
-  /** NOT NULL, no default, present since the table was created; never added by ALTER */
+  /**
+   * NOT NULL, no default, present since the table was created; never added by ALTER.
+   *
+   * A hand-kept list, so it rots: it named eight tables that went in the reduction -- invites,
+   * posts, comments, rsvps, places and the rest -- long after the tables did. Entries for tables
+   * this schema no longer declares are worse than useless, because the next person to read it
+   * cannot tell which of these are real.
+   */
   private static final List<String> FOUNDING = List.of(
-      "config.name", "config.value_text",
-      "emails.email", "sessions.token_hash", "sessions.user_id",
-      "roles.user_id", "roles.role_name", "templates.name", "content.uri",
-      "profiles.user_id", "answers.user_id", "bans.email", "oauth_clients.client_id",
-      "content_versions.content_id", "content_versions.version",
-      "invites.email", "invites.token",
-      "posts.author_id", "comments.subject_id", "comments.author_id", "notifications.user_id",
-      "notify_prefs.user_id", "rsvps.event_id", "rsvps.user_id", "role_defs.name", "push_subs.session_id", "push_subs.user_id",
-      "push_subs.endpoint", "place_types.slug", "places.type_slug",
-      "places.slug", "themes.scope", "legal.slug",
-      "signals.subject_id", "signals.user_id", "system_templates.slug",
-      "public_rsvps.event_id", "public_rsvps.email",
-      "availability.user_id", "calendar_links.user_id", "calendar_links.url",
-      "calendar_cache.user_id", "calendar_cache.url_hash",
-      "polls.post_id", "polls.kind",
-      "poll_options.poll_id", "poll_options.facet",
-      "poll_votes.poll_id", "poll_votes.option_id", "poll_votes.facet", "poll_votes.user_id",
-      "projects.name", "projects.slug",
-      "task_defs.name", "task_defs.slug",
-      "tasks.project_id", "tasks.title",
-      "task_entries.user_id",
-      // attachments has no NOT NULL column without a default; everything is addable
-      "schema_meta.meta_key", "schema_meta.meta_value");
+      "bans.email", "config.name", "config.value_text", "content.uri",
+      "content_versions.content_id", "content_versions.version", "emails.email", "legal.slug",
+      "mutations.uri", "oauth_clients.client_id", "profiles.user_id", "push_subs.endpoint",
+      "push_subs.session_id", "push_subs.user_id", "role_defs.name", "roles.role_name",
+      "roles.user_id", "schema_meta.meta_key", "schema_meta.meta_value", "sessions.token_hash",
+      "sessions.user_id", "system_templates.slug", "templates.name", "themes.scope");
 
   @Test
   public void aVersionOneDatabaseUpgradesToVersionTwoInPlace() throws Exception {
