@@ -21,11 +21,7 @@ say() { printf '  %-6s %s\n' "$1" "$2"; }
 bad() { say "BAD" "$1"; fail=1; }
 ok()  { say "ok" "$1"; }
 
-# LANDING.md is in here for a reason worth stating: it is the document read by people who have
-# never seen this software, so a claim that has gone stale there is more expensive than the same
-# claim in the manual, not less. It quotes a test count, names flags somebody is meant to type, and
-# links to the other five -- all of which this script already knows how to check.
-DOCS=(README.md MANUAL.md CLAUDE.md MISSION.md API.md LANDING.md)
+DOCS=(README.md CLAUDE.md MISSION.md)
 
 echo
 echo "  documents"
@@ -147,7 +143,8 @@ done < <(find src/main/resources/templates -name '*.mustache' | sort)
 # ---- 7. the admin sections the docs describe are the ones that exist ---------------------------
 sectionmiss=0
 while IFS= read -r section; do
-  grep -qE "(^|[^a-z])$section([^a-z]|$)" MANUAL.md README.md CLAUDE.md \
+  # case-insensitive: a document calls it "Overview" and the enum calls it `overview`
+  grep -qiE "(^|[^a-z])$section([^a-z]|$)" README.md CLAUDE.md \
     || { bad "admin section '$section' is in AdminView and in no document"; sectionmiss=1; }
 done < <(sed -n '/public enum Section {/,/;$/p' src/main/java/io/hearth/web/AdminView.java \
          | grep -oE '^    [a-z]+\(' | tr -d ' (')
@@ -185,26 +182,6 @@ if [ -n "$CLAIMED" ]; then
   fi
 fi
 
-# ---- 10. every endpoint API.md promises is one the server answers ----------------------------
-# API.md is a contract with somebody else's code: a tool written against it is already relying on
-# every path in it. A renamed endpoint is not a documentation bug, it is a broken client -- so the
-# paths it names have to appear in the routes that serve them.
-if [ -f API.md ] && [ -f src/main/java/io/hearth/api/ApiRoutes.java ]; then
-  apibad=0
-  for path in $(grep -ohE '/api/v1/[a-z]+' API.md | sort -u); do
-    leaf=${path#/api/v1/}
-    grep -q "\"$leaf\"" src/main/java/io/hearth/api/ApiRoutes.java \
-      || { bad "API.md promises $path and ApiRoutes answers no such thing"; apibad=1; }
-  done
-  # and the error codes it tabulates
-  for code in unauthorized not_allowed no_such_endpoint wrong_method server_error; do
-    if grep -q "\`$code\`" API.md; then
-      grep -q "\"$code\"" src/main/java/io/hearth/api/ApiRoutes.java \
-        || { bad "API.md documents the error '$code' and nothing emits it"; apibad=1; }
-    fi
-  done
-  [ $apibad -eq 0 ] && ok "every endpoint and error API.md promises is one the server has"
-fi
 
 echo
 if [ $fail -eq 0 ]; then

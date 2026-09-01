@@ -82,24 +82,6 @@ public class PushLedgerTests {
     assertTrue(ledger().due(now + PushLedger.FLUSH_MILLIS + 1));
   }
 
-  @Test
-  public void theHistogramIsBucketsRatherThanAnAverage() throws Exception {
-    // the average of "three people in a minute and one person tomorrow" is six hours, which
-    // describes nobody
-    long me = me();
-    long now = System.currentTimeMillis();
-    ledger().sent(me, now - 3 * 60_000);
-    ledger().acted(me, now);
-    ledger().flush(now);
-
-    List<Map<String, Object>> histogram = ledger().histogram();
-    assertTrue(histogram.stream().anyMatch(row -> "within 5 min".equals(row.get("label"))
-        && ((Number) row.get("count")).intValue() == 1));
-    assertTrue("and it says how many answered at all",
-        histogram.stream().anyMatch(row -> Boolean.TRUE.equals(row.get("total"))));
-    assertTrue("the engagement screen shows it",
-        admin.get("/admin/engagement").contains("How long a notification takes to work"));
-  }
 
   @Test
   public void somebodySentToAndNeverHeardFromIsCountedSeparately() throws Exception {

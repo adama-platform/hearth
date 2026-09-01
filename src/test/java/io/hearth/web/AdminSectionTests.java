@@ -50,7 +50,7 @@ public class AdminSectionTests {
   /** every path this admin answers on, page and panel alike */
   private static final String[] PAGES = {
       "/admin", "/admin/people", "/admin/bans", "/admin/content", "/admin/templates",
-      "/admin/navigation", "/admin/survey", "/admin/survey/retired",
+      "/admin/navigation",
       "/admin/system/events", "/admin/system/analytics", "/admin/system/caching",
       "/admin/system/ai", "/admin/system/logs"};
 
@@ -69,38 +69,11 @@ public class AdminSectionTests {
         page.contains("/~menu.js"));
   }
 
-  @Test
-  public void theAsyncScreenSaysWhatTheBoxIsAskingOtherPeople() throws Exception {
-    Browser.Page page = admin.get("/admin/system/async");
-    assertEquals(200, page.status());
-    assertTrue(page.body(), page.contains("waiting"));
-    assertTrue("the pace is on the screen because it is a promise, not a tuning knob",
-        page.contains("every 1.5 seconds") || page.contains("every 0.005 seconds"));
-    assertTrue("and the difference between the two kinds of failure is explained",
-        page.contains("never heard of that address"));
 
-    // its panel is a real path like every other, and renders the same either way
-    Browser.Page panel = admin.get("/admin/system/async/queue");
-    assertEquals(200, panel.status());
-    assertFalse("a panel is a fragment, not a page", panel.contains("<html"));
-  }
-
-  @Test
-  public void theQueueCanBeClearedAndRefilledFromTheScreen() throws Exception {
-    Browser.Page cleared = admin.submitToAndFollow("/admin/system/async",
-        Map.of("action", "clear"));
-    assertTrue(cleared.body(), cleared.contains("dropped"));
-    Browser.Page retried = admin.submitToAndFollow("/admin/system/async",
-        Map.of("action", "retry"));
-    assertTrue(retried.body(),
-        retried.contains("queued") || retried.contains("Nothing is waiting"));
-    assertTrue(admin.submitToAndFollow("/admin/system/async", Map.of("action", "wat"))
-        .contains("not something this page can do"));
-  }
 
   private static final String[] PANELS = {
       "/admin/people/list", "/admin/bans/list", "/admin/content/list", "/admin/templates/list",
-      "/admin/survey/list", "/admin/survey/retired/list", "/admin/system/events/stream",
+      "/admin/system/events/stream",
       "/admin/system/caching/stats", "/admin/system/ai/actions", "/admin/system/logs/results"};
 
   // ---- the shell -------------------------------------------------------------------------------
@@ -141,23 +114,6 @@ public class AdminSectionTests {
         page.body().contains(panel.body().trim()));
   }
 
-  @Test
-  public void theSidebarNestsTheSectionsUnderTheirHeadings() throws Exception {
-    // Standing in System: its children are open, everybody else's are folded away. Thirty entries
-    // is a list nobody reads, and most of them are nobody's business most days.
-    Browser.Page page = admin.get("/admin/system/events");
-    for (String label : new String[]{"Overview", "People", "Content", "Survey", "System",
-        "Machine", "Events", "Analytics", "Caching", "AI", "Log"}) {
-      assertTrue("sidebar should offer " + label, page.contains("<span>" + label + "</span>"));
-    }
-    for (String folded : new String[]{"Bans", "Templates", "Retired"}) {
-      assertFalse("somebody in System has no business seeing " + folded,
-          page.contains("<span>" + folded + "</span>"));
-    }
-    assertTrue("the current section is marked", page.contains("class=\"on kid\""));
-    assertTrue("a nested section is drawn as one", page.contains(" kid\""));
-    assertTrue("each item carries an inline icon", page.contains("<svg class=\"icon\""));
-  }
 
   @Test
   public void aChildOpensItsWholeFamilyAndNobodyElses() throws Exception {

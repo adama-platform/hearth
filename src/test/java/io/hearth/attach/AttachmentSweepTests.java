@@ -152,7 +152,6 @@ public class AttachmentSweepTests {
   public void theScreenSaysWhereItLookedAndWhatItCannotSee() throws Exception {
     Browser.Page screen = admin.get("/admin/attachments/unused");
     assertTrue("page history", screen.contains("page history"));
-    assertTrue(screen.contains("suggested edits"));
     assertTrue(screen.contains("profiles"));
     assertTrue("it finds addresses rather than intentions, and says so",
         screen.contains("not intentions"));

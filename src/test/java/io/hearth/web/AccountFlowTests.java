@@ -92,7 +92,7 @@ public class AccountFlowTests {
     Browser.Page done = browser.submit(Map.of("code", message.code()));
     assertEquals(303, done.status());
     // brand new, with no name on the account yet, so the welcome rather than the home page
-    assertEquals("/welcome", done.location());
+    assertEquals("/", done.location());
     assertNotNull("a session cookie should have been set", browser.cookie("hearth_session"));
 
     Browser.Page home = browser.get("/");

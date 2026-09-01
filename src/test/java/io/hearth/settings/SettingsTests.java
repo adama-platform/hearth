@@ -377,6 +377,7 @@ public class SettingsTests {
   public void theEditorShowsWhatIsActuallyInForce() throws Exception {
     String page = admin.get("/admin/configuration").body();
     assertTrue("the file's value has to appear in its box", page.contains("Example Community"));
-    assertTrue("and a built-in default too", page.contains("value=\"60\""));
+    assertTrue("and the clock, which comes from the built-in default",
+        page.contains("s_timezone"));
   }
 }

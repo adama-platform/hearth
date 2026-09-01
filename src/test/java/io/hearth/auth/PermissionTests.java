@@ -138,7 +138,7 @@ public class PermissionTests {
   public void anAdminSeesEverySection() throws Exception {
     // from the overview: the top-level sections, with everybody's children folded away
     Browser.Page page = boss.get("/admin");
-    for (String label : new String[]{"People", "Content", "Board", "Events", "Survey", "System",
+    for (String label : new String[]{"People", "Content", "System",
         "Customization"}) {
       assertTrue(label, page.contains("<span>" + label + "</span>"));
     }

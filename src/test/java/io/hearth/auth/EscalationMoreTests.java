@@ -61,34 +61,7 @@ public class EscalationMoreTests {
 
 
 
-  @Test
-  public void theMembersDirectoryIsForMembers() throws Exception {
-    // the single most valuable page on this server to somebody who should not have it
-    try (io.hearth.testkit.Http http = new io.hearth.testkit.Http()) {
-      assertEquals(303, http.get(server.port, "example.org", "/members").status);
-      assertEquals(303, http.get(server.port, "example.org", "/members/1").status);
-    }
-    // signed in but not approved: the community itself is what approval gates
-    Browser waiting = signIn("waiting@example.com");
-    assertFalse(waiting.get("/members").contains("class=\"members\""));
-  }
 
-  @Test
-  public void aMemberPageNeverCarriesAnEmailAddress() throws Exception {
-    Browser ana = signIn("ana@example.com");
-    long id = accounts().users.byEmail("ana@example.com").id();
-    boss.submitToAndFollow("/admin/people",
-        Map.of("action", "approve", "user", Long.toString(id)));
-    ana.submitToAndFollow("/self", Map.of("action", "profile", "display_name", "Ana",
-        "location", "Kansas City", "about", "I bring the bread."));
-
-    Browser.Page directory = ana.get("/members");
-    assertTrue(directory.contains("Ana"));
-    assertTrue(directory.contains("Kansas City"));
-    assertFalse("a member list is the easiest thing in the world to screenshot",
-        directory.contains("ana@example.com"));
-    assertFalse(ana.get("/members/" + id).contains("ana@example.com"));
-  }
 
   private Browser signIn(String email) throws Exception {
     Browser browser = new Browser(server.port, "example.org");

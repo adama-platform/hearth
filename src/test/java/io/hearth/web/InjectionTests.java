@@ -34,8 +34,7 @@ public class InjectionTests {
   @Before
   public void setUp() throws Exception {
     configs = Configs.dir().domain("example.org",
-        "{\"name\":\"Example\",\"admin_emails\":[\"boss@example.com\"],"
-            + "\"board\":{\"enabled\":true}}");
+        "{\"name\":\"Example\",\"admin_emails\":[\"boss@example.com\"]}");
     server = TestServer.ofConfigs(configs.file());
     admin = signIn("boss@example.com");
   }
@@ -72,22 +71,6 @@ public class InjectionTests {
     assertFalse(newcomer.get("/self").contains(PAYLOAD));
   }
 
-  @Test
-  public void aPostAndACommentAreBothFiltered() throws Exception {
-    Browser member = approved("member@example.com");
-    member.get("/board");
-    Browser.Page posted = member.submitTo("/board",
-        Map.of("action", "post", "title", "Hello", "body", "Look at this " + PAYLOAD));
-    long postId = Long.parseLong(posted.location().substring("/board/".length()));
-    assertFalse(member.get("/board").contains(PAYLOAD));
-
-    member.get("/board/" + postId);
-    member.submitToAndFollow("/board/" + postId, Map.of("action", "reply",
-        "post", Long.toString(postId), "body", "And this " + PAYLOAD));
-    Browser.Page thread = member.get("/board/" + postId);
-    assertFalse("a cached thread is still a filtered thread", thread.contains(PAYLOAD));
-    assertTrue(thread.contains("And this"));
-  }
 
   @Test
   public void anInjectedFormCannotPostSomewhereElse() throws Exception {

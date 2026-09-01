@@ -1160,6 +1160,9 @@ public class AdminRoutes {
       if (!query.isEmpty() && !person.email().toLowerCase(Locale.ROOT).contains(query)) {
         continue;
       }
+      if (!matchesState(state, person, isAdmin)) {
+        continue;
+      }
       ProfileRecord profile = accounts.people.profileOf(person.id());
       LinkedHashMap<String, Object> row = new LinkedHashMap<>();
       row.put("id", person.id());
@@ -1326,6 +1329,24 @@ public class AdminRoutes {
       }
     }
     return false;
+  }
+
+  /**
+   * The people listing's state filter.
+   *
+   * Four states a person can be in, asked as a query on the listing rather than as four screens.
+   * `admin` is the odd one: it is not a column but a question for `Access`, because the two
+   * spellings of admin -- named in the config, or granted a role -- are one state to whoever is
+   * looking at the list.
+   */
+  private static boolean matchesState(String state, UserRecord person, boolean isAdmin) {
+    return switch (state) {
+      case "waiting" -> !person.isApproved() && !person.disabled();
+      case "approved" -> person.isApproved() && !person.disabled();
+      case "disabled" -> person.disabled();
+      case "admin" -> isAdmin;
+      default -> true;
+    };
   }
 
   private static Map<String, Object> cacheRow(String name, String policy, int size, long hits,

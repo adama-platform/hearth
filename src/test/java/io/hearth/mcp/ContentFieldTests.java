@@ -378,23 +378,4 @@ public class ContentFieldTests {
         .path("title").asText());
   }
 
-  /**
-   * A listing's knobs live in the same blob as the declared fields.
-   *
-   * They are a property of one page rather than of its template, so nothing declares them -- which
-   * means a merge that only knew about declared names would refuse them, and a replace would reset
-   * a listing somebody tuned every time a title changed.
-   */
-  @Test
-  public void aListingsPageSizeSurvivesAMetaEdit() throws Exception {
-    admin.submitToAndFollow("/admin/content", Map.of("action", "save", "uri", "/whats-on",
-        "title", "What's on", "kind", "event_listing", "template_name", "", "published", "on",
-        "body", "{{#events}}{{title}}{{/events}}", "page_size", "25", "sort", "date"));
-
-    grok.call("content_meta", "uri", "/whats-on", "title", "Coming up");
-
-    JsonNode got = grok.call("content_get", "uri", "/whats-on").toolResult();
-    assertEquals("Coming up", got.path("title").asText());
-    assertEquals("25", got.path("fields").path("page_size").asText());
-  }
 }

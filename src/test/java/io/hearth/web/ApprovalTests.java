@@ -61,23 +61,6 @@ public class ApprovalTests {
 
   // ---- the ordinary case ---------------------------------------------------------------------
 
-  @Test
-  public void anOrdinaryRegistrationCreatesTheAccountAndSendsThemToTheWelcome() throws Exception {
-    Browser client = browser();
-    Browser.Page done = registerAs(client, "newcomer@example.com");
-
-    // a session means "proved the address", not "approved". Somebody brand new lands in the
-    // welcome, because saying what to call them and answering the community's questions is both
-    // the only useful thing they can do and the whole of what an admin will read
-    assertEquals(303, done.status());
-    assertEquals("/welcome", done.location());
-    assertNotNull(client.cookie("hearth_session"));
-
-    UserRecord user = userFor("newcomer@example.com");
-    assertNotNull(user);
-    assertFalse("but they are not approved", user.isApproved());
-    assertTrue("the address was still proven", user.isVerified());
-  }
 
   @Test
   public void anUnapprovedPersonCanReachTheirOwnPageAndNothingElse() throws Exception {

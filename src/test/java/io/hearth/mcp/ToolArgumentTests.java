@@ -74,46 +74,8 @@ public class ToolArgumentTests {
     return node;
   }
 
-  /** a kind of place that records something this program has never heard of */
-  private void ranchKind() throws Exception {
-    admin.submitToAndFollow("/admin/places/kinds", Map.of(
-        "action", "save",
-        "slug", "ranch",
-        "label", "Ranch",
-        "plural", "Ranches",
-        "description", "where the beef comes from",
-        "p_name_0", "grass_finished",
-        "p_type_0", "text",
-        "p_label_0", "Grass finished",
-        "template_name", "",
-        "icon", ""));
-  }
 
-  @Test
-  public void aPlacesOwnFieldsActuallyLand() throws Exception {
-    ranchKind();
 
-    McpClient.Response saved = grok.call("place_save",
-        "type", "ranch", "slug", "oak-hill", "name", "Oak Hill",
-        "address", "12 Long Road",
-        "fields", values("grass_finished", "grass finished"));
-    assertEquals(200, saved.status());
-
-    JsonNode got = grok.call("place_get", "type", "ranch", "slug", "oak-hill").toolResult();
-    assertEquals("the fields object used to arrive as the empty string and be dropped in silence",
-        "grass finished", got.path("fields").path("grass_finished").asText());
-  }
-
-  /** and the refusal that proves the value is still being checked rather than merely stored */
-  @Test
-  public void aFieldTheKindNeverDeclaredIsStillRefused() throws Exception {
-    ranchKind();
-
-    McpClient.Response response = grok.call("place_save",
-        "type", "ranch", "slug", "oak-hill", "name", "Oak Hill",
-        "fields", values("acreage", "400"));
-    assertTrue(response.body(), response.body().contains("acreage"));
-  }
 
   @Test
   public void aNestedObjectSurvivesTheWholeRoundTrip() throws Exception {

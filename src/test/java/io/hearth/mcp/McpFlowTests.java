@@ -388,7 +388,8 @@ public class McpFlowTests {
     assertEquals(200, tools.status());
     String body = tools.body();
     for (String tool : new String[]{"content_list", "content_search", "content_get", "content_save",
-        "template_list", "template_save", "survey_list", "survey_ask", "survey_summarize"}) {
+        "content_meta", "content_delete", "template_list", "template_get", "template_save",
+        "navigation_get", "site_spec"}) {
       assertTrue("should offer " + tool, body.contains("\"" + tool + "\""));
     }
   }

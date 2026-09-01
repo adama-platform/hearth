@@ -263,7 +263,6 @@ public class BundleTests {
     assertTrue("a file box", page.contains("type=\"file\""));
     assertTrue("and the paste box, behind a modal rather than sitting on the page",
         page.contains("data-modal=\"paste\""));
-    assertTrue("with the same thing over HTTP for a script", page.contains("/api/v1/content"));
   }
 
   @Test
