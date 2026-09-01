@@ -140,6 +140,15 @@ position**. It will not drop, rename, or retype a column — which is what makes
 one above safe for a database that already exists: the tables for removed features are simply left
 alone.
 
+The cost of that promise is that an upgraded database keeps carrying the discussion board and the
+calendar, holding rows nothing will ever read. **`/admin/system/cleanup`** is where somebody finally
+throws them away: it lists every table the code no longer declares with the number of rows in it,
+and drops one at a time, by name, after confirming. Nothing is hard-coded — a leftover is any table
+the schema does not name, which stays correct for removals that have not happened yet. It is the
+only screen in the admin section that destroys data and the only one that asks for `everything`, and
+boot is still never allowed to drop anything: an operator who upgrades, hits a regression and rolls
+the jar back must still have their data.
+
 Every account starts unapproved: registering proves you can read an address and creates the row, but
 an admin has to say yes before you can sign in. `admin_emails` in a domain's config names the
 addresses that are admins outright — without that, requiring approval would mean nobody can ever
@@ -178,9 +187,9 @@ and paste:
 ### Content, and the event bus that keeps it fresh
 
 Pages live in a `content` table and are written at `/admin/content`: markdown wrapped in a template,
-an HTML fragment wrapped in a template, or a whole document served as-is. Markdown has everything
-switched on — tables, task lists, footnotes, autolinks, heading anchors. Templates live in their own
-table and are mustache: `{{{body}}}` is the page, `{{title}}` and `{{uri}}` are its own.
+an HTML fragment wrapped in a template, a whole document served as-is, or **a program**. Markdown has
+everything switched on — tables, task lists, footnotes, autolinks, heading anchors. Templates live in
+their own table and are mustache: `{{{body}}}` is the page, `{{title}}` and `{{uri}}` are its own.
 
 Pages are cached for an hour by default. They also update the instant you save, because every write
 announces itself:
@@ -209,6 +218,35 @@ one nobody can find anything in.
 values, flags. A snapshot every ten versions and a line patch in between. **Restore** puts a version
 back as a *new* version, so the edit being undone stays in the history. That is `git revert`, not
 `git reset --hard`, and it is the reason to keep a history rather than a backup.
+
+**One kind is a program.** A *Dynamic JavaScript* page has a body that is run rather than rendered,
+on every request, in V8. It gets two functions and nothing else: `render(text)` appends to the
+document, and `meta(key, value)` sets the title and anything the template declared — a value set
+there wins, because it ran a moment ago and the boxes above were typed once.
+
+```js
+meta('title', 'Today');
+for (var i = 0; i < 3; i++) { render('<li>' + i + '</li>'); }
+```
+
+Every execution gets a **fresh isolate**, so nothing one page defines is visible to the next or to
+the next request — that costs about 0.8ms and is what makes the feature explainable. It runs on a
+**dedicated thread pool** created on first use, so a server with no dynamic pages pays nothing for
+this at all. It gets **one second**, and V8 is interrupted if it overruns: `while(true){}` in a page
+body is stopped and says so on the page rather than taking a thread with it. There is no network, no
+storage, no timers and no way back into this server — not because something refuses, but because
+nothing was ever bound. **No agent can write one**, in either direction: it cannot create a program
+and it cannot convert a document into one.
+
+These pages are the one thing not cached, because a page that can answer differently every time has
+no business being kept under its address.
+
+**Every page is timed, and the listing has a p99 column.** The last 50 builds of every page — markdown,
+HTML, whole-document and program alike — are kept in memory, and the content listing prints the
+slowest of them. That is the number worth having: what the unlucky reader waits for, not the average.
+The column is only readable because the static pages have numbers too — 40ms means nothing until the
+markdown page beside it is 0.3ms. A dash means nothing has asked for that page since the last
+restart.
 
 **Everything comes out as one JSON file.** Every page and template carries a merge key stamped once
 and never rewritten, so a bundle downloaded today and brought back in March is a *merge* rather than
@@ -328,7 +366,8 @@ Refusals are logged as loudly as successes.
   files** and **Import & export** under it
 - **Settings** — what this community is, with **Setup** under it
 - **Customization** — **Appearance**, **Legal** and **Messages**
-- **System** — **Machine**, **Settings**, **Events**, **Analytics**, **Caching**, **AI**, **Log**
+- **System** — **Machine**, **Settings**, **Events**, **Analytics**, **Caching**, **AI**, **Log**,
+  and **Clean up**
 
 Every entry there is drawn only for somebody allowed to open it. A section you may not enter is
 absent from the sidebar and answers 404 rather than 403 — a 403 confirms what is behind the door.

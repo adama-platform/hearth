@@ -1,14 +1,10 @@
 {{<shell}}{{$content}}
 <h1>Legal</h1>
-<p class="hint">Every community has these two whether or not anybody has thought about them, so this
-  server ships a considered version of each and publishes it from the first day. They say plainly
-  that the people who wrote this software and whoever provides the machine are not parties to
-  anything that happens here &mdash; which in a self-hosted community is the fact somebody has to
-  be told.</p>
-<p class="problem">These are a starting point written by people who are not lawyers, and they cannot
-  know which country you are in. Read them. If this community carries real risk &mdash; money,
-  children, medical advice, an organisation with something to lose &mdash; have somebody qualified
-  read them too.</p>
+<p class="hint">Two documents, published from the first day so this community never has none. They
+  say who a member is agreeing with &mdash; you, not the people who wrote the software and not
+  whoever rents you the machine.</p>
+<p class="problem">Written by people who are not lawyers, and they do not know what country you are
+  in. Read them. If this community carries real risk, have somebody qualified read them too.</p>
 
 <table>
   <thead><tr><th>document</th><th>state</th><th>address</th><th class="actions"></th></tr></thead>
@@ -25,12 +21,17 @@
   </tbody>
 </table>
 
-<h2>Two things they assume</h2>
+<h2>What they rely on</h2>
 <ul class="cando">
-  <li><span class="dim">everywhere</span> every email this community sends links to the terms and says that using the community accepts them</li>
-  <li><span class="dim">open</span> both pages are readable without signing in, because most of the people receiving that link do not have an account yet</li>
+  <li><span class="dim">linked</span> every email this community sends links to the terms</li>
+  <li><span class="dim">open</span> both pages are readable without signing in, because most people
+    following that link have no account yet</li>
+  <li><span class="dim">true</span> the privacy policy describes what the software actually does. If
+    you change what it promises, you are changing a requirement</li>
 </ul>
-<p class="hint">Inside the text, <code>{{lbrace}}community{{rbrace}}</code> becomes this community's
-  name and <code>{{lbrace}}domain{{rbrace}}</code> becomes its address, so a document written once is
-  right after somebody renames the community.</p>
+<p class="hint">In the text, <code>{{lbrace}}community{{rbrace}}</code> becomes this community's name
+  and <code>{{lbrace}}domain{{rbrace}}</code> its address, so renaming the community does not leave
+  either document wrong.</p>
+<p class="hint">Leaving a document as shipped is the useful default: it improves when the software
+  does. Saving your own version stops that for that document.</p>
 {{/content}}{{/shell}}

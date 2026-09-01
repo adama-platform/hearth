@@ -62,7 +62,14 @@ public final class AdminView {
     analytics("system/analytics", "Analytics", "analytics", system, Permission.system_read),
     caching("system/caching", "Caching", "star", system, Permission.system_read),
     ai("system/ai", "AI", "star", system, Permission.ai_manage),
-    logs("system/logs", "Log", "logs", system, Permission.system_read);
+    logs("system/logs", "Log", "logs", system, Permission.system_read),
+    // `everything`, which no other section asks for.
+    //
+    // This is the only screen that destroys data rather than a row, and there is no undo behind it
+    // -- a dropped table is gone from the file. system_read opens the rest of System because
+    // reading is what those screens do; this one is a different kind of act and takes the
+    // permission that means "all of it".
+    cleanup("system/cleanup", "Clean up", "x", system, Permission.everything);
 
     public final String slug;
     public final String label;

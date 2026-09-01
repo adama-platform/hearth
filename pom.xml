@@ -10,6 +10,27 @@
     <description>A single-jar community server for communities of 100 to 1,000 people.</description>
     <version>${revision}</version>
     <dependencies>
+        <!-- V8, for the dynamic JavaScript content kind. Two artifacts on purpose: `javet` is the
+             Java half and is small, and the native V8 build is a separate per-platform jar. Only
+             the platforms a server actually runs on are bundled, because each one is 14MB and the
+             deliverable is a jar somebody copies to a box. A missing native is not fatal: the
+             engine reports itself unavailable at boot and the JavaScript kind refuses to save,
+             which is the honest failure rather than a page that renders as an error. -->
+        <dependency>
+            <groupId>com.caoccao.javet</groupId>
+            <artifactId>javet</artifactId>
+            <version>${javet.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.caoccao.javet</groupId>
+            <artifactId>javet-v8-linux-x86_64</artifactId>
+            <version>${javet.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.caoccao.javet</groupId>
+            <artifactId>javet-v8-linux-arm64</artifactId>
+            <version>${javet.version}</version>
+        </dependency>
         <!-- ACME (Let's Encrypt) for automatic certificates; utils brings CSRBuilder and KeyPairUtils -->
         <dependency>
             <groupId>org.shredzone.acme4j</groupId>
@@ -207,6 +228,7 @@
              the jar's manifest so the binary somebody downloads can say what it is. A SNAPSHOT
              default means a jar built by hand never claims to be a release. -->
         <revision>0.0.1-SNAPSHOT</revision>
+        <javet.version>5.0.11</javet.version>
         <maven.compiler.source>21</maven.compiler.source>
         <maven.compiler.target>21</maven.compiler.target>
         <maven.compiler.release>21</maven.compiler.release>

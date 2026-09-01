@@ -38,7 +38,7 @@ public class McpTools {
   /**
    * What each tool needs the acting person to be allowed to do, or null for anybody connected.
    *
-   * <b>Offered means usable.</b> A tool a connection can never call is invariant 149 in a model's
+   * <b>Offered means usable.</b> A tool a connection can never call is invariant 38 in a model's
    * hands: a control that would refuse teaches whoever meets it that the software is broken, and a
    * model meeting one spends its turns finding a phrasing that works. This is the same map the
    * surface enforces with -- listed here so the two cannot drift, and enforced there because a
@@ -435,7 +435,7 @@ public class McpTools {
     // string -- so every nested object a tool declared arrived as "". place_save has advertised a
     // `fields` object since the address book shipped and reads it with an `instanceof Map` that
     // could never be true, which meant a model filling in a kind's own fields was told it had
-    // worked and nothing was written. That is the precise failure invariant 76 refuses for an
+    // worked and nothing was written. That is the precise failure invariant 86 refuses for an
     // *undeclared* field, arriving through the plumbing instead: silent success for a write that
     // did not happen. Objects are now objects, and ToolArgumentTests holds both halves down.
     if (node.isObject()) {

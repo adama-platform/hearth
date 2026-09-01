@@ -258,6 +258,25 @@ public class AiSurface {
     ContentRecord.Kind kind = changes.containsKey("kind")
         ? ContentRecord.Kind.of(str(changes, "kind"))
         : (existing == null ? ContentRecord.Kind.markdown : existing.kind());
+    // An agent writes documents. It does not write programs.
+    //
+    // The javascript kind runs its body on this server for every visitor, so allowing it here
+    // would make "write me an about page" a way to get code executed -- and the agent acts as a
+    // person who may well have content_write and no idea they had lent anybody an interpreter.
+    // Refused by name rather than ignored, because a save that quietly stored markdown instead
+    // would teach the model it had succeeded.
+    //
+    // The check is on the *result*, so it catches converting an existing dynamic page as well as
+    // creating one, and it is here rather than in the tool schema because the schema is a
+    // description and this is the rule.
+    if (kind != null && kind.isProgram()) {
+      throw new Refused("the '" + kind.name() + "' kind runs code on the server and only a person"
+          + " at the admin screen can write one");
+    }
+    if (existing != null && existing.kind().isProgram()) {
+      throw new Refused("'" + uri + "' is a program rather than a document, and only a person at"
+          + " the admin screen can change one");
+    }
     String template = changes.containsKey("template")
         ? str(changes, "template")
         : (existing == null ? null : existing.templateName());
@@ -525,6 +544,12 @@ public class AiSurface {
     ArrayList<Map<String, Object>> kinds = new ArrayList<>();
     for (io.hearth.content.ContentRecord.Kind kind
         : io.hearth.content.ContentRecord.Kind.values()) {
+      // a kind an agent may not write is not offered: advertising it would cost the model a turn
+      // learning that, and a listing of things that always refuse is the shape this project
+      // already refuses everywhere else
+      if (kind.isProgram()) {
+        continue;
+      }
       LinkedHashMap<String, Object> one = new LinkedHashMap<>();
       one.put("kind", kind.name());
       one.put("label", kind.label);

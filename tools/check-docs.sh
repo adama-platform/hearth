@@ -183,6 +183,24 @@ if [ -n "$CLAIMED" ]; then
 fi
 
 
+# ---- 10. every invariant a comment cites actually exists --------------------------------------
+# The reasoning in this project lives in comments, and comments cite invariants by number -- which
+# makes the number a link, and a link that points at nothing is worse than no link because somebody
+# will go and read whatever is sitting at that position. Four of these were dangling at once
+# (147, 149, 187, 202, from back when the list was half as long again), and two more pointed at a
+# real invariant about something else entirely, which is the failure this check cannot see. It
+# checks the half a machine can: that the number exists at all.
+LAST=$(grep -oE '^ *[0-9]+\. \*\*' CLAUDE.md | grep -oE '[0-9]+' | sort -n | tail -1)
+danglers=0
+while IFS= read -r n; do
+  [ -z "$n" ] && continue
+  if [ "$n" -lt 1 ] || [ "$n" -gt "${LAST:-0}" ]; then
+    bad "a comment cites invariant $n; CLAUDE.md has $LAST of them"
+    danglers=1
+  fi
+done < <(grep -rhoE 'invariants? [0-9]+' src/ | grep -oE '[0-9]+' | sort -nu)
+[ $danglers -eq 0 ] && ok "every invariant a comment cites exists ($LAST of them)"
+
 echo
 if [ $fail -eq 0 ]; then
   echo "  docs: OK"

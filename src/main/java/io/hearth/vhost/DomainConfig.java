@@ -72,7 +72,6 @@ public class DomainConfig {
    * people it is for. Metric by default because most of the world is, and one word in the config
    * for everybody else.
    */
-  public final boolean imperial;
   /** what may be uploaded here, and who may read it afterwards */
   public final io.hearth.attach.AttachmentConfig attachments;
   /** how this community sends email; off means codes print to the terminal */
@@ -118,7 +117,7 @@ public class DomainConfig {
   private final java.time.ZoneId fallbackZone;
 
   private DomainConfig(String domain, File configFile, String name, boolean enabled,
-                       java.time.ZoneId zone, boolean imperial, boolean wildcard,
+                       java.time.ZoneId zone, boolean wildcard,
                        String useDatabaseDomain, java.util.List<String> adminEmails,
                        LoginSecurity loginSecurity, Caches caches, SiteUrls urls,
                        io.hearth.mcp.McpConfig mcp,
@@ -133,7 +132,6 @@ public class DomainConfig {
     this.name = name;
     this.enabled = enabled;
     this.zone = zone;
-    this.imperial = imperial;
     this.wildcard = wildcard;
     this.useDatabaseDomain = useDatabaseDomain;
     this.adminEmails = java.util.List.copyOf(adminEmails);
@@ -186,11 +184,6 @@ public class DomainConfig {
         config.strOf("timezone", (fallbackZone == null
             ? java.time.ZoneId.systemDefault() : fallbackZone).getId()),
         configFile.getName() + ": timezone");
-    String units = config.strOf("units", "metric");
-    if (!units.equals("metric") && !units.equals("imperial")) {
-      throw new ConfigException(configFile.getName() + ": units is '" + units
-          + "'; it is 'metric' (kilometres) or 'imperial' (miles)");
-    }
     boolean enabled = config.boolOf("enabled", true);
     boolean wildcard = config.boolOf("wildcard", true);
     String useDatabaseDomain = config.strOf("use_database_domain", null);
@@ -249,7 +242,7 @@ public class DomainConfig {
       throw new ConfigException(configFile + ": mcp.path '" + mcp.path
           + "' is already one of this domain's account pages");
     }
-    return new DomainConfig(domain, configFile, name, enabled, zone, units.equals("imperial"),
+    return new DomainConfig(domain, configFile, name, enabled, zone,
         wildcard, useDatabaseDomain,
         admins, loginSecurity, caches, urls, mcp, attachments, ses,
         disabled, subdomains, acceptsMail,

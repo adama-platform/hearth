@@ -20,10 +20,10 @@ import static org.junit.Assert.assertTrue;
 /**
  * A push endpoint is a url this server will POST to on its own, so it is checked like one.
  *
- * The availability grid already treats a member-supplied url as what invariant 202 says it is — an
- * instruction to make a request — and resolves it, refusing every private range. The push endpoint
- * a browser hands over is the same kind of thing arriving one seam away, and the whole test on it
- * was that the string began with `https://`.
+ * Invariant 104 says a member-supplied url is an instruction to make a request, and everywhere
+ * else one appears it is resolved first and every private range refused. The push endpoint a
+ * browser hands over is the same kind of thing arriving one seam away, and the whole test on it was
+ * that the string began with `https://`.
  *
  * So an approved member could subscribe with an endpoint inside the network the server is on and
  * have it knock on that address, from a background thread, for as long as the subscription lived.

@@ -114,7 +114,7 @@ public class AuthReturnTests {
 
   @Test
   public void theAdminSectionStillAnswersLikeSomethingThatIsNotThere() throws Exception {
-    // invariant 65: the way back is on the page, never in the status code. A 303 here would tell
+    // invariant 37: the way back is on the page, never in the status code. A 303 here would tell
     // whoever asked that this path is guarded, which is the one thing the 404 exists to withhold.
     Browser stranger = new Browser(server.port, "example.org");
     Browser.Page page = stranger.get("/admin/bans");

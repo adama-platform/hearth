@@ -29,7 +29,7 @@ import java.util.List;
  */
 public class Schema {
   /** bumped whenever the tables below change; recorded in schema_meta for the boot audit */
-  public static final int VERSION = 40;
+  public static final int VERSION = 41;
 
   public static final String EMAILS = "emails";
   public static final String SESSIONS = "sessions";
@@ -240,47 +240,19 @@ public class Schema {
       // markdown, rendered when shown; the same renderer the content table uses
       .column(Column.of("about", "VARCHAR(8192)").notNull().withDefault("''"))
       .column(Column.of("location", "VARCHAR(128)").notNull().withDefault("''"))
-      // Where they actually live, and it is not the column above it.
+      // The address, the two coordinates and the seven geo_ columns that were here are gone.
       //
-      // `location` is what somebody puts on their profile for other members to read -- a town, a
-      // neighbourhood, a joke. This is a street address, given for one purpose: working out how far
-      // people would have to travel to a proposed event. It is never rendered on any page, never in
-      // the admin section, never handed to a model and never in another member's export. The only
-      // thing that leaves this column is a distance, counted into a bucket with everybody else's.
-      .column(Column.of("address", "VARCHAR(256)").notNull().withDefault("''"))
-      // What that resolved to. A point rather than the text is what every calculation uses, which
-      // is also what lets somebody give a town instead and still be counted -- roughly, and
-      // labelled as roughly.
-      .column(Column.of("latitude", "DOUBLE PRECISION"))
-      .column(Column.of("longitude", "DOUBLE PRECISION"))
-      // 'precise' when it came from the private address, 'city' when it came from the public
-      // location line. The difference matters to whoever reads a distance histogram: a city-level
-      // point is a claim about a town, not about a doorstep.
-      .column(Column.of("geo_precision", "VARCHAR(16)").notNull().withDefault("''"))
-      // How the last attempt ended, which is not the same question as where they are.
+      // They existed to work out how far somebody would travel to a proposed event, and there are
+      // no events any more. Nothing had read or written them since the reduction -- PeopleStore
+      // still carried the SELECT list for them as a constant nothing referenced, which is what a
+      // dead column looks like from the inside.
       //
-      // Three failures are possible and only two of them are worth retrying. `not_found` is the
-      // service saying it has never heard of that address: asking it again tomorrow gets the same
-      // answer, so it is left alone until the address changes or the operator switches service.
-      // `unreachable` is the service not answering, which says nothing about the address at all
-      // and is retried on a widening schedule. Collapsing the two -- which the first version of
-      // this did -- either retries a typo forever or gives up on everybody because somebody's DNS
-      // was down for an hour.
-      .column(Column.of("geo_state", "VARCHAR(16)").notNull().withDefault("''"))
-      // which service produced that answer, so switching service re-opens everything it could not
-      // find. Without this, changing to a better geocoder leaves every previous failure sitting
-      // there permanently, which is the one thing somebody switches in order to fix.
-      .column(Column.of("geo_service", "VARCHAR(32)").notNull().withDefault("''"))
-      .column(Column.of("geo_tries", "INTEGER").notNull().withDefault("0"))
-      // when it may be asked about again; null means as soon as anything is looking
-      .column(Column.of("geo_next_at", "TIMESTAMP"))
-      // renamed because it stopped being true: it is stamped by a failure as well as by a
-      // success, and a column called geocoded_at holding "we tried and could not" is a column
-      // that will be read wrongly by somebody in six months
-      .column(Column.of("geo_tried_at", "TIMESTAMP").renamedFrom("geocoded_at"))
-      // what happened last time, when it did not work; shown to its owner and to nobody else
-      .column(Column.of("geo_note", "VARCHAR(256)").notNull().withDefault("''"))
-      // one per line, so an admin can see where somebody is from without a second table
+      // A column nothing uses is not free. It is a sentence in the privacy policy that has to stay
+      // true, a column every erasure test has to keep walking, and a street address sitting in a
+      // file for no reason at all.
+      //
+      // An upgraded database still has them, because the upgrader adds and never drops. Getting
+      // rid of them there is what /admin/system/cleanup is for.
       .column(Column.of("links", "VARCHAR(1024)").notNull().withDefault("''"))
       // how far through the welcome they actually got: 0 never started, 1 told us their name,
       // 2 answered or skipped the questions, 3 reached the end. Only ever forwards, and written

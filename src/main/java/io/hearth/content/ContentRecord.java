@@ -42,9 +42,9 @@ public record ContentRecord(long id, String uri, String title, Kind kind, String
   /**
    * How the body should be turned into a page.
    *
-   * Three ways of writing a document, and that is all there is now. There used to be six more --
-   * shapes filled in from the events, the address book and the members -- and they went when those
-   * did. A page's address is an address again rather than a pattern with a hole in it.
+   * Three of them are documents; the fourth is a program. There used to be six more -- shapes
+   * filled in from the events, the address book and the members -- and they went when those did. A
+   * page's address is an address again rather than a pattern with a hole in it.
    */
   public enum Kind {
     /** markdown, rendered and then wrapped in the template */
@@ -52,7 +52,17 @@ public record ContentRecord(long id, String uri, String title, Kind kind, String
     /** an HTML fragment, wrapped in the template as-is */
     html("HTML content", "an HTML fragment, wrapped in the template as-is"),
     /** a whole document, served exactly as stored; no template involved */
-    page("Full page", "a whole document served exactly as stored; no template is used");
+    page("Full page", "a whole document served exactly as stored; no template is used"),
+    /**
+     * JavaScript, run on every request; what it renders is the body.
+     *
+     * The one kind whose body is not what is served. It gets `render(text)` to build the document
+     * and `meta(key, value)` to set the title and whatever else the template asked for, and it has
+     * nothing else -- no network, no storage, no way back into this server.
+     */
+    javascript("Dynamic JavaScript",
+        "a program run on every request; render(text) builds the body and meta(key, value) sets"
+            + " the title and the template's fields");
 
     /** what the editor calls it, because "markdown" alone does not say what happens to it */
     public final String label;
@@ -66,6 +76,17 @@ public record ContentRecord(long id, String uri, String title, Kind kind, String
     /** does a page of this kind get wrapped in a template at all? */
     public boolean wantsTemplate() {
       return this != page;
+    }
+
+    /**
+     * Is the body a program rather than a document?
+     *
+     * Asked where the difference matters and nowhere else: the editor draws a different box, the
+     * renderer runs it instead of rendering it, and the page cache leaves it alone -- a page that
+     * can answer differently on every request has no business being kept under its address.
+     */
+    public boolean isProgram() {
+      return this == javascript;
     }
 
     /**

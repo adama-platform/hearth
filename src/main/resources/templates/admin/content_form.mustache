@@ -35,10 +35,6 @@
       <label for="c-sort">order</label>
       <select id="c-sort" name="sort">{{#sorts}}<option value="{{value}}"{{#selected}} selected{{/selected}}>{{label}}</option>{{/sorts}}</select>
     </div>{{/anySorts}}
-    {{#isPlaceListing}}<div>
-      <label for="c-placekind">which kind of place</label>
-      <select id="c-placekind" name="place_kind">{{#placeKinds}}<option value="{{value}}"{{#selected}} selected{{/selected}}>{{label}}</option>{{/placeKinds}}</select>
-    </div>{{/isPlaceListing}}
     <div>
       <label for="c-date">published <span class="dim">&mdash; what a listing orders by</span></label>
       <input id="c-date" type="date" name="published_at" value="{{form_published_at}}">
@@ -56,6 +52,12 @@
   <div class="fields" data-template-fields></div>
   <div>
     <label for="c-body">body</label>
+    <p class="hint" data-js-help hidden>This body is a <strong>program</strong>, run every time
+      somebody asks for the page. <code>render(text)</code> appends to the document and
+      <code>meta(key, value)</code> sets the title and anything the template declared &mdash; a
+      value set here wins over the boxes above, because it ran a moment ago and they were typed
+      once. There is no network, no storage and no way back into this server: it builds a string.
+      It gets one second, and a page that overruns is stopped and says so.</p>
     <div class="editorbar">
       <button type="button" class="quiet" data-rich-toggle hidden>plain markdown</button>
       {{#filesUrl}}<button type="button" class="quiet" data-pick="{{.}}" data-pick-into="c-body">Insert a file</button>{{/filesUrl}}
@@ -132,6 +134,9 @@
     }
     var wants = option && option.getAttribute('data-wants-template') === '1';
     if (templateRow) { templateRow.classList.toggle('hide', !wants); }
+    // the two APIs, shown only for the kind that has them
+    var jsHelp = form.querySelector('[data-js-help]');
+    if (jsHelp) { jsHelp.hidden = kind.value !== 'javascript'; }
     drawFields();
   }
 
@@ -152,7 +157,14 @@
   var host = document.querySelector('[data-rich]');
   var area = document.getElementById(host && host.getAttribute('data-markdown-for'));
   var toggle = document.querySelector('[data-rich-toggle]');
+  var kindField = document.querySelector('[data-kind]');
   if (!host || !area) { return; }
+  // A markdown editor for something that is not markdown rewrites it.
+  //
+  // This used to load for every kind, so an HTML page was being round-tripped through a markdown
+  // parser on the way to the textarea. For a program it would be worse than lossy: Milkdown would
+  // treat the source as prose and hand back something that is not the code anybody typed.
+  if (!kindField || kindField.value !== 'markdown') { return; }
   var mod;
   try {
     mod = await import('/3rd/milkdown/7.21.3/milkdown.js');

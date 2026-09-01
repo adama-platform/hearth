@@ -1,0 +1,37 @@
+{{<shell}}{{$content}}
+<h1>Clean up</h1>
+<p class="hint">Tables still in <code>{{database}}</code> that this software no longer uses. They are
+  left behind on purpose: upgrading only ever <em>adds</em> to a database, so a version that removes
+  a feature cannot take somebody's data with it, and an operator who upgrades and then rolls back
+  still has everything. The cost is what is listed here.</p>
+
+{{^any}}<p class="done">Nothing left over. Every table in this database is one the software still
+  uses.</p>{{/any}}
+
+{{#any}}
+<p class="count">{{count}} table(s), holding {{rowsHeld}} row(s)</p>
+<table>
+  <thead><tr><th>table</th><th>rows</th><th></th></tr></thead>
+  <tbody>{{#tables}}<tr>
+    <td class="mono">{{name}}</td>
+    <td class="dim mono">{{rows}}</td>
+    <td class="actions">
+      <form class="inline" method="post" action="{{action}}" onsubmit="return confirm('Drop {{name}} and everything in it? This cannot be undone.')">
+        <input type="hidden" name="csrf" value="{{csrf}}">
+        <input type="hidden" name="action" value="drop">
+        <input type="hidden" name="table" value="{{name}}">
+        <button type="submit">drop</button>
+      </form>
+    </td>
+  </tr>{{/tables}}</tbody>
+</table>
+<p class="problem"><strong>Dropping a table deletes what is in it, and there is no undo on this
+  screen.</strong> A table with rows in it is somebody's discussion board, or their calendar, or
+  their address book, from before those features were removed. If any of it might still be wanted,
+  take a copy of the database directory first &mdash; that is the whole backup, and it is a file
+  copy.</p>
+<p class="hint">One at a time and no &lsquo;drop them all&rsquo;, because reading each name is the
+  point. A table this software still uses can never appear here, whatever a form is made to
+  say.</p>
+{{/any}}
+{{/content}}{{/shell}}

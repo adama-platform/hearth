@@ -28,3 +28,23 @@ Hearth itself is a separate work; see the repository's own licence.
 
 `just release-check` refuses a release when a vendored package has no licence file, because a
 release is the moment redistribution actually happens.
+
+## What else is in the jar
+
+The table at the top is about the **browser** libraries, which are vendored by hand because they
+are served to a member's browser from this machine. The jar is also an uber-jar and therefore
+redistributes its ordinary Maven dependencies — Netty, H2, Jackson, jsoup, commonmark, scrypt,
+acme4j, logback and the rest — each under its own licence, unmodified, as published.
+
+One of those is worth naming because it is most of the jar's size and it is not Java:
+
+| Package | Licence | What it is |
+|---|---|---|
+| [Javet](https://github.com/caoccao/Javet) | Apache-2.0 | the Java binding for V8 |
+| [V8](https://v8.dev) | BSD-3-Clause | Google's JavaScript engine, as a native library per platform |
+
+Javet ships V8 as a compiled shared library in a per-platform jar, and Hearth bundles two of them —
+`linux-x86_64` and `linux-arm64` — which is what takes the deliverable from about 20MB to about
+50MB. They are there so that a dynamic JavaScript page works on a server the moment the jar lands,
+with nothing installed beside it. A platform whose native library is not bundled runs everything
+else normally and reports the JavaScript engine as unavailable.

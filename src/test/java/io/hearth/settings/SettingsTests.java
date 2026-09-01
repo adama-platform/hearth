@@ -36,8 +36,7 @@ public class SettingsTests {
   @Before
   public void setUp() throws Exception {
     configs = Configs.dir().domain("example.org",
-        "{\"name\":\"Example Community\",\"admin_emails\":[\"boss@example.com\"],"
-            + "\"units\":\"metric\"}");
+        "{\"name\":\"Example Community\",\"admin_emails\":[\"boss@example.com\"]}");
     server = TestServer.ofConfigs(configs.file());
     admin = signIn("boss@example.com");
   }
@@ -154,8 +153,8 @@ public class SettingsTests {
    * A tool that refused would still be a tool: it would appear in a listing, a model would spend
    * turns hunting for a phrasing that worked, and the next person to add a parameter would be one
    * mistake away from making it real. There is simply nothing here for an agent to call -- which is
-   * the same argument invariant 187 makes about the content bundle, and invariant 118 about
-   * moderating. What a community *is* -- its name, its clock, which parts of the product exist --
+   * the same argument invariant 87 makes about the content bundle. What a community *is* -- its
+   * name, its clock, which parts of the product exist --
    * is a decision the people in it make, and it is exactly the kind of decision that would be
    * cheapest for a model to get wrong at scale.
    */
@@ -306,8 +305,7 @@ public class SettingsTests {
     admin.submitToAndFollow("/admin/configuration/setup", Map.of(
         "action", "save", "step", "1",
         field("name"), "The Tuesday Club",
-        field("timezone"), "Europe/London",
-        field("units"), "metric"));
+        field("timezone"), "Europe/London"));
 
     assertEquals("a step saves as it goes, so stopping half way keeps what was answered",
         "The Tuesday Club", server.tree.exact("example.org").name);

@@ -46,6 +46,7 @@ public class Site {
   private final TtlCache<String, ContentRecord> byUri;
   private final TtlCache<String, Rendered> rendered;
   private final TtlCache<String, Mustache> templates;
+  private final RenderTimes times = new RenderTimes();
   private final Verbose verbose;
 
   public Site(String domain, Store store, Caches policies, EventBus events, Verbose verbose) {
@@ -56,6 +57,11 @@ public class Site {
     this.templates = new TtlCache<>(Caches.TEMPLATES, policies.forName(Caches.TEMPLATES));
     this.verbose = verbose;
     events.subscribe(this::onMutation);
+  }
+
+  /** how long every page has been taking; the content listing prints a column of it */
+  public RenderTimes times() {
+    return times;
   }
 
   public ContentStore store() {
@@ -130,7 +136,12 @@ public class Site {
       return null;
     }
     Rendered made = render(page);
-    if (made != null) {
+    // A program is run for every request that asks for it.
+    //
+    // Caching it would make "dynamic" a name for "rendered once per TTL", and it would make the
+    // timings a lie -- fifty samples would take fifty TTLs to collect. The cost is bounded by the
+    // engine's own ceiling rather than by this cache.
+    if (made != null && !page.kind().isProgram()) {
       rendered.put(uri, made);
     }
     return made;
@@ -407,7 +418,15 @@ public class Site {
         : new String(rendered.html(), java.nio.charset.StandardCharsets.UTF_8);
   }
 
+  /**
+   * Build one page, and time it.
+   *
+   * Every kind goes through here and every kind is timed, including the ones that are fast. A
+   * duration is only worth reading next to its neighbours, and "the markdown pages are 0.3ms" is
+   * what makes "this one is 40ms" mean something.
+   */
   Rendered render(ContentRecord page) {
+    long started = System.nanoTime();
     try {
       // a page reconstructed from history has no timestamp, and rendering must not depend on one
       long updatedAt = page.updatedAt() == null ? 0L : page.updatedAt().getTime();
@@ -415,19 +434,47 @@ public class Site {
         return new Rendered(page.id(), page.uri(), page.templateName(),
             page.body().getBytes(StandardCharsets.UTF_8), updatedAt);
       }
-      String body = page.kind() == ContentRecord.Kind.markdown
-          ? Markdown.toHtml(page.body())
-          : page.body();
-      String html = wrap(page, body);
+      String body = switch (page.kind()) {
+        case markdown -> Markdown.toHtml(page.body());
+        case javascript -> null;   // handled below, because it also contributes to the model
+        default -> page.body();
+      };
+      String html = body == null ? runProgram(page) : wrap(page, body);
       return new Rendered(page.id(), page.uri(), page.templateName(),
           html.getBytes(StandardCharsets.UTF_8), updatedAt);
     } catch (RuntimeException ex) {
       LOG.error("content-render-failed", ex);
       return null;
+    } finally {
+      times.record(page.uri(), System.nanoTime() - started);
     }
   }
 
+  /**
+   * Run a page whose body is a program, and wrap what it rendered.
+   *
+   * What `meta` set is merged into the template's model *under* the page's own declared fields and
+   * the built-ins, so a program can supply a title the page did not set and can never overwrite the
+   * body it just built. A failure renders as a visible, ugly notice rather than as an empty page:
+   * an author looking at a blank screen has nothing to act on, and this is the one content kind
+   * where the failure is theirs to fix.
+   */
+  private String runProgram(ContentRecord page) {
+    io.hearth.js.JavaScript.Run run = io.hearth.js.JavaScript.shared().run(page.body());
+    if (run.failed()) {
+      verbose.detail(() -> "content: " + page.uri() + " failed to run -- " + run.error());
+      return wrap(page, "<p class=\"js-error\"><strong>This page did not run.</strong> "
+          + esc(run.error()) + (run.errorLine() > 0 ? " (line " + run.errorLine() + ")" : "")
+          + "</p>", java.util.Map.of());
+    }
+    return wrap(page, run.body(), run.meta());
+  }
+
   private String wrap(ContentRecord page, String body) {
+    return wrap(page, body, java.util.Map.of());
+  }
+
+  private String wrap(ContentRecord page, String body, Map<String, String> meta) {
     if (!page.usesTemplate()) {
       // no template named: the body is the document, which is the sensible thing for a quick page
       return body;
@@ -455,6 +502,20 @@ public class Site {
     // rule the listing rows already use, for the same reason.
     for (Map.Entry<String, String> field : fieldsOf(page).entrySet()) {
       model.putIfAbsent(field.getKey(), field.getValue());
+    }
+    // And last, what the program asked for, which wins.
+    //
+    // The opposite precedence from the declared fields, and deliberately: those are typed once and
+    // stored, this one ran a millisecond ago with the request in front of it. `meta('title', ...)`
+    // that could not replace the stored title would not be manipulating the title at all, which is
+    // the whole job it was given.
+    //
+    // `body` is the exception, because the program built it by calling render() and a meta call
+    // that replaced it would silently throw that work away.
+    for (Map.Entry<String, String> entry : meta.entrySet()) {
+      if (!"body".equals(entry.getKey())) {
+        model.put(entry.getKey(), entry.getValue());
+      }
     }
     StringWriter writer = new StringWriter(4096);
     try {

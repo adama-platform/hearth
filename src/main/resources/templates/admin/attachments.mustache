@@ -6,7 +6,7 @@
 
 <details class="card" open>
   <summary>Upload</summary>
-  <form method="post" action="{{uploadUrl}}" enctype="multipart/form-data">
+  <form class="upload" method="post" action="{{uploadUrl}}" enctype="multipart/form-data">
     <input type="hidden" name="csrf" value="{{csrf}}">
     <div><label for="f-file">the file <span class="dim">&mdash; up to {{maxMb}}MB</span></label>
       <input id="f-file" type="file" name="file" accept="{{accept}}" required></div>
@@ -15,10 +15,10 @@
       <input id="f-desc" type="text" name="description" maxlength="512"></div>
     <div class="row">
       <div><label for="f-folder">folder</label>
-        <input id="f-folder" type="text" name="folder" list="folders" placeholder="suppers/2026-05">
+        <input id="f-folder" type="text" name="folder" list="folders" placeholder="photos/2026">
         <datalist id="folders">{{#folders}}<option value="{{value}}"></option>{{/folders}}</datalist></div>
       <div><label for="f-tags">tags</label>
-        <input id="f-tags" type="text" name="tags" placeholder="supper cake outside"></div>
+        <input id="f-tags" type="text" name="tags" placeholder="photos summer"></div>
     </div>
     <label class="check"><input type="checkbox" name="public"> anybody can see it &mdash; leave this
       off and it needs a signed-in member</label>

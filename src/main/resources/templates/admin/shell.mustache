@@ -179,6 +179,11 @@ button:hover{opacity:.88}
 .inline button{margin-left:.3rem;padding:.15rem .5rem;font-size:.75rem;font-weight:400;color:var(--fg);background:transparent;border:1px solid var(--line);border-radius:4px}
 .check{display:flex;align-items:center;gap:.4rem;font-size:.875rem;color:var(--fg)}
 .check input{width:auto}
+/* the upload form stacks bare divs, which have no margin of their own, so every control in it sat
+   against the one above and the button ended up 0.25rem under the checkbox */
+.upload>div{margin:0 0 .7rem}
+.upload>.check{margin:0 0 1rem}
+.upload .doing{margin:0}
 .tag{font-size:.6875rem;text-transform:uppercase;letter-spacing:.04em;color:var(--dim);border:1px solid var(--line);border-radius:3px;padding:0 .3rem}
 .done{margin:0 0 1rem;padding:.55rem .75rem;border-left:3px solid var(--good);background:color-mix(in srgb,var(--good) 10%,transparent)}
 .problem{margin:0 0 1rem;padding:.55rem .75rem;border-left:3px solid var(--bad);background:color-mix(in srgb,var(--bad) 10%,transparent)}

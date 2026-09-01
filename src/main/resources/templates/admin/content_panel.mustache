@@ -1,13 +1,14 @@
 <p class="count">{{count}} shown</p>
 {{^anyPages}}<p class="hint">Nothing matches.</p>{{/anyPages}}
 {{#anyPages}}<table>
-  <thead><tr><th>uri</th><th>title</th><th>kind</th><th>template</th><th>folder</th><th>updated</th><th></th></tr></thead>
+  <thead><tr><th>uri</th><th>title</th><th>kind</th><th>template</th><th>folder</th><th title="the slowest of the last 50 builds of this page">p99</th><th>updated</th><th></th></tr></thead>
   <tbody>{{#pages}}<tr>
     <td class="mono"><a href="{{editUrl}}">{{uri}}</a>{{^published}} <span class="pill dim">draft</span>{{/published}}</td>
     <td>{{title}}</td>
     <td class="dim">{{kind}}{{#humanOnly}} <span class="pill purple">human only</span>{{/humanOnly}}</td>
     <td class="dim mono">{{template}}</td>
     <td>{{#noNavigation}}<span class="pill warn">no folder</span>{{/noNavigation}}{{^noNavigation}}<span class="dim">{{folder}}</span>{{/noNavigation}}</td>
+    <td class="dim mono">{{#timed}}<span class="{{#slow}}warn{{/slow}}" title="median {{p50}}, over {{samples}} build(s)">{{p99}}</span>{{/timed}}{{^timed}}&mdash;{{/timed}}</td>
     <td class="dim mono">{{updated}}</td>
     <td class="actions">
       <a href="{{uri}}">view</a>
@@ -15,4 +16,9 @@
     </td>
   </tr>{{/pages}}</tbody>
 </table>
-<p class="hint">A page with no folder is reachable by its uri and by nothing else. <a href="{{adminUrl}}/navigation">Navigation</a> is where that gets fixed.</p>{{/anyPages}}
+<p class="hint">A page with no folder is reachable by its uri and by nothing else. <a href="{{adminUrl}}/navigation">Navigation</a> is where that gets fixed.</p>
+<p class="hint"><strong>p99</strong> is the slowest of the last 50 times a page was built, so it is
+  what the unlucky reader waits for rather than the average. It is measured for every kind, and a
+  dash means nothing has asked for that page since the server started. Markdown and HTML pages are
+  cached once built; a dynamic JavaScript page is run for every request, which is what makes it
+  dynamic and also the reason it is the one worth watching.</p>{{/anyPages}}

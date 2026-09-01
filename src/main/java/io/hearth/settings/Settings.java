@@ -49,10 +49,6 @@ public final class Settings {
               + " ends, which evening a Tuesday event is on, and when the nightly jobs run. It is a"
               + " fact about where people meet, not about where the server is -- a box rented in"
               + " another continent would otherwise put every evening a few hours out."),
-      Setting.choice("units", COMMUNITY, "Miles or kilometres",
-          "How distances are shown: how far members would travel, and how far a place is.",
-          List.of("metric", "imperial")),
-
       Setting.words("disabled", SURFACES, "Parts to switch off",
           "One per line. Everything is on until it is named here, because the decision worth"
               + " writing down is the refusal. Switching something off stops its pages answering"
@@ -134,7 +130,7 @@ public final class Settings {
     return List.of(
         new Step("Who you are", "The name and the clock. Everything else on this server refers back"
             + " to these two, including every message it sends.",
-            keys("name", "timezone", "units")),
+            keys("name", "timezone")),
         new Step("What this community has", "Everything is on. Turn off what this group is not"
             + " going to use, so nobody meets a page nobody maintains.",
             keys("disabled")));
@@ -158,7 +154,6 @@ public final class Settings {
     return switch (key) {
       case "name" -> config.name;
       case "timezone" -> config.zone.getId();
-      case "units" -> config.imperial ? "imperial" : "metric";
       case "disabled" -> joinWords(config.disabled);
       default -> "";
     };

@@ -21,10 +21,6 @@ import java.util.Map;
  * answer changing means one person's is. Neither this class nor the indexer knows about the other.
  */
 public class PeopleStore {
-  /** the private half, which PROFILE_COLUMNS deliberately does not name */
-  private static final String HOME_COLUMNS =
-      "user_id, address, latitude, longitude, geo_precision, geo_state, geo_service, geo_tries,"
-          + " geo_tried_at, geo_next_at, geo_note";
   private static final String PROFILE_COLUMNS =
       "id, user_id, display_name, headline, about, location, links, orientation_step,"
           + " created_at, updated_at";

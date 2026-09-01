@@ -27,12 +27,9 @@ public class Caches {
   public static final String RENDERED = "rendered";
   /** compiled templates, keyed by name */
   public static final String TEMPLATES = "templates";
-  /** the board's feed rows; one entry, rebuilt by one query */
-  public static final String BOARD_FEED = "board-feed";
-  /** a thread's comments with the markdown already rendered, keyed by post id */
-  public static final String BOARD_THREADS = "board-threads";
-  /** a rendered feed page, keyed by who is looking and what they asked for */
-  public static final String FEEDS = "feeds";
+  // `board-feed`, `board-threads` and `feeds` were here, naming caches whose features are gone.
+  // A cache name nobody uses is worse than none: it is a name an operator can still put in a
+  // config file and tune, and get no error and no effect.
 
   private final CachePolicy catchAll;
   private final Map<String, CachePolicy> named;
@@ -52,8 +49,7 @@ public class Caches {
         config.intOf("ttl-seconds", 3600),
         config.intOf("max-entries", 1000));
     LinkedHashMap<String, CachePolicy> named = new LinkedHashMap<>();
-    for (String name : new String[]{CONTENT, RENDERED, TEMPLATES, BOARD_FEED,
-        BOARD_THREADS, FEEDS}) {
+    for (String name : new String[]{CONTENT, RENDERED, TEMPLATES}) {
       named.put(name, CachePolicy.of(config.child(name), catchAll));
     }
     config.assertKnownKeys();

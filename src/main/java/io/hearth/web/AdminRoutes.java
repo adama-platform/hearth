@@ -222,6 +222,7 @@ public class AdminRoutes {
         case messages -> actOnMessage(config, accounts, form, me);
         case ai -> actOnConnector(accounts, form, me);
         case roles -> actOnRole(accounts, form, me);
+        case cleanup -> actOnCleanup(accounts, form, me);
         default -> Outcome.refused("That is not something this page can do.");
       };
     }
@@ -907,6 +908,7 @@ public class AdminRoutes {
       case machine -> machine(model, config);
       case analytics -> analytics(model, config);
       case caching -> model.put("capacity", accessLog.capacity());
+      case cleanup -> cleanup(model, accounts);
       case logs -> {
         model.put("q", orEmpty(Forms.query(req.uri(), "q")));
         model.put("errorsOnly", "1".equals(Forms.query(req.uri(), "errors")));
@@ -1231,6 +1233,17 @@ public class AdminRoutes {
       row.put("noNavigation", page.isOutsideNavigation());
       row.put("published", page.published());
       row.put("updated", stamp(page.updatedAt()));
+      // How slow is this page, worst case, over the last fifty times it was built?
+      //
+      // Every kind, not only the dynamic one: the number is unreadable on its own and obvious
+      // beside its neighbours. A page nothing has asked for since the last restart has no timing
+      // at all, which the listing shows as a dash rather than as a zero.
+      io.hearth.content.RenderTimes.Stat stat = accounts.site.times().of(page.uri());
+      row.put("timed", stat != null);
+      row.put("p99", stat == null ? "" : stat.p99Shown());
+      row.put("p50", stat == null ? "" : stat.p50Shown());
+      row.put("samples", stat == null ? 0 : stat.samples());
+      row.put("slow", stat != null && stat.p99Millis() >= 50);
       row.put("editUrl", AdminView.Section.content.path(config) + "/edit/" + page.id());
       rows.add(row);
     }
@@ -1297,6 +1310,55 @@ public class AdminRoutes {
     model.put("actions", rows);
     model.put("anyActions", !rows.isEmpty());
     model.put("count", rows.size());
+  }
+
+  /**
+   * What is still in the database that the software has stopped using.
+   *
+   * Read every time the screen is opened rather than remembered, because the answer changes when
+   * somebody presses a button on it and a stale list here is a list with a delete button beside it.
+   */
+  private void cleanup(Map<String, Object> model, Accounts accounts) throws SQLException {
+    ArrayList<Map<String, Object>> rows = new ArrayList<>();
+    long total = 0;
+    try (java.sql.Connection connection = accounts.store.connection()) {
+      for (io.hearth.store.Leftovers.Table table : io.hearth.store.Leftovers.find(connection)) {
+        LinkedHashMap<String, Object> row = new LinkedHashMap<>();
+        row.put("name", table.name());
+        row.put("rows", table.rows() < 0 ? "unknown" : String.valueOf(table.rows()));
+        row.put("empty", table.empty());
+        rows.add(row);
+        total += Math.max(0, table.rows());
+      }
+    }
+    model.put("tables", rows);
+    model.put("any", !rows.isEmpty());
+    model.put("count", rows.size());
+    model.put("rowsHeld", total);
+    model.put("database", accounts.store.databaseDomain);
+  }
+
+  /**
+   * Drop one leftover table.
+   *
+   * One at a time, named in the form, with no "drop them all" button anywhere. This is the only
+   * irreversible thing in the admin section and the friction is the feature: somebody removing four
+   * tables should have to read four table names and press four buttons, because the fourth one
+   * might be the one holding something they wanted.
+   */
+  private Outcome actOnCleanup(Accounts accounts, Forms form, UserRecord me) throws SQLException {
+    if (!String.valueOf(form.get("action")).equals("drop")) {
+      return Outcome.refused("That is not something this page can do.");
+    }
+    String name = form.get("table");
+    try (java.sql.Connection connection = accounts.store.connection()) {
+      io.hearth.store.Leftovers.drop(connection, name);
+    } catch (SQLException ex) {
+      return Outcome.refused(String.valueOf(ex.getMessage()));
+    }
+    verbose.detail("admin: " + me.email() + " dropped the leftover table " + name);
+    return Outcome.done(name + " is gone. That cannot be undone from here -- the copy in your"
+        + " backup is the only one left.");
   }
 
   private void cachingPanel(Map<String, Object> model, Accounts accounts) throws SQLException {
@@ -2945,9 +3007,6 @@ public class AdminRoutes {
             + java.time.ZonedDateTime.now(config.zone)
                 .format(java.time.format.DateTimeFormatter.ofPattern("EEEE HH:mm"))
             + " here (UTC" + java.time.ZonedDateTime.now(config.zone).getOffset() + ").");
-    row(community, "units", config.imperial ? "imperial" : "metric",
-        "'metric' for kilometres, 'imperial' for miles. It decides the buckets on the travel chart"
-            + " an event's page shows, which is the only place this server prints a distance.");
     row(community, "wildcard", config.wildcard, "serve everything under this name; a wildcard can"
         + " never have a certificate, so name subdomains instead");
     row(community, "subdomains", config.subdomains.isEmpty() ? "none"
@@ -3073,7 +3132,7 @@ public class AdminRoutes {
     row(caching, "cache.enabled", config.caches.catchAll().enabled(), "");
     groups.add(group("Caching", file,
         "Named caches inherit from the catch-all and change only what they name: `content`,"
-            + " `rendered`, `templates`, `board-feed`, `board-threads`, `feeds`.", caching));
+            + " `rendered`, `templates`.", caching));
 
     model.put("groups", groups);
     model.put("configFile", config.configFile.getAbsolutePath());

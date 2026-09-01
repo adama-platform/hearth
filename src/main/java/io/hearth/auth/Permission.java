@@ -172,7 +172,7 @@ public enum Permission {
       }
       if (permission.isMemberBaseline()) {
         // Every approved member already has these, so a checkbox for one grants nothing. An
-        // offered permission has to be asked for somewhere that matters (invariant 147) -- and its
+        // offered permission has to be asked for somewhere that matters (invariant 35) -- and its
         // opposite is just as true: a box that cannot change the answer teaches whoever ticks it
         // that this screen does not work.
         continue;

@@ -190,7 +190,7 @@ public class SystemTemplateTests {
    * of which named the board, the invitations or the calendar, so the whole method came out with
    * them -- and what was left validated the address and then refused every time. The form, the
    * heading and the paragraph explaining why it matters were all still on the screen, which makes
-   * it invariant 149 with the refusal drawn as a button.
+   * it invariant 38 with the refusal drawn as a button.
    */
   @Test
   public void theTestButtonSendsARealMessage() throws Exception {
