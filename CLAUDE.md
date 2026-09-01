@@ -2,24 +2,39 @@
 
 ## What this is
 
-A single-jar Java community server, reduced to a spine: **accounts, a content management system,
-push notifications, and mail in and out.** One process, one jar, one config directory, hosting a
-handful of communities of 100 to 1,000 people each.
+**A multi-user platform for a small number of people to coordinate using AI.** One jar, one process,
+one config directory, hosting a handful of groups of 100 to 1,000 people each.
 
-[MISSION.md](MISSION.md) is why it exists, what it used to be, and why it is smaller now.
-[README.md](README.md) is what it does today.
+Three things that only matter together:
+
+1. **A door.** Accounts, and a human deciding who comes through. Everything else rests on it -- an
+   AI acting for a member is only safe because membership means something.
+2. **An AI-directed content management system.** The site is a database rather than a folder of
+   files, and all of it -- pages, templates, the fields a template declares, the navigation -- is
+   addressable by a model over MCP, acting *as* the person who connected it.
+3. **An app platform for validating ideas quickly.** A page's body can be a program. The shortest
+   path from an idea to something the group can look at, with no build and no deploy.
+
+Around those: files, mail in and out, push, TLS, and the legal documents. Those are plumbing. When a
+change has to trade against something, it trades in favour of the three above.
+
+[MISSION.md](MISSION.md) is why it exists and what it refuses to become. [README.md](README.md) is
+what it does today.
 
 **It used to be much larger.** A discussion board, a calendar with RSVPs and emailed invitations, an
 address book, an availability grid, a members directory, an invitation funnel, projects and a
-training log, a live channel and a JSON API were all removed in one pass. The reason is in
-MISSION.md and it is the governing constraint on everything below: **surface that one person cannot
+training log, a live channel and a JSON API were all removed in one pass. None of it was the point,
+and the reason is the governing constraint on everything below: **surface that one person cannot
 validate is surface they cannot safely operate.** The bar for adding anything back is not "would
 this be useful" -- it is "can one person enumerate how this fails".
 
-Nothing online is worth building unless it makes an in-person gathering more likely. No money will
-ever move through this server. The scale target (100 to 1,000 members) is a design input: when a
-choice comes up between a simple approach that works at that scale and a general approach that
-scales further, take the simple one and say why in a comment.
+That bar is sharper now than it was, not softer, because of what the AI half is. A model that can
+rewrite the site is only a reasonable thing to offer while a person can still read everything it
+did. Small is what makes directed AI safe here; it is not modesty.
+
+No money will ever move through this server. The scale target (100 to 1,000 members) is a design
+input: when a choice comes up between a simple approach that works at that scale and a general
+approach that scales further, take the simple one and say why in a comment.
 
 ## Ground rules
 
@@ -875,13 +890,28 @@ Different from a defect: nobody has proved these wrong, and nobody has proved th
 
 ## What's next, and what's undecided
 
-The reduction is the current work. What comes after it is deliberately not planned: the point of
-cutting was to reach something one person can hold, and filling the space back up immediately would
-undo it. **The bar for anything new is invariant-shaped — can one person enumerate how it fails.**
+**The app platform is the live question.** A dynamic page today gets `render` and `meta` and nothing
+else -- no state, no request data, no idea who is asking. That is deliberate and it is also the
+whole limitation: it validates *ideas*, not products. Everything an app would actually need is the
+next decision, and each piece of it moves this from a CMS that runs a snippet toward a place that
+runs code:
 
-Open questions — **ask before deciding these**:
+- **State.** Where would it live, who may read it, and what happens to it in an export or an
+  erasure? A dynamic page that can store things is a table nobody declared.
+- **The request.** Who is asking, what they submitted, what they may see. The moment a program gets
+  the viewer it needs an authorization story of its own, and "it runs as whoever wrote it" stops
+  being obviously right.
+- **Anything outbound.** Invariant 104 already says a member-supplied url is an instruction to make
+  a request. A program that could make one is that, with a loop around it.
 
-- **Whether push should have a producer**, and what would generate one now.
+**Ask before deciding any of those.** The bar has not moved -- can one person enumerate how it
+fails -- and each answer is a new class of failure rather than a new field on an existing one.
+
+Open questions -- **ask before deciding these**:
+
+- **Whether push should have a producer**, and what would generate one now. A dynamic page is the
+  obvious candidate and it is exactly the kind of power that needs the paragraph above settled
+  first.
 - **Whether inbound mail should do anything**, given nothing consumes it. The alternative is
   removing the SMTP listener too and keeping only sending.
 - **Config inheritance.** The deepest applicable config wins outright; ancestors do not merge.

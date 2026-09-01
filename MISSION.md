@@ -2,13 +2,15 @@
 
 ## What it is
 
-**A content management system for a small community, in one jar.**
+**A multi-user platform for a small number of people to coordinate using AI.**
 
-A website the community owns, a door somebody decides who comes through, and the mail that ties the
-two together. One process, one directory, one machine, 100 to 1,000 people.
+An AI-directed content management system with an app platform on the side, in one jar. A door
+somebody decides who comes through, a site a model can be handed the keys to, and pages whose body
+is a program — so an idea can be put in front of the group the same afternoon it is had. One
+process, one directory, one machine, 100 to 1,000 people.
 
-That is the whole claim. It is smaller than it sounds and much smaller than this project used to
-claim, and both of those are on purpose.
+That is the whole claim, and the smallness is not a caveat on it. A model that can rewrite the site
+is only a reasonable thing to offer while one person can still read everything it did.
 
 ## Why it is this small
 
@@ -52,31 +54,39 @@ sometimes "and it would be one more thing nobody is checking."**
 
 ## What is here
 
+The three that are the point:
+
 - **Accounts.** Sign in by emailed code, by password, or both. Every account waits for a human to
   approve it. Roles, permissions, bans, sessions with a cap.
-- **A website.** Pages and templates the community writes, every save versioned as a whole document,
-  directory indexes so a template behaves like a blog, and the whole site as one JSON file that
-  merges back.
+- **A model endpoint.** MCP with OAuth, off by default, offering the content and template tools —
+  a model acts as the person who connected it and can do nothing they could not. Everything it does
+  is logged under two names, and refusals as loudly as successes.
+- **A website that is a database**, addressable by all of the above: pages and templates, every save
+  versioned as a whole document, directory indexes so a template behaves like a blog, dynamic pages
+  whose body is a program, and the whole site as one JSON file that merges back.
+
+And the plumbing under them:
+
 - **Files.** Photographs, video, the PDF of the menu. The extension decides what a thing is.
 - **Email, both ways.** SES out in the community's colours; SMTP in with SPF, DKIM and DMARC checked
   and stamped. Nothing acts on an inbound message yet — it is received, authenticated and printed.
 - **Push notifications** and an installable app.
 - **TLS**, with certificates it obtains and renews itself.
-- **A model endpoint.** MCP, off by default, offering content and template tools and nothing else.
 - **Terms and a privacy policy**, published from day one, with export and erasure the policy can
   honestly describe.
 
 ## Where it is going
 
-**Dynamic apps.** A page whose body is a program rather than a document — the first of it is here: a
-JavaScript content kind with two functions, `render` and `meta`, a fresh V8 isolate per request, and
-a second to finish in. It is small and it is fenced: no network, no storage, no way back into this
-server, and no agent may write one.
+**The app platform.** The first of it is here: a JavaScript content kind with two functions,
+`render` and `meta`, a fresh V8 isolate per request, and a second to finish in. It is small and it
+is fenced — no network, no storage, no request data, no way back into this server, and no agent may
+write one.
 
-That fence is the whole design so far, and it is the easy part. What comes next — state, request
-data, anything an app would actually need — is where this stops being a CMS and starts being a place
-to run code, and **that needs thinking about before it needs building.** The bar has not moved: can
-one person enumerate how it fails.
+That fence is the whole design so far, and it is the easy part. It means the thing validates
+*ideas*, not products. What comes next — state, who is asking, what they submitted — is where this
+stops being a CMS that runs a snippet and starts being a place that runs code, and **that needs
+thinking about before it needs building.** The bar has not moved: can one person enumerate how it
+fails.
 
 ## Never
 
