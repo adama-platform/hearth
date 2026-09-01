@@ -51,7 +51,7 @@ check. Run it before claiming anything works, and after any change to the reques
 
 ```bash
 just                      # list recipes
-just validate             # THE gate: clean + package (runs tests) + live smoke + docs
+just validate             # THE gate: clean + package (runs tests) + live smoke + suite + docs
 just test                 # unit + HTTP tests
 just test-one ServerHttpTests
 just coverage             # jacoco; fails below the floor (80% line, 70% branch)
@@ -61,6 +61,7 @@ just run                  # serve the checked-in ./site root on 8080, verbose
 just reset-stores         # delete the local databases and start over
 just check DIR            # load a config tree and exit; never opens a socket
 just docs                 # do the documents still describe this program?
+just suite                # did every test actually run?
 just release-check        # what a release would refuse, without doing anything
 just release 0.2.0        # validate, build a stamped jar, tag, publish to GitHub
 just peek blog.example.com   # dump headers + body for one host
@@ -781,6 +782,21 @@ and `ServerHttpTests.boot()` asserts it took effect.
 
 Cover the refusals, not just the happy path. An assertion with an `|| raw.isEmpty()` escape hatch is
 a test that proves nothing. `just coverage` enforces a floor.
+
+**A test class with no `@Test` is skipped in silence, and `just suite` is the answer.** The
+reduction removed eight of the thirteen message flows; every test in `SystemTemplateTests` named one
+of them somewhere, and removing each one left a class with a `@Before`, an `@After` and nothing to
+run. Surefire says nothing about a class it finds no tests in, so a kept feature lost all of its
+coverage while the suite stayed green — and the file was still the right size and the right shape,
+which is what would have carried it through a review. `tools/check-suite.sh` refuses an empty
+`*Tests` class and, once the suite has run, refuses any test class that produced no report.
+
+This is the failure mode of cutting a feature out mechanically, and the general lesson is worth more
+than the check: **a script that deletes what mentions a dead symbol will delete things that merely
+mention it.** Two of the escalation tests were removed for containing the word `places_write` in a
+role they were building — the role was scenery, and the invariant they proved (nobody may grant a
+permission they do not hold) is one of the load-bearing ones. After any mechanical cut, the question
+is not "does it compile" but "what is no longer being checked".
 
 ## Not verified
 

@@ -2085,7 +2085,12 @@ public class AdminRoutes {
       if (to == null || to.indexOf('@') <= 0) {
         return Outcome.refused("An address to send it to.");
       }
-      return Outcome.refused("Sending a test message is not something this screen does any more.");
+      Mailer.Outcome sent = sendTest(config, accounts, template, to);
+      return sent.delivered()
+          ? Outcome.done("Sent to " + to + ". It went through the same path a real one does, so"
+              + " what arrives is what everybody gets.",
+              site -> AdminView.Section.messages.path(site) + "/edit/" + template.name())
+          : Outcome.refused("That did not send: " + sent.detail());
     }
     if (!action.equals("save")) {
       return Outcome.refused("That is not something this page can do.");
@@ -2108,6 +2113,31 @@ public class AdminRoutes {
         site -> AdminView.Section.messages.path(site));
   }
 
+
+  /**
+   * One real message, down the same path everybody else's goes down.
+   *
+   * The switch is exhaustive over {@link io.hearth.mail.SystemTemplate} on purpose: there is no
+   * default arm, so adding a flow stops compiling here rather than shipping a screen with a button
+   * that refuses. It used to cover thirteen flows and the eight that named the board, the digest,
+   * the invitations and the calendar went with them -- which is how the whole method came out and
+   * left the button behind it.
+   *
+   * The code is a fixed fake. A real one would be a credential in an inbox and in a log, and the
+   * point of this is the shape of the message rather than the digits in it.
+   */
+  private Mailer.Outcome sendTest(DomainConfig config, Accounts accounts,
+                                  io.hearth.mail.SystemTemplate template, String to) {
+    Mailer.Envelope envelope = Mailer.Envelope.to(config, accounts, to, null);
+    return switch (template) {
+      case register_code -> mailer.sendRegistrationCode(envelope, "482913");
+      case login_code -> mailer.sendLoginCode(envelope, "482913");
+      case two_factor -> mailer.sendTwoFactorCode(envelope, "482913");
+      case password_reset -> mailer.sendPasswordReset(envelope, "482913",
+          "https://" + config.domain + config.urls.resetPassword + "?code=482913");
+      case password_changed -> mailer.sendPasswordChanged(envelope);
+    };
+  }
 
   /**
    * Save or reset one palette.
@@ -2162,17 +2192,10 @@ public class AdminRoutes {
     values.put("site", "https://" + config.domain + "/");
     values.put("code", "482913");
     values.put("minutes", "10");
-    values.put("link", "https://" + config.domain + config.urls.register);
-    values.put("inviter", "Ana Rivera");
-    values.put("who", "Bo Chen");
-    values.put("what", "replied to you");
-    values.put("excerpt", "I will bring the flour.");
-    values.put("count", "4");
-    values.put("period", "today");
-    values.put("title", "Supper club");
-    values.put("when", "Saturday 14 May, 7pm");
-    values.put("where", "The Oak, back room");
-    values.put("details", "Bring a chair.");
+    values.put("link", "https://" + config.domain + config.urls.resetPassword);
+    // Every parameter any surviving flow declares has a value above. The ten that used to be here
+    // -- the inviter, the excerpt, the title, the place -- belonged to the board, the invitations
+    // and the calendar, and a preview cannot fill a hole no flow can ask for any more.
     return values;
   }
 

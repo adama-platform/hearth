@@ -14,13 +14,17 @@ default:
 # --- validate ---------------------------------------------------------------------------------
 
 # THE gate: clean build, full unit + HTTP test suite, packaged jar, live smoke test, docs check
-validate: clean package smoke docs
+validate: clean package smoke suite docs
     @echo ""
     @echo "  validate: OK"
 
 # do the documents still describe this program? checks links, paths, flags, recipes, templates
 docs:
     @./tools/check-docs.sh
+
+# did every test actually run? a class with no @Test is skipped in silence
+suite:
+    @./tools/check-suite.sh
 
 # unit + HTTP tests
 test:

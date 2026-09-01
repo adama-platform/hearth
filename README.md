@@ -92,7 +92,7 @@ a different thing from a defect and gets a different kind of attention.
 Everything goes through [`just`](https://github.com/casey/just):
 
 ```bash
-just validate     # clean build, full test suite, package, smoke test the running jar, check the docs
+just validate     # clean build, full suite, package, smoke the running jar, check the tests and docs
 just run          # serve the checked-in ./site root on 8080, narrating every decision
 just              # list the rest
 ```
@@ -446,7 +446,9 @@ the server from starting instead of being logged and shrugged at.
 ## The documents
 
 There are three, and `just docs` is part of `just validate` — it fails the build when a link, a
-flag, a recipe, a schema version or a quoted test count has drifted.
+flag, a recipe, a schema version or a quoted test count has drifted. `just suite` sits beside it and
+asks the other mechanical question: did every test actually run, or is a class sitting there with
+nothing in it?
 
 - **[MISSION.md](MISSION.md)** — why this exists, what it used to be, and why it is smaller now.
 - **[CLAUDE.md](CLAUDE.md)** — every invariant, why it exists, and what broke when it did not hold.

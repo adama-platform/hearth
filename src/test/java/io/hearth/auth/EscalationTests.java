@@ -12,6 +12,8 @@ import java.util.Map;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -128,9 +130,36 @@ public class EscalationTests {
     assertTrue(accounts().roles.of(idOf("newcomer@example.com")).contains("admin"));
   }
 
-  // ---- the other sections where one permission opens several actions ---------------------------
+  // ---- the role editor, where the escalation is sideways rather than upwards -------------------
 
+  /**
+   * Invariant 124, proved from outside.
+   *
+   * This is the subtle one, and it is the reason the rule is written down: `everything` is stripped
+   * from every role but the built-in one, so nobody can make a second god role by ticking the god
+   * box. What they can do without this check is invent a role holding every *other* permission and
+   * grant it to themselves -- an administrator in all but the word, reached sideways.
+   */
+  @Test
+  public void nobodyCanGiveAwayAPowerTheyDoNotHave() throws Exception {
+    give("mild@example.com", "granter", Permission.people_roles);
 
+    mild.submitToAndFollow("/admin/roles", Map.of("action", "save", "name", "sneaky",
+        "label", "Sneaky", "p_content_write", "1", "p_attachments_write", "1"));
+    assertNull("the role is not created at all", accounts().roleDefs.byName("sneaky"));
+
+    // and what they do hold, they can still delegate -- otherwise the permission does nothing
+    mild.submitToAndFollow("/admin/roles", Map.of("action", "save", "name", "helper",
+        "label", "Helper", "p_people_roles", "1"));
+    assertNotNull(accounts().roleDefs.byName("helper"));
+  }
+
+  @Test
+  public void anAdminCanStillGiveAwayAnything() throws Exception {
+    boss.submitToAndFollow("/admin/roles", Map.of("action", "save", "name", "editor",
+        "label", "Editor", "p_content_write", "1", "p_attachments_write", "1"));
+    assertNotNull(accounts().roleDefs.byName("editor"));
+  }
 
   private Browser signIn(String email) throws Exception {
     Browser browser = new Browser(server.port, "example.org");
