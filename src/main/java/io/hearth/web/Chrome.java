@@ -46,13 +46,8 @@ public final class Chrome {
     }
     io.hearth.auth.SessionRecord session =
         accounts == null || req == null ? null : AccountRoutes.currentSession(accounts, req);
-    boolean live = session != null && config != null;
-    model.put("live", live);
-    if (live) {
-      model.put("liveUrl", io.hearth.live.LiveRoutes.ROOT);
-      model.put("bellUrl", config.urls.self + "?tab=notifications");
-      model.put("meId", session.userId());
-    }
+    // the live channel and the bell went with the board; a page carries neither now
+    model.put("live", false);
   }
 
   /** the administration's colours, for the admin section and the legal pages */

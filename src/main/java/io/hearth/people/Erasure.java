@@ -76,32 +76,17 @@ public final class Erasure {
     LinkedHashMap<String, Integer> counts = new LinkedHashMap<>();
 
     // everything that is only about them, deleted outright
-    accounts.people.forget(id, actor);
+    accounts.people.forget(id);
     counts.put("push subscription(s)", accounts.pushSubs.forgetUser(id));
-    // when they said they could come, the calendars they pointed us at, and what those said. All
-    // of it is about them and nobody else, so all of it goes.
-    accounts.availability.forget(id);
     // what they uploaded stays and their name comes off it, which is the rule the board already
     // follows: a photograph of last summer is part of what everybody remembers, and cutting one
     // person out of it leaves holes in everybody else's Tuesday. Taking the files down as well is
     // a separate decision, and one an administrator makes deliberately.
     counts.put("upload(s) unnamed", accounts.attachments.forget(id));
-    accounts.inbox.forget(id);
-    accounts.notifyPrefs.forget(id);
     accounts.roles.revokeAll(id);
     // deleted rather than revoked: a revoked row lingers for a day, and this is the request that
     // means "there should be nothing left"
     counts.put("session(s)", accounts.sessions.deleteAllFor(id));
-    // their votes and their flags: an opinion is theirs, and a flag that outlives the person who
-    // raised it is a queue entry nobody can ask about
-    counts.put("vote(s) and flag(s)", accounts.signals.forgetUser(id));
-    // and their votes in polls. The counts move, which is correct: a decision is a count of the
-    // people who are here. What they put forward stays -- an option somebody else voted for is
-    // part of what the group discussed -- with the proposer unnamed, exactly as their words are.
-    counts.put("poll vote(s)", accounts.polls.forget(id));
-    // and their whole log. All of it, unlike their words on the board: a training log is nobody
-    // else's memory of anything, and there is no thread left with a hole in it afterwards.
-    counts.put("recorded set(s)", accounts.tasks.forget(id));
 
     try (Connection connection = accounts.store.connection()) {
       // an invitation *to* them is a record of their address that nobody needs any more

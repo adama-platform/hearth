@@ -84,23 +84,7 @@ public class Mailers implements Mailer {
     return forDomain(envelope.domain()).sendPasswordChanged(envelope);
   }
 
-  @Override
-  public Outcome sendInvite(Envelope envelope, InviteMail.Invitation invitation) {
-    return forDomain(envelope.domain()).sendInvite(envelope, invitation);
-  }
 
-  @Override
-  public Outcome sendBoardNotice(Envelope envelope, Notice notice) {
-    return forDomain(envelope.domain()).sendBoardNotice(envelope, notice);
-  }
 
-  @Override
-  public Outcome sendDigest(Envelope envelope, Digest digest) {
-    return forDomain(envelope.domain()).sendDigest(envelope, digest);
-  }
 
-  @Override
-  public Outcome sendEventInvite(Envelope envelope, EventInvite invite) {
-    return forDomain(envelope.domain()).sendEventInvite(envelope, invite);
-  }
 }

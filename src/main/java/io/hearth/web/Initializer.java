@@ -47,42 +47,21 @@ public class Initializer extends ChannelInitializer<SocketChannel> {
   private final AdminRoutes admin;
   private final SelfRoutes self;
   private final io.hearth.mcp.McpRoutes mcp;
-  private final io.hearth.api.ApiRoutes api;
-  private final io.hearth.availability.AvailabilityRoutes availability;
   private final io.hearth.attach.AttachmentRoutes attachments;
   private final io.hearth.certs.Challenges challenges;
   private final AccessLog accessLog;
   /** non-null on the TLS listener; null on plain HTTP */
-  private final io.hearth.board.BoardRoutes board;
-  private final io.hearth.calendar.CalendarRoutes calendar;
   private final PwaRoutes pwa;
-  private final io.hearth.places.PlaceRoutes places;
   private final io.hearth.legal.LegalRoutes legal;
-  private final io.hearth.people.MemberRoutes members;
-  private final io.hearth.people.SurveyRoutes survey;
-  private final io.hearth.tasks.TaskRoutes tasks;
-  private final HomeRoutes dashboard;
-  private final io.hearth.people.OrientationRoutes welcome;
-  private final io.hearth.live.LiveRoutes liveRoutes;
   private final io.hearth.certs.TlsContexts tls;
   private final Verbose verbose;
 
   public Initializer(WebConfig webConfig, DomainTree domains, AuthSystem auth, Pages pages,
                      AccountRoutes accounts, AdminRoutes admin, SelfRoutes self,
-                     io.hearth.mcp.McpRoutes mcp, io.hearth.api.ApiRoutes api,
-                   io.hearth.availability.AvailabilityRoutes availability,
-                   io.hearth.attach.AttachmentRoutes attachments,
-                   io.hearth.board.BoardRoutes board,
-                    io.hearth.calendar.CalendarRoutes calendar,
-                    PwaRoutes pwa,
-                    io.hearth.places.PlaceRoutes places,
-                    io.hearth.legal.LegalRoutes legal,
-                    io.hearth.people.MemberRoutes members,
-                    io.hearth.people.SurveyRoutes survey,
-                    io.hearth.tasks.TaskRoutes tasks,
-                    HomeRoutes dashboard,
-                    io.hearth.people.OrientationRoutes welcome,
-                    io.hearth.live.LiveRoutes liveRoutes,
+                     io.hearth.mcp.McpRoutes mcp,
+                     io.hearth.attach.AttachmentRoutes attachments,
+                     PwaRoutes pwa,
+                     io.hearth.legal.LegalRoutes legal,
                      io.hearth.certs.Challenges challenges,
                      AccessLog accessLog, Verbose verbose, io.hearth.certs.TlsContexts tls) {
     this.webConfig = webConfig;
@@ -93,20 +72,9 @@ public class Initializer extends ChannelInitializer<SocketChannel> {
     this.admin = admin;
     this.self = self;
     this.mcp = mcp;
-    this.api = api;
-    this.availability = availability;
     this.attachments = attachments;
-    this.board = board;
-    this.calendar = calendar;
     this.pwa = pwa;
-    this.places = places;
     this.legal = legal;
-    this.members = members;
-    this.survey = survey;
-    this.tasks = tasks;
-    this.dashboard = dashboard;
-    this.welcome = welcome;
-    this.liveRoutes = liveRoutes;
     this.challenges = challenges;
     this.accessLog = accessLog;
     this.verbose = verbose;
@@ -164,8 +132,8 @@ public class Initializer extends ChannelInitializer<SocketChannel> {
             io.hearth.attach.AttachmentRoutes.UPLOAD));
         stream.pipeline().addLast(new HttpObjectAggregator(webConfig.uploadCeiling()));
         stream.pipeline().addLast(new HttpContentCompressor());
-        stream.pipeline().addLast(new WebHandler(domains, auth, pages, accounts, admin, self, mcp, api, availability, attachments,
-            board, calendar, pwa, places, legal, members, survey, tasks, dashboard, welcome, liveRoutes, challenges, accessLog, verbose));
+        stream.pipeline().addLast(new WebHandler(domains, auth, pages, accounts, admin, self, mcp, attachments,
+            pwa, legal, challenges, accessLog, verbose));
       }
     }));
   }
@@ -180,6 +148,6 @@ public class Initializer extends ChannelInitializer<SocketChannel> {
         io.hearth.attach.AttachmentRoutes.UPLOAD));
     pipeline.addLast(new HttpObjectAggregator(webConfig.uploadCeiling()));
     pipeline.addLast(new HttpContentCompressor());
-    pipeline.addLast(new WebHandler(domains, auth, pages, accounts, admin, self, mcp, api, availability, attachments, board, calendar, pwa, places, legal, members, survey, tasks, dashboard, welcome, liveRoutes, challenges, accessLog, verbose));
+    pipeline.addLast(new WebHandler(domains, auth, pages, accounts, admin, self, mcp, attachments, pwa, legal, challenges, accessLog, verbose));
   }
 }

@@ -30,7 +30,7 @@ public class AccessLog {
   private int writeAt;
 
   /** the one path prefix whose traffic is a heartbeat rather than a visit */
-  private static final String LIVE = io.hearth.live.LiveRoutes.ROOT + "/";
+  private static final String LIVE = "/~live/";
   private final java.util.concurrent.atomic.AtomicLong livePings =
       new java.util.concurrent.atomic.AtomicLong();
 

@@ -268,14 +268,6 @@ public class AccountRoutes {
       user = accounts.users.create(redeemed.email(), passwordHash, true, signup);
       verbose.detail("register: created account " + user.id() + " for " + redeemed.email()
           + " (" + form.signals().describe() + ")");
-      // An invitation converts here rather than at the link: the link only proves somebody clicked,
-      // and what an invitation is for is a member. Matching by address means a person who was
-      // invited and signed up from the front page still counts, which is the honest reading.
-      var claimed = accounts.invites.convert(redeemed.email(), user.id());
-      if (claimed != null) {
-        verbose.say("invite: " + redeemed.email() + " joined from an invitation by "
-            + claimed.createdByEmail());
-      }
     } else {
       accounts.users.markVerified(user.id());
       if (passwordHash != null && !user.hasPassword()) {
@@ -501,25 +493,6 @@ public class AccountRoutes {
     String requested = Landing.from(req.uri());
     if (requested != null && accounts.access.isApproved(fresh)) {
       landing = requested;
-    } else if (io.hearth.people.OrientationRoutes.hasMoreToAsk(accounts, fresh)
-        && config.has(io.hearth.vhost.Surface.survey)) {
-      // Somebody who has been here before, and whom the community has asked something since.
-      //
-      // The wizard coming back is the point of having one: a survey only asked on the first day
-      // measures what a community wanted to know the day somebody joined and then goes stale. Once
-      // per sign-in, three questions, skippable in one press -- which is the difference between a
-      // nudge and a nag.
-      landing = config.urls.orientation + "?step=2";
-    } else if (io.hearth.people.OrientationRoutes.needsIt(accounts, fresh)) {
-      // Somebody with no name yet goes to the welcome instead. This is the one moment in a member's
-      // life when asking is not an interruption -- they have just arrived and there is nothing else
-      // on the screen -- and everything this server prints on their behalf needs the answer. It is
-      // asked of the profile rather than kept as a flag on the account, because "have they told us
-      // who they are" is a question the profile already answers and a second copy would drift.
-      //
-      // Below an honoured `next` and never above it: a connector's popup waiting on a consent
-      // screen must not be handed a welcome flow instead.
-      landing = config.urls.orientation;
     }
     Responses.send(ctx, req, HttpResponseStatus.SEE_OTHER, null, Responses.EMPTY, new String[]{
         HttpHeaderNames.LOCATION.toString(), landing,
@@ -622,29 +595,6 @@ public class AccountRoutes {
     if (handle != null) {
       blob.put("handle", handle);
     }
-    // The address an invitation was sent to, filled into the box.
-    //
-    // Somebody arriving from an invitation has already proved they can read that mailbox -- the
-    // link was in it -- so asking them to type the address back is asking them to re-key something
-    // we already know, and getting it wrong is how an invitation fails to convert against an
-    // address that is one character out. The value is still only a suggestion: the code goes to
-    // whatever they submit, so a typo costs them a code rather than somebody else's account.
-    io.hearth.people.Invites.Invite invited = invitationFor(accounts, req);
-    if (invited != null) {
-      blob.put("email", invited.email());
-      // ...and the click, recorded here because here is where the link actually arrives. A
-      // redirect of our own would track it more tidily and put one more hop between somebody and
-      // the form, which is the wrong trade for a number. Only on a GET: re-rendering the page
-      // after a refused submission is not somebody following a link again.
-      if (io.netty.handler.codec.http.HttpMethod.GET.equals(req.method())) {
-        try {
-          accounts.invites.markClicked(invited.token());
-          verbose.detail(() -> "invite: " + invited.email() + " followed their link");
-        } catch (java.sql.SQLException ex) {
-          LOG.warn("invite-click-not-recorded", ex);
-        }
-      }
-    }
     ObjectNode names = blob.putObject("f");
     for (Map.Entry<String, String> entry : ticket.names().entrySet()) {
       names.put(entry.getKey(), entry.getValue());
@@ -686,30 +636,6 @@ public class AccountRoutes {
     return model;
   }
 
-  /**
-   * Which invitation this page was opened on behalf of, or null.
-   *
-   * The token is session-strength and arrived in the mailbox it names, so handing the address back
-   * to whoever holds it discloses nothing they did not already have. An expired, revoked or already
-   * converted invitation fills in nothing rather than a stale address.
-   */
-  private static io.hearth.people.Invites.Invite invitationFor(Accounts accounts,
-                                                               FullHttpRequest req) {
-    String token = Forms.query(req.uri(), "invite");
-    if (token == null || token.isBlank() || accounts == null) {
-      return null;
-    }
-    try {
-      io.hearth.people.Invites.Invite invite = accounts.invites.byToken(token.trim());
-      if (invite == null || invite.revokedAt() != null || invite.convertedAt() != null) {
-        return null;
-      }
-      return invite;
-    } catch (java.sql.SQLException ex) {
-      // a filled-in box is a convenience; failing the sign-up page for it would not be
-      return null;
-    }
-  }
 
   static String pathOf(SiteUrls.Route route, DomainConfig config) {
     return switch (route) {

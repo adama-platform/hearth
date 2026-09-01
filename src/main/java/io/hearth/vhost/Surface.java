@@ -28,28 +28,10 @@ import java.util.Set;
  * purpose is turning things off.
  */
 public enum Surface {
-  /** the discussion board */
-  board,
-  /** what is happening, and who is coming */
-  calendar,
-  /** the address book */
-  places,
-  /** the directory of who else is here */
-  members,
-  /** the community's standing questions, and the welcome that starts them */
-  survey,
-  /** projects, things to do, routines, and what was recorded against them */
-  tasks,
-  /** inviting people by email */
-  invites,
   /** the installable shell and push notifications */
   app,
   /** the endpoint a model connects to */
   ai,
-  /** the endpoint a program connects to, holding somebody's own token */
-  api,
-  /** when people can actually come, and the grid that adds it up */
-  availability,
   /** uploaded files: photographs, video, the PDF of the menu */
   attachments;
 

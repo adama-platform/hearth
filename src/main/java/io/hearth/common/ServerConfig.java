@@ -35,14 +35,6 @@ public class ServerConfig {
    * a box somebody set up for their own community and wrong on a rented one in another continent.
    */
   public final java.time.ZoneId zone;
-  /**
-   * Which geocoding service, if any, turns an address into a point.
-   *
-   * A property of the box rather than of a community: it is one account with one key, and two
-   * communities on one machine sharing it is right -- the alternative is asking somebody to open
-   * two accounts to run two supper clubs.
-   */
-  public final io.hearth.places.GpsConfig gps;
   public final int httpPort;
   public final int httpsPort;
   public final boolean httpsEnabled;
@@ -71,7 +63,6 @@ public class ServerConfig {
     this.httpsEnabled = false;
     this.bouncePort = WebConfig.NO_PORT;
     this.smtp = io.hearth.smtp.SmtpConfig.off();
-    this.gps = io.hearth.places.GpsConfig.off();
     this.http2 = true;
     this.compactHtml = true;
     this.maxRequestBytes = WebConfig.DEFAULT_MAX_CONTENT_LENGTH;
@@ -106,7 +97,6 @@ public class ServerConfig {
     int bouncePort = port(config, "http-bounce-port", WebConfig.DEFAULT_BOUNCE_PORT);
     this.bouncePort = bounce ? bouncePort : WebConfig.NO_PORT;
     this.smtp = new io.hearth.smtp.SmtpConfig(config.child("smtp"));
-    this.gps = new io.hearth.places.GpsConfig(config.child("gps"));
     this.http2 = config.boolOf("http2", true);
     this.compactHtml = config.boolOf("compact-html", true);
     this.maxRequestBytes = positive(config, "max-request-bytes", WebConfig.DEFAULT_MAX_CONTENT_LENGTH);

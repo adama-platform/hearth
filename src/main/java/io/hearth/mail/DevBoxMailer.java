@@ -60,55 +60,9 @@ public class DevBoxMailer implements Mailer {
     return print(envelope, "password changed", "Your password was just changed. If that wasn't you, come find an admin.", null, null);
   }
 
-  @Override
-  public Outcome sendInvite(Envelope envelope, InviteMail.Invitation invitation) {
-    // the pixel is not printed: on a terminal it is a URL nobody will fetch, and showing it would
-    // suggest the open tracking works here when it cannot
-    return print(envelope, "invitation (" + invitation.touch() + ")",
-        InviteMail.subjectFor(invitation), null, invitation.link());
-  }
 
-  @Override
-  public Outcome sendBoardNotice(Envelope envelope, Notice notice) {
-    return print(envelope, "board notice", notice.actor() + " " + notice.heading(), null,
-        notice.link());
-  }
 
-  @Override
-  public Outcome sendDigest(Envelope envelope, Digest digest) {
-    // one line per item rather than the print() shape: a digest whose whole content is a count is
-    // a digest that has not been tested against anything real
-    StringBuilder lines = new StringBuilder();
-    lines.append(digest.count()).append(" thing(s) ").append(digest.period());
-    for (Notice item : digest.items()) {
-      lines.append("\n  | ").append("  - ").append(item.actor()).append(' ')
-          .append(item.heading());
-    }
-    return print(envelope, "digest", lines.toString(), null, digest.link());
-  }
 
-  @Override
-  public Outcome sendEventInvite(Envelope envelope, EventInvite invite) {
-    // the calendar file itself is printed, because the thing most likely to be wrong about an
-    // invitation is the file, and an operator watching a terminal can paste it into a validator
-    StringBuilder lines = new StringBuilder();
-    lines.append(switch (invite.note()) {
-          case cancelled -> "CANCELLED: ";
-          case changed -> "CHANGED: ";
-          case reminder -> "REMINDER: ";
-          case invitation -> "";
-        })
-        .append(invite.title()).append(" -- ").append(invite.when());
-    if (invite.where() != null && !invite.where().isBlank()) {
-      lines.append(" at ").append(invite.where());
-    }
-    lines.append("\n  | replies to: ").append(invite.replyTo());
-    for (String line : invite.ics().split("\r\n")) {
-      lines.append("\n  |   ").append(line);
-    }
-    return print(envelope, "event-invite (" + invite.method() + ")", lines.toString(), null,
-        invite.url());
-  }
 
   private Outcome print(Envelope envelope, String flow, String line, String code, String link) {
     StringBuilder sb = new StringBuilder();

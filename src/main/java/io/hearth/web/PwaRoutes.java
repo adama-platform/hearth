@@ -190,16 +190,6 @@ public class PwaRoutes {
     vector.put("purpose", "any");
 
     var shortcuts = manifest.putArray("shortcuts");
-    if (config.has(io.hearth.vhost.Surface.board)) {
-      ObjectNode board = shortcuts.addObject();
-      board.put("name", "Discussion");
-      board.put("url", SHELL + "?to=" + config.urls.board);
-    }
-    if (config.has(io.hearth.vhost.Surface.calendar)) {
-      ObjectNode what = shortcuts.addObject();
-      what.put("name", "Events");
-      what.put("url", SHELL + "?to=" + config.urls.calendar);
-    }
 
     recorder.status(200);
     Responses.send(ctx, req, HttpResponseStatus.OK, "application/manifest+json; charset=utf-8",

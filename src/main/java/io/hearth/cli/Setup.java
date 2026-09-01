@@ -10,7 +10,6 @@ import io.hearth.mail.SesConfig;
 import io.hearth.common.ConfigObject;
 import io.hearth.common.Verbose;
 import io.hearth.vhost.Hosts;
-import io.hearth.places.WebGeocoder;
 import io.hearth.smtp.SmtpConfig;
 import io.hearth.web.WebConfig;
 
@@ -465,99 +464,6 @@ public class Setup {
     return true;
   }
 
-  // ---- --setup-gps ----------------------------------------------------------------------------
-
-  /**
-   * Choose a geocoding service, and understand what you are choosing.
-   *
-   * <b>The key is the easy part.</b> What this walkthrough exists for is that most geocoding
-   * services do not let you keep the answer -- and keeping the answer is exactly what a coordinate
-   * written onto a place row is. Google requires results to be used with a Google map; Mapbox
-   * charges differently for storing them; HERE has the largest free tier of any of them and caps
-   * caching at thirty days. An operator who picks one of those from a comparison table is in breach
-   * of the terms on the day the first place is saved, and nothing will tell them.
-   *
-   * So the three offered here are the three that permit it, and the screen says why the famous ones
-   * are missing. That is the same reasoning as the certificate walkthrough: the expensive mistake is
-   * made before anybody types anything, so the walkthrough is mostly words.
-   */
-  public boolean gps() throws IOException {
-    ask.section("geocoding");
-    ask.say("  Addresses are turned into coordinates: places in the address book, so a map link");
-    ask.say("  works and an event arriving by email is matched to somewhere you already have; and");
-    ask.say("  members who said where they are, so whoever books a hall can see how far people");
-    ask.say("  would have to come.");
-    ask.blank();
-    ask.say("  This is already on, using OpenStreetMap's Nominatim, which needs no account and no");
-    ask.say("  key. You are here to choose something else, or to say who to contact. Turning it");
-    ask.say("  off entirely is one line in config.cfg: \"gps\": { \"enabled\": false }.");
-    ask.blank();
-    ask.say("  It does send an address somebody typed to another company. The default one is a");
-    ask.say("  charitable foundation and costs nothing; the other two are businesses.");
-    ask.blank();
-    ask.say("  Three services, and the reason the famous ones are not among them:");
-    ask.blank();
-    ask.say("    Google, Mapbox and HERE all restrict keeping the answer. Google wants results used");
-    ask.say("    with a Google map, Mapbox charges a different rate for storing them, and HERE --");
-    ask.say("    which has the largest free tier of the lot -- caps caching at thirty days. This");
-    ask.say("    server writes the coordinate onto the place and keeps it, so all three would put");
-    ask.say("    you in breach on the day you saved your first address.");
-    ask.blank();
-    int number = 1;
-    for (WebGeocoder.Service service : WebGeocoder.Service.values()) {
-      ask.say("    " + number++ + ". " + service.name() + " -- " + service.terms());
-      ask.say("       " + service.where());
-      ask.blank();
-    }
-
-    String chosen = ask.text("Which one", "nominatim");
-    WebGeocoder.Service service = WebGeocoder.Service.of(chosen);
-    if (service == null) {
-      ask.fail("that is not one of them; nothing was changed");
-      return false;
-    }
-
-    File file = root.configFile();
-    ObjectNode config;
-    try {
-      config = file.isFile() ? (ObjectNode) JSON.readTree(file) : JSON.createObjectNode();
-    } catch (Exception ex) {
-      ask.fail(file + " did not parse: " + ex.getMessage());
-      return false;
-    }
-    ObjectNode gps = config.has("gps") && config.get("gps").isObject()
-        ? (ObjectNode) config.get("gps") : config.putObject("gps");
-    gps.put("service", service.name());
-
-    if (service.needsKey()) {
-      ask.blank();
-      ask.say("  Get a key from " + service.where() + " and paste it here. It goes into config.cfg");
-      ask.say("  in the clear, like the mail credentials -- there is nowhere else for it in a");
-      ask.say("  single jar with no secret store.");
-      gps.put("key", ask.required("API key"));
-    } else {
-      gps.remove("key");
-      ask.blank();
-      ask.say("  No key. What Nominatim asks for instead is that you identify yourself: their");
-      ask.say("  policy requires a way to reach whoever runs this server, and a client that does");
-      ask.say("  not give one can be blocked without warning -- which looks, from here, like");
-      ask.say("  geocoding quietly stopping.");
-      ask.say("  They also ask for at most one request a second, no bulk work, and that results are");
-      ask.say("  cached rather than asked for twice. This server does all three: it looks a place");
-      ask.say("  up once, when it is saved, and keeps the answer.");
-    }
-    ask.blank();
-    gps.put("contact", ask.required("An email address they could reach you at"));
-    gps.put("enabled", true);
-
-    write(file, config.toPrettyString() + "\n", service.needsKey());
-    ask.ok("wrote " + file.getName()
-        + (service.needsKey() ? ", readable only by this user" : ""));
-    ask.blank();
-    ask.say("  Saving a place in the admin section will now look up its address. A place that was");
-    ask.say("  saved before this has no coordinate until it is saved again.");
-    return true;
-  }
 
   // ---- --test-email ---------------------------------------------------------------------------
 

@@ -32,10 +32,8 @@ public final class AdminView {
     overview("", "Overview", "home", null, Permission.admin_enter),
     people("people", "People", "people", null, Permission.people_read),
     bans("bans", "Bans", "x", people, Permission.people_remove),
-    invites("invites", "Invites", "people", people, Permission.invites_send),
     roles("roles", "Roles", "star", people, Permission.people_roles),
     content("content", "Content", "content", null, Permission.content_read),
-    proposals("content/proposals", "Suggestions", "questions", content, Permission.content_propose),
     templates("templates", "Templates", "template", content, Permission.templates_write),
     directories("templates/directories", "Directories", "logs", content,
         Permission.templates_write),
@@ -43,17 +41,6 @@ public final class AdminView {
     attachments("attachments", "Files", "content", content, Permission.attachments_write),
     bundles("content/bundles", "Import & export", "logs", content, Permission.content_write),
     unused("attachments/unused", "Unused files", "x", attachments, Permission.attachments_write),
-    board("board", "Board", "content", null, Permission.board_moderate),
-    flagged("board/flagged", "Flagged", "x", board, Permission.board_moderate),
-    calendar("calendar", "Events", "events", null, Permission.calendar_write),
-    suggestions("calendar/suggestions", "Suggested", "questions", calendar,
-        Permission.calendar_review),
-    places("places", "Places", "events", null, Permission.places_write),
-    placetypes("places/kinds", "Kinds", "star", places, Permission.places_write),
-    survey("survey", "Survey", "questions", null, Permission.survey_write),
-    tasks("tasks", "Projects", "logs", null, Permission.tasks_share),
-    retired("survey/retired", "Retired", "x", survey, Permission.survey_write),
-    engagement("engagement", "Engagement", "star", null, Permission.system_read),
     // The three that decide what this community looks and sounds like, under one heading. They
     // were three top-level entries competing with People and Content for somebody's eye, and none
     // of them is opened weekly -- a colour, a policy and the wording of an email are things
@@ -74,7 +61,6 @@ public final class AdminView {
     events("system/events", "Events", "events", system, Permission.system_read),
     analytics("system/analytics", "Analytics", "analytics", system, Permission.system_read),
     caching("system/caching", "Caching", "star", system, Permission.system_read),
-    async("system/async", "Async", "logs", system, Permission.system_read),
     ai("system/ai", "AI", "star", system, Permission.ai_manage),
     logs("system/logs", "Log", "logs", system, Permission.system_read);
 
@@ -149,25 +135,13 @@ public final class AdminView {
   private static final Map<Section, String> PANELS = Map.ofEntries(
       Map.entry(Section.people, "list"),
       Map.entry(Section.bans, "list"),
-      Map.entry(Section.invites, "list"),
       Map.entry(Section.content, "list"),
       Map.entry(Section.attachments, "list"),
       Map.entry(Section.roles, "list"),
-      Map.entry(Section.proposals, "list"),
-      Map.entry(Section.places, "list"),
-      Map.entry(Section.placetypes, "list"),
       Map.entry(Section.templates, "list"),
-      Map.entry(Section.board, "list"),
-      Map.entry(Section.flagged, "list"),
-      Map.entry(Section.calendar, "list"),
-      Map.entry(Section.suggestions, "list"),
-      Map.entry(Section.survey, "list"),
-      Map.entry(Section.tasks, "list"),
-      Map.entry(Section.retired, "list"),
       Map.entry(Section.ai, "actions"),
       Map.entry(Section.events, "stream"),
       Map.entry(Section.caching, "stats"),
-      Map.entry(Section.async, "queue"),
       Map.entry(Section.logs, "results"));
 
   private AdminView() {

@@ -35,23 +35,12 @@ public class WebServer implements Runnable {
   private final AdminRoutes admin;
   private final SelfRoutes self;
   private final io.hearth.mcp.McpRoutes mcp;
-  private final io.hearth.api.ApiRoutes api;
-  private final io.hearth.availability.AvailabilityRoutes availability;
   private final io.hearth.attach.AttachmentRoutes attachments;
   private final io.hearth.certs.Challenges challenges;
   private final AccessLog accessLog;
   private final Verbose verbose;
-  private final io.hearth.board.BoardRoutes board;
-  private final io.hearth.calendar.CalendarRoutes calendar;
   private final PwaRoutes pwa;
-  private final io.hearth.places.PlaceRoutes places;
   private final io.hearth.legal.LegalRoutes legal;
-  private final io.hearth.people.MemberRoutes members;
-  private final io.hearth.people.SurveyRoutes survey;
-  private final io.hearth.tasks.TaskRoutes tasks;
-  private final HomeRoutes dashboard;
-  private final io.hearth.people.OrientationRoutes welcome;
-  private final io.hearth.live.LiveRoutes liveRoutes;
   private final io.hearth.certs.TlsContexts tls;
   private final AtomicBoolean started;
   private final CountDownLatch ready;
@@ -62,20 +51,10 @@ public class WebServer implements Runnable {
 
   public WebServer(WebConfig webConfig, DomainTree domains, AuthSystem auth, Pages pages,
                    AccountRoutes accounts, AdminRoutes admin, SelfRoutes self,
-                   io.hearth.mcp.McpRoutes mcp, io.hearth.api.ApiRoutes api,
-                   io.hearth.availability.AvailabilityRoutes availability,
+                   io.hearth.mcp.McpRoutes mcp,
                    io.hearth.attach.AttachmentRoutes attachments,
-                   io.hearth.board.BoardRoutes board,
-                    io.hearth.calendar.CalendarRoutes calendar,
-                    PwaRoutes pwa,
-                    io.hearth.places.PlaceRoutes places,
-                    io.hearth.legal.LegalRoutes legal,
-                    io.hearth.people.MemberRoutes members,
-                    io.hearth.people.SurveyRoutes survey,
-                    io.hearth.tasks.TaskRoutes tasks,
-                    HomeRoutes dashboard,
-                    io.hearth.people.OrientationRoutes welcome,
-                    io.hearth.live.LiveRoutes liveRoutes,
+                   PwaRoutes pwa,
+                   io.hearth.legal.LegalRoutes legal,
                    io.hearth.certs.Challenges challenges,
                    io.hearth.certs.TlsContexts tls,
                    AccessLog accessLog, Verbose verbose) {
@@ -87,20 +66,9 @@ public class WebServer implements Runnable {
     this.admin = admin;
     this.self = self;
     this.mcp = mcp;
-    this.api = api;
-    this.availability = availability;
     this.attachments = attachments;
-    this.board = board;
-    this.calendar = calendar;
     this.pwa = pwa;
-    this.places = places;
     this.legal = legal;
-    this.members = members;
-    this.survey = survey;
-    this.tasks = tasks;
-    this.dashboard = dashboard;
-    this.welcome = welcome;
-    this.liveRoutes = liveRoutes;
     this.challenges = challenges;
     this.tls = tls;
     this.accessLog = accessLog;
@@ -127,8 +95,8 @@ public class WebServer implements Runnable {
           .option(ChannelOption.SO_BACKLOG, 128)
           .childOption(ChannelOption.TCP_NODELAY, true)
           .childOption(ChannelOption.SO_KEEPALIVE, true)
-          .childHandler(new Initializer(webConfig, domains, auth, pages, accounts, admin, self, mcp, api, availability, attachments,
-              board, calendar, pwa, places, legal, members, survey, tasks, dashboard, welcome, liveRoutes, challenges, accessLog, verbose, null));
+          .childHandler(new Initializer(webConfig, domains, auth, pages, accounts, admin, self, mcp, attachments,
+              pwa, legal, challenges, accessLog, verbose, null));
       verbose.say("binding " + webConfig.bind + ":" + webConfig.port + " with " + webConfig.workerThreads + " worker thread(s)");
       Channel bound = bootstrap.bind(new InetSocketAddress(webConfig.bind, webConfig.port)).sync().channel();
 
@@ -144,7 +112,7 @@ public class WebServer implements Runnable {
             .childOption(ChannelOption.TCP_NODELAY, true)
             .childOption(ChannelOption.SO_KEEPALIVE, true)
             .childHandler(new Initializer(webConfig, domains, auth, pages, accounts, admin, self,
-                mcp, api, availability, attachments, board, calendar, pwa, places, legal, members, survey, tasks, dashboard, welcome, liveRoutes, challenges, accessLog, verbose, tls));
+                mcp, attachments, pwa, legal, challenges, accessLog, verbose, tls));
         verbose.say("binding " + webConfig.bind + ":" + webConfig.httpsPort + " for https");
         httpsChannel = secure.bind(new InetSocketAddress(webConfig.bind, webConfig.httpsPort)).sync().channel();
       }

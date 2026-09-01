@@ -73,18 +73,10 @@ public class DomainConfig {
    * for everybody else.
    */
   public final boolean imperial;
-  /** whether a program may hold a token here, and for how long */
-  public final io.hearth.api.ApiConfig api;
   /** what may be uploaded here, and who may read it afterwards */
   public final io.hearth.attach.AttachmentConfig attachments;
-  /** when people can come, and how often their calendars are read */
-  public final io.hearth.availability.AvailabilityConfig availability;
   /** how this community sends email; off means codes print to the terminal */
   public final io.hearth.mail.SesConfig ses;
-  /** the discussion board, and how long a thread lives */
-  public final io.hearth.board.BoardConfig board;
-  /** the address book */
-  public final io.hearth.places.PlacesConfig places;
   /**
    * What this community switched off in one word.
    *
@@ -105,10 +97,6 @@ public class DomainConfig {
   public final java.util.List<String> subdomains;
   /** does this domain accept inbound mail, when the server is listening for any */
   public final boolean acceptsMail;
-  /** what an invitation says, and when it says it again */
-  public final io.hearth.people.InviteConfig invites;
-  /** the calendar, and how far back it looks */
-  public final io.hearth.calendar.CalendarConfig calendar;
   /** account routes for this domain, path to route, resolved once */
   public final Map<String, SiteUrls.Route> routes;
 
@@ -133,14 +121,9 @@ public class DomainConfig {
                        java.time.ZoneId zone, boolean imperial, boolean wildcard,
                        String useDatabaseDomain, java.util.List<String> adminEmails,
                        LoginSecurity loginSecurity, Caches caches, SiteUrls urls,
-                       io.hearth.mcp.McpConfig mcp, io.hearth.api.ApiConfig api,
-                       io.hearth.availability.AvailabilityConfig availability,
+                       io.hearth.mcp.McpConfig mcp,
                        io.hearth.attach.AttachmentConfig attachments,
                        io.hearth.mail.SesConfig ses,
-                       io.hearth.board.BoardConfig board,
-                       io.hearth.calendar.CalendarConfig calendar,
-                       io.hearth.people.InviteConfig invites,
-                       io.hearth.places.PlacesConfig places,
                        java.util.Set<Surface> disabled,
                        java.util.List<String> subdomains, boolean acceptsMail,
                        com.fasterxml.jackson.databind.node.ObjectNode source, String where,
@@ -158,14 +141,8 @@ public class DomainConfig {
     this.caches = caches;
     this.urls = urls;
     this.mcp = mcp;
-    this.api = api;
-    this.availability = availability;
     this.attachments = attachments;
     this.ses = ses;
-    this.board = board;
-    this.calendar = calendar;
-    this.invites = invites;
-    this.places = places;
     this.disabled = disabled;
     this.subdomains = java.util.List.copyOf(subdomains);
     this.acceptsMail = acceptsMail;
@@ -222,19 +199,9 @@ public class DomainConfig {
     Caches caches = Caches.of(config.child("cache"));
     SiteUrls urls = new SiteUrls(config.child("urls"));
     io.hearth.mcp.McpConfig mcp = new io.hearth.mcp.McpConfig(config.child("mcp"));
-    io.hearth.api.ApiConfig api = new io.hearth.api.ApiConfig(config.child("api"));
-    io.hearth.availability.AvailabilityConfig availability =
-        new io.hearth.availability.AvailabilityConfig(config.child("availability"));
     io.hearth.attach.AttachmentConfig attachments =
         new io.hearth.attach.AttachmentConfig(config.child("attachments"));
     io.hearth.mail.SesConfig ses = new io.hearth.mail.SesConfig(config.child("ses"));
-    io.hearth.board.BoardConfig board = new io.hearth.board.BoardConfig(config.child("board"));
-    io.hearth.calendar.CalendarConfig calendar =
-        new io.hearth.calendar.CalendarConfig(config.child("calendar"));
-    io.hearth.people.InviteConfig invites =
-        new io.hearth.people.InviteConfig(config.child("invites"));
-    io.hearth.places.PlacesConfig places =
-        new io.hearth.places.PlacesConfig(config.child("places"));
     java.util.Set<Surface> disabled = Surface.parse(domain,
         java.util.List.of(config.stringsOf("disabled", new String[0])));
 
@@ -278,19 +245,13 @@ public class DomainConfig {
       throw new ConfigException(configFile + ": mcp is enabled but admin_emails is empty,"
           + " so nobody could ever authorize a connector");
     }
-    if (api.enabled && urls.collidesWith(io.hearth.api.ApiConfig.PATH)) {
-      throw new ConfigException(configFile + ": '" + io.hearth.api.ApiConfig.PATH
-          + "' is already one of this domain's account pages; move that page or switch the api off"
-          + " with \"disabled\": [\"api\"]");
-    }
     if (mcp.enabled && urls.collidesWith(mcp.path)) {
       throw new ConfigException(configFile + ": mcp.path '" + mcp.path
           + "' is already one of this domain's account pages");
     }
     return new DomainConfig(domain, configFile, name, enabled, zone, units.equals("imperial"),
         wildcard, useDatabaseDomain,
-        admins, loginSecurity, caches, urls, mcp, api, availability, attachments, ses, board,
-        calendar, invites, places,
+        admins, loginSecurity, caches, urls, mcp, attachments, ses,
         disabled, subdomains, acceptsMail,
         rememberSource != null ? rememberSource : config.node.deepCopy(),
         configFile.getName(), configsRoot, fallbackZone);
@@ -354,16 +315,10 @@ public class DomainConfig {
       return false;
     }
     return switch (surface) {
-      case board -> board.enabled;
-      case calendar -> calendar.enabled;
-      case places -> places.enabled;
       case ai -> mcp.enabled;
-      case api -> api.enabled;
-      case availability -> availability.enabled;
       case attachments -> attachments.enabled;
-      // neither invitations nor the app shell has a block of its own; they are on unless the broad
-      // switch says otherwise
-      case invites, app, members, survey, tasks -> true;
+      // the app shell has no block of its own; it is on unless the broad switch says otherwise
+      case app -> true;
     };
   }
 

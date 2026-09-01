@@ -15,23 +15,15 @@ import io.hearth.auth.UserRecord;
 import io.hearth.cache.TtlCache;
 import io.hearth.common.Verbose;
 import io.hearth.content.ContentRecord;
-import io.hearth.board.Board;
-import io.hearth.calendar.Calendar;
 import io.hearth.content.ContentVersions;
 import io.hearth.content.Proposals;
 import io.hearth.content.TextPatch;
 import io.hearth.mail.Mailer;
-import io.hearth.people.InvitePixel;
-import io.hearth.people.Invitations;
-import io.hearth.people.Invites;
-import io.hearth.places.Geocoder;
-import io.hearth.places.Places;
 import io.hearth.content.TemplateField;
 import io.hearth.content.TemplateRecord;
 import io.hearth.events.EventBus;
 import io.hearth.events.MutationEvent;
 import io.hearth.people.ProfileRecord;
-import io.hearth.people.Question;
 import io.hearth.template.Templates;
 import io.hearth.legal.LegalDoc;
 import io.hearth.legal.LegalDocs;
@@ -98,53 +90,16 @@ public class AdminRoutes {
   private final io.hearth.mcp.AiLog aiLog;
   /** invitations go out from here, so the admin needs the mailer */
   private final Mailer mailer;
-  private final Invitations invitations;
-  /** the calendar's own invitations, which are a different thing: a file rather than a message */
-  private final io.hearth.calendar.Invitations calendarInvites;
-  /**
-   * Is this server receiving mail at all?
-   *
-   * Read once at boot and carried, because it decides whether a calendar invitation can honestly be
-   * sent -- every one of them says "answer from your calendar", and a calendar answers by email to
-   * this machine. It is a property of the box rather than of a community, which is why it arrives
-   * here rather than sitting in a domain's config.
-   */
-  private final boolean inboundMail;
-  /** turns an address into a point when a place is saved, or does nothing */
-  private final Geocoder geocoder;
   private final Flash flash;
-  private final io.hearth.live.Live live;
   /** what the box is doing; sampled on the notifier's pass, never on a request */
   private final io.hearth.analytics.Machine machine = new io.hearth.analytics.Machine();
 
   public io.hearth.analytics.Machine machine() {
     return machine;
   }
-  /**
-   * The weekly grid, so somebody putting an event up is not guessing at a night.
-   *
-   * Read, never built: the event form asks what the indexer last worked out, which is the whole
-   * reason the indexer exists.
-   */
-  private io.hearth.availability.Availabilities availabilities;
   /** where the bytes live and what is cached; the screen reports both */
   private io.hearth.attach.AttachmentRoutes attachments;
-  /**
-   * The queue that turns addresses into points, and the screen that reports on it.
-   *
-   * Set after construction, like the availabilities and the attachments, because it needs the whole
-   * account system and that is built after the routes are.
-   */
-  private io.hearth.places.Geocodes geocodes;
   private final Verbose verbose;
-
-  public void knowsAbout(io.hearth.places.Geocodes geocodes) {
-    this.geocodes = geocodes;
-  }
-
-  public io.hearth.places.Geocodes geocodes() {
-    return geocodes;
-  }
 
   /**
    * Everything this box was started with, so one screen can say what is actually switched on.
@@ -157,16 +112,10 @@ public class AdminRoutes {
   private final io.hearth.common.ServerConfig settings;
 
   public AdminRoutes(Templates templates, EventBus events, AccessLog accessLog,
-                     io.hearth.mcp.AiLog aiLog, Mailer mailer, io.hearth.live.Live live,
-                     boolean inboundMail, Geocoder geocoder,
+                     io.hearth.mcp.AiLog aiLog, Mailer mailer,
                      io.hearth.common.ServerConfig settings, Verbose verbose) {
     this.settings = settings == null ? io.hearth.common.ServerConfig.defaults() : settings;
-    this.live = live;
     this.mailer = mailer;
-    this.invitations = new Invitations(mailer);
-    this.calendarInvites = new io.hearth.calendar.Invitations(mailer);
-    this.inboundMail = inboundMail;
-    this.geocoder = geocoder;
     this.templates = templates;
     this.events = events;
     this.accessLog = accessLog;
@@ -179,10 +128,6 @@ public class AdminRoutes {
     return flash;
   }
 
-  /** wired after construction, because the grids need the domains and the domains need routes */
-  public void knowsAbout(io.hearth.availability.Availabilities grids) {
-    this.availabilities = grids;
-  }
 
   /** the uploads screen needs the store and the cache, which live with the serving route */
   public void knowsAbout(io.hearth.attach.AttachmentRoutes files) {
@@ -265,29 +210,19 @@ public class AdminRoutes {
       outcome = switch (section) {
         case people -> actOnPerson(config, accounts, form, me);
         case bans -> actOnBan(accounts, form, me);
-        case invites -> actOnInvite(config, accounts, form, me);
         case content -> actOnContent(accounts, form, me);
       case attachments -> actOnAttachment(config, accounts, form, me);
       case bundles -> actOnContent(accounts, form, me);
       case directories -> actOnDirectory(accounts, form, me);
       case unused -> actOnUnused(config, accounts, form, me);
         case templates -> actOnTemplate(accounts, form, me);
-        case survey -> actOnQuestion(accounts, form, me);
-        case retired -> actOnRetiredQuestion(accounts, form, me);
         case configuration -> actOnConfiguration(config, accounts, form, me);
         case setup -> actOnSetup(config, accounts, form, me);
         case appearance -> actOnAppearance(accounts, form, me);
         case legal -> actOnLegal(accounts, form, me);
         case messages -> actOnMessage(config, accounts, form, me);
         case ai -> actOnConnector(accounts, form, me);
-        case board -> actOnPost(accounts, form, me);
-        case flagged -> actOnFlag(accounts, form, me);
-        case calendar, suggestions -> actOnEvent(config, accounts, form, me);
         case roles -> actOnRole(accounts, form, me);
-        case proposals -> actOnProposal(accounts, form, me);
-        case places -> actOnPlace(accounts, form, me);
-        case async -> actOnAsync(config, accounts, form, me);
-        case placetypes -> actOnPlaceType(accounts, form, me);
         default -> Outcome.refused("That is not something this page can do.");
       };
     }
@@ -298,8 +233,6 @@ public class AdminRoutes {
     String where = outcome.goTo() == null ? section.path(config) : outcome.goTo().apply(config);
     // redirect after every POST, so a refresh cannot repeat it and the URL stays clean
     recorder.status(303);
-    Responses.send(ctx, req, HttpResponseStatus.SEE_OTHER, null, Responses.EMPTY,
-        new String[]{HttpHeaderNames.LOCATION.toString(), where});
   }
 
   /**
@@ -374,7 +307,7 @@ public class AdminRoutes {
       }
       case "approve" -> {
         accounts.users.approve(target.id(), me.id());
-        int adopted = accounts.welcome(target);
+        int adopted = 0;
         yield Outcome.done(target.email() + " is approved."
             + (adopted == 0 ? "" : " " + adopted + " answer(s) they gave from outside are now on"
                 + " the guest list."));
@@ -428,7 +361,6 @@ public class AdminRoutes {
       case "grant_admin" -> {
         accounts.roles.grant(target.id(), Roles.ADMIN, me.id());
         accounts.users.approve(target.id(), me.id());
-        accounts.welcome(target);
         yield Outcome.done(target.email() + " is now an admin.");
       }
       case "revoke_admin" -> {
@@ -477,92 +409,7 @@ public class AdminRoutes {
     return Outcome.done(email + " is banned.");
   }
 
-  /**
-   * Invitations: write one, send it, chase it, or give up on it.
-   *
-   * Sending is separate from creating because they fail for different reasons and at different
-   * times -- an address that was mistyped is a bad invitation, an SES key that is wrong is a bad
-   * afternoon, and conflating them means one error message for two problems.
-   */
-  private Outcome actOnInvite(DomainConfig config, Accounts accounts, Forms form, UserRecord me)
-      throws SQLException {
-    String action = String.valueOf(form.get("action"));
-    if (action.equals("create")) {
-      // no note, and that is the change: one message for the whole community, written once in the
-      // config, and inviting somebody is an address in a box. A per-invitation line meant every
-      // admin composing a sentence under pressure, and it is the field that made this page clunky.
-      // Sending is what the button says, so it is not also a box.
-      //
-      // Writing one down without sending it was a state with no purpose: an invitation nobody
-      // received is a row, and the person who pressed "Send the invitation" was told it went.
-      Invitations.Result result = invitations.invite(config, accounts, form.get("email"),
-          null, me.id(), me.email(), true, false);
-      return result.ok()
-          ? Outcome.done("Invitation to " + result.email() + " " + result.detail() + ".",
-              domain -> AdminView.Section.invites.path(domain))
-          : Outcome.refused(result.email() + ": " + result.detail() + ".");
-    }
-    if (action.equals("bulk")) {
-      if (!accounts.access.can(me, Permission.invites_bulk)) {
-        return Outcome.refused("You are not able to send invitations in bulk.");
-      }
-      String pasted = form.text("addresses");
-      Outcome oversized = oversized(form);
-      if (oversized != null) {
-        return oversized;
-      }
-      List<Invitations.Result> results =
-          invitations.bulk(config, accounts, pasted, null, me.id(), me.email(),
-              form.get("send") != null);
-      if (results.isEmpty()) {
-        return Outcome.refused("No email addresses in that.");
-      }
-      long ok = results.stream().filter(Invitations.Result::ok).count();
-      StringBuilder said = new StringBuilder(ok + " of " + results.size() + " went out.");
-      // every refusal named. A bulk operation that reports only the total hides the ones that
-      // failed, and those are the addresses somebody has to do something about.
-      for (Invitations.Result result : results) {
-        if (!result.ok()) {
-          said.append(' ').append(result.email()).append(" -- ").append(result.detail()).append('.');
-        }
-      }
-      return ok == results.size()
-          ? Outcome.done(said.toString(), domain -> AdminView.Section.invites.path(domain))
-          : Outcome.refused(said.toString());
-    }
-    Long id = longOf(form.get("id"));
-    if (id == null) {
-      return Outcome.refused("That invitation could not be found.");
-    }
-    Invites.Invite invite = accounts.invites.byId(id);
-    if (invite == null) {
-      return Outcome.refused("That invitation could not be found.");
-    }
-    return switch (action) {
-      case "send" -> send(config, accounts, invite, me);
-      case "revoke" -> {
-        if (invite.converted()) {
-          yield Outcome.refused("That one already became a member; there is nothing to revoke.");
-        }
-        accounts.invites.revoke(id, me.id());
-        yield Outcome.done("Invitation to " + invite.email() + " revoked.");
-      }
-      case "delete" -> {
-        accounts.invites.delete(id, me.id());
-        yield Outcome.done("Invitation to " + invite.email() + " deleted.");
-      }
-      default -> Outcome.refused("That is not something this page can do.");
-    };
-  }
 
-  /** put one in the post, and record exactly what the mailer said */
-  private Outcome send(DomainConfig config, Accounts accounts, Invites.Invite invite, UserRecord me)
-      throws SQLException {
-    Invitations.Result result = invitations.sendTouch(config, accounts, invite);
-    return result.ok()
-        ? Outcome.done("Invitation to " + result.email() + ": " + result.detail() + ".")
-        : Outcome.refused("Could not send to " + result.email() + ": " + result.detail());
-  }
 
   /**
    * What each button on the content screens actually requires.
@@ -640,14 +487,6 @@ public class AdminRoutes {
       return Outcome.refused("A page needs a uri that starts with '/'.");
     }
     ContentRecord.Kind kind = ContentRecord.Kind.of(form.get("kind"));
-    // A page for one row needs somewhere in its address to say which row.
-    //
-    // Without the token it can never match anything, which looks from the outside exactly like the
-    // page being broken -- so it is refused here rather than saved and quietly answering 404.
-    if (kind.isFeed() && !kind.listing && !uri.contains(kind.token)) {
-      return Outcome.refused("A " + kind.label + " needs " + kind.token + " somewhere in its"
-          + " address, which is how it knows which one to show.");
-    }
     String templateName = kind.wantsTemplate() ? form.get("template_name") : null;
     com.fasterxml.jackson.databind.node.ObjectNode node =
         new com.fasterxml.jackson.databind.ObjectMapper().createObjectNode();
@@ -662,22 +501,6 @@ public class AdminRoutes {
           }
           node.put(field.name(), value == null ? "" : value);
         }
-      }
-    }
-    // how many rows a listing shows, in the same blob the template's fields live in rather than in
-    // a column: it is a property of this one page, and a column would be null on every other row
-    if (kind.listing) {
-      String size = form.get("page_size");
-      if (size != null && !size.isBlank()) {
-        node.put("page_size", size.trim());
-      }
-      String sort = form.get("sort");
-      if (sort != null && kind.sorts().contains(sort)) {
-        node.put("sort", sort);
-      }
-      if (kind == ContentRecord.Kind.place_listing) {
-        String placeKind = form.get("place_kind");
-        node.put("place_kind", placeKind == null || placeKind.isBlank() ? "*" : placeKind);
       }
     }
     String fields = node.toString();
@@ -799,75 +622,7 @@ public class AdminRoutes {
         config -> AdminView.Section.templates.path(config));
   }
 
-  private Outcome actOnQuestion(Accounts accounts, Forms form, UserRecord me) throws SQLException {
-    String action = String.valueOf(form.get("action"));
-    if (action.equals("delete")) {
-      Long id = longOf(form.get("id"));
-      if (id == null) {
-        return Outcome.refused("That question could not be found.");
-      }
-      accounts.people.deleteQuestion(id, me.id());
-      return Outcome.done("question deleted; everybody's remaining count is being recalculated.");
-    }
-    if (!action.equals("save")) {
-      return Outcome.refused("That is not something this page can do.");
-    }
-    String prompt = form.text("prompt");
-    if (prompt == null || prompt.isBlank()) {
-      return Outcome.refused("A question needs something to ask.");
-    }
-    Question.Kind kind = Question.Kind.of(form.get("kind"));
-    List<String> options = Question.optionsFrom(form.text("options"));
-    if (kind == Question.Kind.choice && options.isEmpty()) {
-      return Outcome.refused("A dropdown needs at least one option, one per line.");
-    }
-    String definition = Question.definition(kind, prompt, form.text("help"), options,
-        intOr(form.get("min"), 1), intOr(form.get("max"), 5), form.get("required") != null);
-    int position = intOr(form.get("position"), 0);
-    boolean published = form.get("published") != null;
-    Function<DomainConfig, String> toList = config -> AdminView.Section.survey.path(config);
-    Outcome refused = oversized(form);
-    if (refused != null) {
-      return refused;
-    }
-    Long id = longOf(form.get("id"));
-    if (id == null) {
-      accounts.people.askQuestion(definition, position, published, me.id());
-      return Outcome.done("question asked; everybody now has one more to answer.", toList);
-    }
-    accounts.people.updateQuestion(id, definition, position, published, me.id());
-    return Outcome.done("question updated; everybody's remaining count is being recalculated.", toList);
-  }
 
-  /**
-   * The cleanup nobody should do by accident.
-   *
-   * Restoring is free -- the answers never went anywhere. Purging is the cascade: it strips the
-   * question's answer out of every sheet in the community, and it says how many it rewrote, because
-   * "done" is not an acceptable report for an irreversible rewrite of everybody's data.
-   */
-  private Outcome actOnRetiredQuestion(Accounts accounts, Forms form, UserRecord me) throws SQLException {
-    Long id = longOf(form.get("id"));
-    if (id == null) {
-      return Outcome.refused("That question could not be found.");
-    }
-    Question question = accounts.people.questionById(id);
-    if (question == null || !question.deleted()) {
-      return Outcome.refused("That question is not waiting to be cleaned up.");
-    }
-    return switch (String.valueOf(form.get("action"))) {
-      case "restore" -> {
-        accounts.people.restoreQuestion(id, me.id());
-        yield Outcome.done("That question is being asked again, with its old answers intact.");
-      }
-      case "purge" -> {
-        int rewritten = accounts.people.purgeQuestion(id, me.id());
-        yield Outcome.done("Question deleted for good; " + rewritten
-            + " answer sheet(s) were rewritten to drop it.");
-      }
-      default -> Outcome.refused("That is not something this page can do.");
-    };
-  }
 
   private Outcome actOnConnector(Accounts accounts, Forms form, UserRecord me) throws SQLException {
     Long id = longOf(form.get("id"));
@@ -908,9 +663,6 @@ public class AdminRoutes {
 
     if (target.kind() == AdminView.Target.Kind.panel) {
       recorder.status(200);
-      Responses.send(ctx, req, HttpResponseStatus.OK, "text/html; charset=utf-8",
-          renderPanel(section, config, accounts, req, csrf, me),
-          new String[]{HttpHeaderNames.SET_COOKIE.toString(), Cookies.csrf(accounts.security, csrf)});
       return;
     }
 
@@ -940,9 +692,6 @@ public class AdminRoutes {
         byte[] json = io.hearth.people.DataExport.of(accounts, person, config.name, config.domain);
         verbose.detail("admin: " + me.email() + " exported everything about " + person.email());
         recorder.status(200);
-        Responses.send(ctx, req, HttpResponseStatus.OK, "application/json; charset=utf-8", json,
-            new String[]{"Content-Disposition", "attachment; filename=\"" + person.id()
-                + "-data.json\""});
         return;
       }
       case bundle -> {
@@ -963,10 +712,6 @@ public class AdminRoutes {
         verbose.detail("admin: " + me.email() + " downloaded "
             + (onlyPage == null ? "the whole site" : "page " + onlyPage));
         recorder.status(200);
-        Responses.send(ctx, req, HttpResponseStatus.OK, "application/json; charset=utf-8", json,
-            new String[]{"Content-Disposition", "attachment; filename=\""
-                + config.domain + (onlyPage == null ? "-content" : "-page-" + onlyPage)
-                + ".json\""});
         return;
       }
       case history -> {
@@ -976,19 +721,11 @@ public class AdminRoutes {
       case version -> {
         // the preview: just the version, no shell, so it can go straight into a modal
         recorder.status(200);
-        Responses.send(ctx, req, HttpResponseStatus.OK, "text/html; charset=utf-8",
-            versionPreview(config, accounts, target.id(), csrf),
-            new String[]{HttpHeaderNames.SET_COOKIE.toString(), Cookies.csrf(accounts.security, csrf)});
         return;
       }
       case changes -> {
         // the same modal, showing what changed rather than what it became
         recorder.status(200);
-        Responses.send(ctx, req, HttpResponseStatus.OK, "text/html; charset=utf-8",
-            section == AdminView.Section.proposals
-                ? proposalChanges(accounts, target.id())
-                : versionChanges(accounts, target.id()),
-            new String[]{HttpHeaderNames.SET_COOKIE.toString(), Cookies.csrf(accounts.security, csrf)});
         return;
       }
       default -> {
@@ -1003,10 +740,6 @@ public class AdminRoutes {
     }
 
     recorder.status(200);
-    Responses.send(ctx, req, HttpResponseStatus.OK, "text/html; charset=utf-8",
-        templates.render(template, model),
-        new String[]{HttpHeaderNames.SET_COOKIE.toString(), Cookies.csrf(accounts.security, csrf)},
-        (String) model.get("nonce"));
   }
 
   /** the refreshable part of a section, identical embedded or fetched */
@@ -1019,25 +752,12 @@ public class AdminRoutes {
     switch (section) {
       case people -> peoplePanel(model, accounts, config, req);
       case bans -> bansPanel(model, accounts);
-      case invites -> invitesPanel(model, accounts, config, req, me);
       case content -> contentPanel(model, accounts, config, req);
       case templates -> templatesPanel(model, accounts, config);
-      case survey -> surveyPanel(model, accounts, config, req);
-      case retired -> retiredPanel(model, accounts);
       case ai -> aiPanel(model, req);
-      case board -> boardPanel(model, accounts, config, req);
-      case flagged -> flaggedPanel(model, accounts, config);
-      case calendar -> calendarPanel(model, accounts, config);
-      case suggestions -> suggestionsPanel(model, accounts, config);
       case roles -> rolesPanel(model, accounts, config);
-      case proposals -> proposalsPanel(model, accounts, config);
-      case places -> placesPanel(model, accounts, config, req);
-      case placetypes -> placeTypesPanel(model, accounts, config);
-      case events -> model.put("events", eventRows(events.recent(events.capacity())));
       case attachments -> attachmentsPanel(model, accounts, config, req);
-      case tasks -> tasksPanel(model, accounts, config, req);
       case caching -> cachingPanel(model, accounts);
-      case async -> asyncPanel(model, accounts, config);
       case logs -> logsPanel(model, config, req);
       default -> {
       }
@@ -1045,227 +765,15 @@ public class AdminRoutes {
     return templates.render(AdminView.panelTemplate(section), model);
   }
 
-  /**
-   * What the box is asking somebody else, and how it is going.
-   *
-   * The queue is one for the whole server, because a rate limit is a property of this machine as
-   * somebody else's client. The numbers here are therefore global, and the list of finished items
-   * is filtered to this community -- another community's addresses on this screen would be a small
-   * but real leak between two groups who have nothing to do with each other.
-   */
-  private void asyncPanel(Map<String, Object> model, Accounts accounts, DomainConfig config)
-      throws SQLException {
-    // What the *rows* say, which is a different question from what the queue is doing. The queue
-    // forgets everything on a restart; the rows are where "this address cannot be found" and "the
-    // service was down when we asked" actually live, and they are what the two buttons act on.
-    Map<String, Integer> members = accounts.people.placementCounts();
-    Map<String, Integer> places = accounts.places.placementCounts();
-    model.put("states", placementRows(members, places));
-    model.put("stuck", count(members, io.hearth.places.Placement.NOT_FOUND)
-        + count(places, io.hearth.places.Placement.NOT_FOUND));
-    model.put("retrying", count(members, io.hearth.places.Placement.UNREACHABLE)
-        + count(places, io.hearth.places.Placement.UNREACHABLE));
-    asyncQueuePanel(model, config);
-  }
 
   private static int count(Map<String, Integer> counts, String state) {
     Integer found = counts.get(state);
     return found == null ? 0 : found;
   }
 
-  private static List<Map<String, Object>> placementRows(Map<String, Integer> members,
-                                                         Map<String, Integer> places) {
-    String[][] states = {
-        {io.hearth.places.Placement.PLACED, "placed"},
-        {io.hearth.places.Placement.UNKNOWN, "waiting to be looked up"},
-        {io.hearth.places.Placement.UNREACHABLE, "the service could not be reached -- will retry"},
-        {io.hearth.places.Placement.NOT_FOUND, "no such address -- nothing will retry on its own"},
-    };
-    ArrayList<Map<String, Object>> rows = new ArrayList<>();
-    for (String[] state : states) {
-      int forMembers = count(members, state[0]);
-      int forPlaces = count(places, state[0]);
-      if (forMembers == 0 && forPlaces == 0) {
-        continue;
-      }
-      LinkedHashMap<String, Object> row = new LinkedHashMap<>();
-      row.put("label", state[1]);
-      row.put("members", forMembers);
-      row.put("places", forPlaces);
-      row.put("stuck", io.hearth.places.Placement.NOT_FOUND.equals(state[0]));
-      rows.add(row);
-    }
-    return rows;
-  }
 
-  private void asyncQueuePanel(Map<String, Object> model, DomainConfig config) {
-    io.hearth.places.Geocodes work = geocodes;
-    io.hearth.async.AsyncQueue queue = work == null ? null : work.queue();
-    model.put("hasQueue", queue != null);
-    model.put("geocoding", settings.gps.describe());
-    model.put("geocodingOn", work != null && work.on());
-    model.put("wantsContact", settings.gps.wantsContact());
-    if (queue == null) {
-      return;
-    }
-    io.hearth.async.AsyncQueue.Counts counts = queue.counts();
-    model.put("running", queue.isRunning());
-    model.put("depth", queue.depth());
-    model.put("capacity", io.hearth.async.AsyncQueue.CAPACITY);
-    model.put("full", queue.depth() >= io.hearth.async.AsyncQueue.CAPACITY);
-    model.put("share", queue.depth() * 100 / io.hearth.async.AsyncQueue.CAPACITY);
-    model.put("gap", io.hearth.async.AsyncQueue.GAP_MILLIS / 1000.0);
-    model.put("inFlight", queue.inFlight());
-    model.put("nextIn", Math.round(queue.waitingFor() / 1000.0));
-    long backoff = queue.backoffLeft();
-    model.put("backoff", backoff > 0);
-    model.put("backoffFor", Math.round(backoff / 1000.0));
-    model.put("backoffNext", queue.backoffNext() / 1000);
-    model.put("lastProblem", queue.lastProblem());
-    model.put("accepted", counts.accepted());
-    model.put("answered", counts.answered());
-    model.put("nothing", counts.nothing());
-    model.put("failed", counts.failed());
-    model.put("abandoned", counts.abandoned());
-    model.put("refused", counts.refused());
-    model.put("attempts", io.hearth.async.AsyncQueue.ATTEMPTS);
 
-    model.put("service", work.service());
 
-    ArrayList<Map<String, Object>> rows = new ArrayList<>();
-    long now = System.currentTimeMillis();
-    for (io.hearth.async.AsyncQueue.Finished item
-        : queue.recentFor(config.databaseDomain())) {
-      LinkedHashMap<String, Object> row = new LinkedHashMap<>();
-      row.put("label", item.label());
-      row.put("outcome", item.outcome().name());
-      row.put("good", item.outcome() == io.hearth.async.AsyncQueue.Outcome.answered);
-      row.put("bad", item.outcome() == io.hearth.async.AsyncQueue.Outcome.abandoned
-          || item.outcome() == io.hearth.async.AsyncQueue.Outcome.refused);
-      row.put("ago", io.hearth.analytics.Machine.uptime(now - item.finishedAt()));
-      row.put("millis", item.millis());
-      row.put("attempts", item.attempts());
-      row.put("detail", item.detail());
-      rows.add(row);
-    }
-    model.put("recent", rows);
-    model.put("anyRecent", !rows.isEmpty());
-  }
-
-  /**
-   * The two things an operator can do about the queue.
-   *
-   * Clearing is for somebody who queued a mistake -- a bulk import against the wrong file -- and it
-   * drops only this community's waiting work, never another's. Re-asking puts everybody who has
-   * said where they are and has never been placed back on it, which is the button for after a
-   * service was down all day.
-   */
-  private Outcome actOnAsync(DomainConfig config, Accounts accounts, Forms form, UserRecord me)
-      throws SQLException {
-    if (!accounts.access.can(me, Permission.system_read)) {
-      return Outcome.refused("You are not able to do that.");
-    }
-    String action = String.valueOf(form.get("action"));
-    if (geocodes == null) {
-      return Outcome.refused("There is no queue on this server.");
-    }
-    if (action.equals("clear")) {
-      int dropped = geocodes.queue().clear(config.databaseDomain());
-      return Outcome.done(dropped + " waiting ask(s) dropped.",
-          settings -> AdminView.Section.async.path(settings));
-    }
-    if (action.equals("retry")) {
-      // everything due right now: the row is what says so, so this is a query rather than a
-      // memory of what failed
-      int queued = geocodes.sweep(config.databaseDomain(), io.hearth.async.AsyncQueue.CAPACITY);
-      return Outcome.done(queued == 0 ? "Nothing is waiting to be placed."
-          : queued + " lookup(s) queued.",
-          settings -> AdminView.Section.async.path(settings));
-    }
-    if (action.equals("reopen")) {
-      // and the harder button: forget every failure, including the addresses the service said it
-      // had never heard of. For after somebody fixed whatever was wrong at the other end.
-      int reopened = geocodes.reopen(config.databaseDomain());
-      int queued = geocodes.sweep(config.databaseDomain(), io.hearth.async.AsyncQueue.CAPACITY);
-      return Outcome.done(reopened == 0 ? "Nothing had been given up on."
-          : reopened + " given up on, now waiting again (" + queued + " queued).",
-          settings -> AdminView.Section.async.path(settings));
-    }
-    return Outcome.refused("That is not something this page can do.");
-  }
-
-  /**
-   * Every project on this community, for somebody who keeps the shared ones.
-   *
-   * <b>What is here and what is deliberately not.</b> The community's own projects are an
-   * administrative record and are opened and edited like anything else. A member's are listed --
-   * with a name, a count and when it was last touched -- and are not opened from here. Somebody
-   * running a community has a legitimate reason to know that half the members have a routine and
-   * three have not touched one since February; they have no reason at all to read what Ana lifted
-   * on Tuesday, and a screen that showed it would be a screen people stop putting anything into.
-   *
-   * That is the whole of the inspection design, and it is a smaller answer than "admins see
-   * everything" on purpose. A community that genuinely needs to look at one person's log can ask
-   * them for the export they can download themselves.
-   */
-  private void tasksPanel(Map<String, Object> model, Accounts accounts, DomainConfig config,
-                          FullHttpRequest req) throws SQLException {
-    long now = System.currentTimeMillis();
-    ArrayList<Map<String, Object>> shared = new ArrayList<>();
-    ArrayList<Map<String, Object>> personal = new ArrayList<>();
-    int peopleUsingIt = 0;
-    java.util.HashSet<Long> owners = new java.util.HashSet<>();
-    for (io.hearth.tasks.Records.Project project : accounts.tasks.allProjects()) {
-      List<io.hearth.tasks.Records.Task> tasks = accounts.tasks.tasksIn(project.id());
-      int open = 0;
-      for (io.hearth.tasks.Records.Task task : tasks) {
-        if (!task.done()) {
-          open++;
-        }
-      }
-      LinkedHashMap<String, Object> row = new LinkedHashMap<>();
-      row.put("id", project.id());
-      row.put("name", project.name());
-      row.put("summary", project.summary());
-      row.put("count", tasks.size());
-      row.put("open", open);
-      row.put("board", project.isBoard());
-      row.put("archived", project.archived());
-      row.put("touched", project.updatedAt() == null ? "" 
-          : io.hearth.analytics.Machine.uptime(now - project.updatedAt().getTime()) + " ago");
-      if (project.isShared()) {
-        // the community's own, which is an administrative record like any other
-        row.put("url", config.urls.tasks + "/" + project.id());
-        shared.add(row);
-      } else {
-        // somebody's own. A name and a count, and no way in from here.
-        row.put("who", io.hearth.people.Names.nameOf(accounts, project.ownerId()));
-        owners.add(project.ownerId());
-        personal.add(row);
-      }
-    }
-    peopleUsingIt = owners.size();
-    model.put("shared", shared);
-    model.put("anyShared", !shared.isEmpty());
-    model.put("personal", personal);
-    model.put("anyPersonal", !personal.isEmpty());
-    model.put("people", peopleUsingIt);
-
-    ArrayList<Map<String, Object>> library = new ArrayList<>();
-    for (io.hearth.tasks.Records.Def def : accounts.tasks.sharedDefs()) {
-      LinkedHashMap<String, Object> row = new LinkedHashMap<>();
-      row.put("id", def.id());
-      row.put("name", def.name());
-      row.put("summary", def.summary());
-      row.put("measure", def.measure().label);
-      row.put("hasInstructions", !def.instructions().isBlank());
-      row.put("url", config.urls.tasks + "/library/" + def.id());
-      library.add(row);
-    }
-    model.put("library", library);
-    model.put("anyLibrary", !library.isEmpty());
-    model.put("tasksUrl", config.urls.tasks);
-  }
 
   /** the top bar, the sidebar, and what every admin page needs */
   private Map<String, Object> shell(DomainConfig config, Accounts accounts, UserRecord me,
@@ -1275,7 +783,6 @@ public class AdminRoutes {
     // the bell belongs on every page somebody works from, and the admin section is where a
     // moderator spends their evening
     model.put("live", true);
-    model.put("liveUrl", io.hearth.live.LiveRoutes.ROOT);
     model.put("bellUrl", config.urls.self + "?tab=notifications");
     model.put("meId", me == null ? 0 : me.id());
     model.put("title", section.label + " - " + config.name + " admin");
@@ -1312,7 +819,6 @@ public class AdminRoutes {
       case people -> {
         model.put("bootstrapAdmins", String.join(", ", accounts.access.bootstrapAdmins()));
         model.put("anyBootstrapAdmins", !accounts.access.bootstrapAdmins().isEmpty());
-        model.put("states", stateOptions(Forms.query(req.uri(), "state")));
         model.put("q", orEmpty(Forms.query(req.uri(), "q")));
       }
       case content -> {
@@ -1328,7 +834,6 @@ public class AdminRoutes {
       case attachments -> {
         model.put("uploadUrl", io.hearth.attach.AttachmentRoutes.UPLOAD);
         model.put("maxMb", config.attachments.maxBytes / (1024 * 1024));
-        model.put("accept", acceptOf(config));
         model.put("kinds", kindOptions(Forms.query(req.uri(), "kind")));
         model.put("q", orEmpty(Forms.query(req.uri(), "q")));
         model.put("folder", orEmpty(Forms.query(req.uri(), "folder")));
@@ -1373,87 +878,19 @@ public class AdminRoutes {
       case bundles -> {
         model.put("bundleUrl", AdminView.Section.content.path(config) + "/bundle");
         model.put("uploadUrl", io.hearth.attach.AttachmentRoutes.UPLOAD);
-        model.put("apiUrl", "https://" + config.domain + io.hearth.api.ApiRoutes.V1 + "/content");
-        model.put("apiPage", config.has(io.hearth.vhost.Surface.api)
-            ? io.hearth.api.ApiConfig.PATH : null);
         model.put("canImport", accounts.access.can(me, Permission.content_publish));
         model.put("pages", accounts.site.store().contentCount());
         model.put("templateCount", accounts.site.store().templateCount());
       }
       case templates -> model.put("newUrl", AdminView.Section.templates.path(config) + "/new");
-      case survey -> {
-        model.put("newUrl", AdminView.Section.survey.path(config) + "/new");
-        model.put("q", orEmpty(Forms.query(req.uri(), "q")));
-        model.put("kinds", questionKindOptions(Forms.query(req.uri(), "kind")));
-        int retired = accounts.people.deletedQuestions().size();
-        model.put("retiredCount", retired);
-        model.put("anyRetired", retired > 0);
-        model.put("retiredUrl", AdminView.Section.retired.path(config));
-      }
       case navigation -> navigation(model, accounts, config);
       case configuration -> configuration(model, config, accounts);
       case setup -> setupWizard(model, config, accounts, req);
       case appearance -> appearance(model, accounts);
-      case engagement -> engagement(model, config, accounts);
       case legal -> legal(model, config, accounts);
       case messages -> messages(model, config, accounts);
-      case board -> {
-        model.put("boardUrl", config.urls.board);
-        model.put("q", orEmpty(Forms.query(req.uri(), "q")));
-      }
       case roles -> model.put("newUrl", AdminView.Section.roles.path(config) + "/new");
-      case places -> {
-        model.put("newUrl", AdminView.Section.places.path(config) + "/new");
-        model.put("kindsUrl", AdminView.Section.placetypes.path(config));
-        model.put("publicUrl", config.urls.places);
-        model.put("q", orEmpty(Forms.query(req.uri(), "q")));
-        model.put("anyKinds", !accounts.places.allTypes().isEmpty());
-      }
-      case placetypes -> {
-        model.put("newUrl", AdminView.Section.placetypes.path(config) + "/new");
-        model.put("backUrl", AdminView.Section.places.path(config));
-      }
-      case proposals -> model.put("contentUrl", AdminView.Section.content.path(config));
-      case calendar -> {
-        model.put("newUrl", AdminView.Section.calendar.path(config) + "/new");
-        model.put("calendarUrl", config.urls.calendar);
-        int open = accounts.calendar.openSuggestions();
-        model.put("openSuggestions", open);
-        model.put("anySuggested", open > 0);
-        model.put("suggestionsUrl", AdminView.Section.suggestions.path(config));
-        model.put("suggestionsOn", config.calendar.suggestions);
-        // what an invitation would say and whether it could be sent at all, both on the screen
-        // where somebody is about to press the button
-        String why = io.hearth.calendar.Invitations.whyNot(config, inboundMail);
-        model.put("invitesOn", why == null);
-        model.put("invitesWhyNot", why);
-        io.hearth.mail.SystemTemplates.Wording wording =
-            accounts.messages.of(io.hearth.mail.SystemTemplate.event_invite);
-        model.put("inviteTemplate", wording.body());
-        model.put("customTemplate", wording.overridden());
-        model.put("messagesUrl", AdminView.Section.messages.path(config));
-        model.put("replyTo", io.hearth.calendar.Invitations.replyTo(config));
-        model.put("remindOn", !config.calendar.remindDaysBefore.isEmpty());
-        model.put("remindDays", config.calendar.remindDaysBefore.stream()
-            .map(String::valueOf).collect(java.util.stream.Collectors.joining(", ")));
-      }
-      case suggestions -> {
-        model.put("calendarUrl", AdminView.Section.calendar.path(config));
-        model.put("suggestionsOn", config.calendar.suggestions);
-      }
-      case invites -> {
-        invitesPage(model, accounts, req);
-        model.put("canBulk", accounts.access.can(me, Permission.invites_bulk));
-        model.put("newUrl", AdminView.Section.invites.path(config) + "/new");
-        model.put("bulkMax", io.hearth.people.Invitations.MAX_BULK);
-        model.put("cadence", config.invites.remindersEnabled
-            ? "A welcome goes out first. If nothing happens, a friendly reminder follows after "
-                + config.invites.reminderAfterDays + " day(s), and a last note "
-                + config.invites.apologyAfterDays + " day(s) after that."
-            : "Reminders are switched off for this community, so only the welcome is sent.");
-      }
       case settings -> settings(model, config, accounts);
-      case retired -> model.put("backUrl", AdminView.Section.survey.path(config));
       case ai -> ai(model, accounts, config, req);
       case events -> {
         model.put("emitted", events.emitted());
@@ -1462,8 +899,6 @@ public class AdminRoutes {
       case machine -> machine(model, config);
       case analytics -> analytics(model, config);
       case caching -> model.put("capacity", accessLog.capacity());
-      case async -> asyncPanel(model, accounts, config);
-      case tasks -> tasksPanel(model, accounts, config, req);
       case logs -> {
         model.put("q", orEmpty(Forms.query(req.uri(), "q")));
         model.put("errorsOnly", "1".equals(Forms.query(req.uri(), "errors")));
@@ -1513,7 +948,6 @@ public class AdminRoutes {
     if (content) {
       model.put("pages", accounts.site.store().contentCount());
       model.put("templateCount", accounts.site.store().templateCount());
-      model.put("questionCount", accounts.people.questionCount());
     }
     // The process numbers used to be here and are not any more.
     //
@@ -1529,21 +963,6 @@ public class AdminRoutes {
     // and the address beside each name is the reason, since this is the only screen in the product
     // that prints one
     ArrayList<Map<String, Object>> here = new ArrayList<>();
-    if (people) {
-      io.hearth.live.LiveHub hub = live.forDomain(config.domain);
-      for (long userId : hub.online()) {
-        UserRecord user = accounts.users.byId(userId);
-        if (user == null) {
-          continue;
-        }
-        LinkedHashMap<String, Object> row = new LinkedHashMap<>();
-        row.put("name", displayNameOf(accounts, user));
-        row.put("email", user.email());
-        row.put("url", AdminView.Section.people.path(config) + "/review/" + user.id());
-        row.put("admin", accounts.access.can(user, Permission.everything));
-        here.add(row);
-      }
-    }
     model.put("online", here);
     model.put("onlineCount", here.size());
     model.put("anyOnline", !here.isEmpty());
@@ -1672,7 +1091,6 @@ public class AdminRoutes {
     model.put("writes", aiLog.writeCount());
     model.put("q", orEmpty(Forms.query(req.uri(), "q")));
     model.put("writesOnly", "1".equals(Forms.query(req.uri(), "writes")));
-    model.put("outcomes", outcomeOptions(Forms.query(req.uri(), "outcome")));
 
     ArrayList<Map<String, Object>> connectors = new ArrayList<>();
     for (io.hearth.mcp.OauthClients.ClientRecord client : accounts.oauthClients.all(PAGE_SIZE)) {
@@ -1689,28 +1107,9 @@ public class AdminRoutes {
     }
     model.put("connectors", connectors);
     model.put("anyConnectors", !connectors.isEmpty());
-    model.put("lockedPages", lockedCount(accounts));
   }
 
-  private static long lockedCount(Accounts accounts) throws SQLException {
-    long locked = 0;
-    for (ContentRecord page : accounts.site.store().allContent(PAGE_SIZE)) {
-      if (page.humanOnly()) {
-        locked++;
-      }
-    }
-    return locked;
-  }
 
-  private static List<Map<String, Object>> outcomeOptions(String current) {
-    String value = orEmpty(current);
-    ArrayList<Map<String, Object>> options = new ArrayList<>();
-    option("all", "everything", value.isEmpty() || value.equals("all"), options);
-    option("ok", "succeeded", value.equals("ok"), options);
-    option("refused", "refused", value.equals("refused"), options);
-    option("failed", "failed", value.equals("failed"), options);
-    return options;
-  }
 
   private void analytics(Map<String, Object> model, DomainConfig config) {
     AccessLog.Summary summary = accessLog.summarize(config.domain, 12);
@@ -1753,9 +1152,6 @@ public class AdminRoutes {
       if (!query.isEmpty() && !person.email().toLowerCase(Locale.ROOT).contains(query)) {
         continue;
       }
-      if (!matchesState(state, person, isAdmin)) {
-        continue;
-      }
       ProfileRecord profile = accounts.people.profileOf(person.id());
       LinkedHashMap<String, Object> row = new LinkedHashMap<>();
       row.put("id", person.id());
@@ -1767,16 +1163,9 @@ public class AdminRoutes {
       row.put("configAdmin", bootstrap);
       row.put("promotedAdmin", isAdmin && !bootstrap);
       row.put("hasProfile", profile.isFilledIn());
-      row.put("answered", accounts.people.answersOf(person.id()).answered());
       row.put("events", person.signupEvents());
       row.put("signals", orEmpty(person.signupSignals()));
       row.put("created", stamp(person.createdAt()));
-      // where they came from. An invitation that converted is the one thing about a member that
-      // the account itself cannot tell you, and it is the whole point of tracking invitations --
-      // a funnel with no way to see who came through it is a number nobody can act on.
-      Invites.Invite from = accounts.invites.forUser(person.id());
-      row.put("invited", from != null);
-      row.put("invitedBy", from == null ? "" : from.createdByEmail());
       row.put("reviewUrl", AdminView.Section.people.path(config) + "/review/" + person.id());
       rows.add(row);
     }
@@ -1785,15 +1174,6 @@ public class AdminRoutes {
     model.put("count", rows.size());
   }
 
-  private static boolean matchesState(String state, UserRecord person, boolean isAdmin) {
-    return switch (state) {
-      case "waiting" -> !person.isApproved() && !person.disabled();
-      case "approved" -> person.isApproved() && !person.disabled();
-      case "disabled" -> person.disabled();
-      case "admin" -> isAdmin;
-      default -> true;
-    };
-  }
 
   private void bansPanel(Map<String, Object> model, Accounts accounts) throws SQLException {
     ArrayList<Map<String, Object>> rows = new ArrayList<>();
@@ -1810,77 +1190,8 @@ public class AdminRoutes {
     model.put("count", rows.size());
   }
 
-  private void invitesPage(Map<String, Object> model, Accounts accounts, FullHttpRequest req)
-      throws SQLException {
-    Invites.Funnel funnel = accounts.invites.funnel();
-    model.put("total", funnel.total());
-    model.put("sent", funnel.sent());
-    model.put("opened", funnel.opened());
-    model.put("clicked", funnel.clicked());
-    model.put("converted", funnel.converted());
-    model.put("outstanding", funnel.outstanding());
-    model.put("openRate", funnel.openRate());
-    model.put("clickRate", funnel.clickRate());
-    model.put("conversionRate", funnel.conversionRate());
-    model.put("stages", stageOptions(Forms.query(req.uri(), "stage")));
-    model.put("q", orEmpty(Forms.query(req.uri(), "q")));
-  }
 
-  private void invitesPanel(Map<String, Object> model, Accounts accounts, DomainConfig config,
-                            FullHttpRequest req, UserRecord me) throws SQLException {
-    String query = orEmpty(Forms.query(req.uri(), "q")).toLowerCase(Locale.ROOT);
-    String stage = orEmpty(Forms.query(req.uri(), "stage"));
-    ArrayList<Map<String, Object>> rows = new ArrayList<>();
-    for (Invites.Invite invite : accounts.invites.all(PAGE_SIZE)) {
-      if (!query.isEmpty() && !invite.email().toLowerCase(Locale.ROOT).contains(query)) {
-        continue;
-      }
-      if (!stage.isEmpty() && !stage.equals("all") && !stage.equals(invite.stage())) {
-        continue;
-      }
-      LinkedHashMap<String, Object> row = new LinkedHashMap<>();
-      row.put("id", invite.id());
-      row.put("email", invite.email());
-      row.put("note", invite.note());
-      row.put("stage", invite.stage());
-      row.put("sent", invite.sent());
-      row.put("opened", invite.opened());
-      row.put("clicked", invite.clicked());
-      row.put("clicks", invite.clicks());
-      row.put("converted", invite.converted());
-      row.put("revoked", invite.revoked());
-      row.put("opens", invite.opens());
-      row.put("invitedBy", invite.createdByEmail());
-      row.put("created", stamp(invite.createdAt()));
-      row.put("sentAt", stamp(invite.sentAt()));
-      row.put("openedAt", stamp(invite.openedAt()));
-      row.put("clickedAt", stamp(invite.clickedAt()));
-      row.put("convertedAt", stamp(invite.convertedAt()));
-      row.put("sendDetail", orEmpty(invite.sendDetail()));
-      // ...and only for somebody who can open the people section. A link that answers 404 is a
-      // door drawn on a wall: it tells somebody there is something there and refuses to say what.
-      if (invite.convertedUser() != null && accounts.access.can(me, Permission.people_read)) {
-        row.put("memberUrl",
-            AdminView.Section.people.path(config) + "/review/" + invite.convertedUser());
-      }
-      rows.add(row);
-    }
-    model.put("invites", rows);
-    model.put("anyInvites", !rows.isEmpty());
-    model.put("count", rows.size());
-  }
 
-  private static List<Map<String, Object>> stageOptions(String current) {
-    String value = orEmpty(current);
-    ArrayList<Map<String, Object>> options = new ArrayList<>();
-    option("all", "every invitation", value.isEmpty() || value.equals("all"), options);
-    option("not sent", "written, not sent", value.equals("not sent"), options);
-    option("sent", "sent, no evidence of an open", value.equals("sent"), options);
-    option("opened", "opened, not clicked", value.equals("opened"), options);
-    option("clicked", "clicked, not joined", value.equals("clicked"), options);
-    option("joined", "joined", value.equals("joined"), options);
-    return options;
-  }
 
   private void contentPanel(Map<String, Object> model, Accounts accounts, DomainConfig config,
                             FullHttpRequest req) throws SQLException {
@@ -1936,51 +1247,7 @@ public class AdminRoutes {
     model.put("count", rows.size());
   }
 
-  private void surveyPanel(Map<String, Object> model, Accounts accounts, DomainConfig config,
-                           FullHttpRequest req) throws SQLException {
-    String query = orEmpty(Forms.query(req.uri(), "q")).toLowerCase(Locale.ROOT);
-    String kind = orEmpty(Forms.query(req.uri(), "kind"));
-    ArrayList<Map<String, Object>> rows = new ArrayList<>();
-    for (Question question : accounts.people.allQuestions()) {
-      if (!query.isEmpty() && !contains(query, question.prompt(), question.help())) {
-        continue;
-      }
-      if (!kind.isEmpty() && !kind.equals("all") && !question.kind().name().equals(kind)) {
-        continue;
-      }
-      LinkedHashMap<String, Object> row = new LinkedHashMap<>();
-      row.put("id", question.id());
-      row.put("prompt", question.prompt());
-      row.put("kind", question.kind().label);
-      row.put("position", question.position());
-      row.put("published", question.published());
-      row.put("required", question.required());
-      row.put("options", String.join(", ", question.options()));
-      // maintained by the survey indexer on its sweep, not counted here
-      row.put("answers", accounts.survey.answersFor(question.id()));
-      row.put("editUrl", AdminView.Section.survey.path(config) + "/edit/" + question.id());
-      rows.add(row);
-    }
-    model.put("questions", rows);
-    model.put("anyQuestions", !rows.isEmpty());
-    model.put("count", rows.size());
-    model.put("sheets", accounts.people.answerCount());
-  }
 
-  private void retiredPanel(Map<String, Object> model, Accounts accounts) throws SQLException {
-    ArrayList<Map<String, Object>> rows = new ArrayList<>();
-    for (Question question : accounts.people.deletedQuestions()) {
-      LinkedHashMap<String, Object> row = new LinkedHashMap<>();
-      row.put("id", question.id());
-      row.put("prompt", question.prompt());
-      row.put("kind", question.kind().label);
-      row.put("answers", accounts.survey.answersFor(question.id()));
-      rows.add(row);
-    }
-    model.put("questions", rows);
-    model.put("anyQuestions", !rows.isEmpty());
-    model.put("count", rows.size());
-  }
 
   private void aiPanel(Map<String, Object> model, FullHttpRequest req) {
     String query = Forms.query(req.uri(), "q");
@@ -2024,8 +1291,6 @@ public class AdminRoutes {
   private void cachingPanel(Map<String, Object> model, Accounts accounts) throws SQLException {
     ArrayList<Map<String, Object>> rows = new ArrayList<>();
     ArrayList<TtlCache.Stats> all = new ArrayList<>(accounts.site.cacheStats());
-    all.addAll(accounts.feeds.cacheStats());
-    all.addAll(accounts.boardCache.cacheStats());
     for (TtlCache.Stats stats : all) {
       rows.add(cacheRow(stats.name(), stats.policy(), stats.size(), stats.hits(), stats.misses(),
           stats.hitRate(), Long.toString(stats.invalidations())));
@@ -2036,9 +1301,23 @@ public class AdminRoutes {
         accounts.sessions.cacheSize(), accounts.sessions.cacheHits(), accounts.sessions.cacheMisses(),
         total == 0 ? 0 : (int) (accounts.sessions.cacheHits() * 100 / total), ""));
     model.put("caches", rows);
-    model.put("indexed", accounts.survey.indexedCount());
-    model.put("sweeps", accounts.survey.sweepCount());
-    model.put("bubbles", accounts.people.answerCount());
+  }
+
+  /**
+   * Is this unchanged line close enough to a change to be worth printing?
+   *
+   * A diff of a long page is mostly lines nobody changed, and printing all of them buries the three
+   * that matter. Three either side is enough to see what a change is sitting in.
+   */
+  private static boolean nearAChange(java.util.List<TextPatch.Change> changes, int at) {
+    int from = Math.max(0, at - 3);
+    int to = Math.min(changes.size() - 1, at + 3);
+    for (int k = from; k <= to; k++) {
+      if (changes.get(k).kind() != TextPatch.Kind.same) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private static Map<String, Object> cacheRow(String name, String policy, int size, long hits,
@@ -2080,364 +1359,18 @@ public class AdminRoutes {
 
   // ---- the address book ------------------------------------------------------------------------
 
-  private Outcome actOnPlaceType(Accounts accounts, Forms form, UserRecord me) throws SQLException {
-    String action = String.valueOf(form.get("action"));
-    String slug = form.get("slug");
-    if (action.equals("delete")) {
-      Places.Type type = accounts.places.typeBySlug(slug);
-      if (type == null) {
-        return Outcome.refused("That kind of place could not be found.");
-      }
-      int moved = accounts.places.retireType(slug, me.id());
-      if (moved < 0) {
-        return Outcome.refused("Unsorted is where addresses go when their kind is removed, so it"
-            + " cannot be removed itself.");
-      }
-      return Outcome.done(type.pluralOr() + " removed."
-          + (moved > 0
-              ? " " + moved + " address(es) moved to Unsorted and taken off the listing -- nothing"
-                  + " was deleted, and what was recorded about them is still there."
-              : ""));
-    }
-    if (!action.equals("save")) {
-      return Outcome.refused("That is not something this page can do.");
-    }
-    String clean = Places.slugify(slug);
-    if (clean == null) {
-      return Outcome.refused("A kind of place needs a short name.");
-    }
-    List<TemplateField> fields = new ArrayList<>();
-    for (int k = 0; k < TemplateField.MAX_FIELDS; k++) {
-      String fieldName = form.get("p_name_" + k);
-      if (fieldName == null) {
-        continue;
-      }
-      if (!TemplateField.isValidName(fieldName)) {
-        return Outcome.refused("'" + fieldName + "' is not a usable field name -- lowercase"
-            + " letters, digits and underscore, starting with a letter.");
-      }
-      fields.add(new TemplateField(fieldName, TemplateField.Type.of(form.get("p_type_" + k)),
-          form.get("p_label_" + k), form.get("p_help_" + k), form.get("p_required_" + k) != null));
-    }
-    Outcome oversized = oversized(form);
-    if (oversized != null) {
-      return oversized;
-    }
-    accounts.places.saveType(clean, form.get("label"), form.get("plural"),
-        form.text("description"), fields, form.get("template_name"), form.get("icon"),
-        form.get("published") != null, (int) longOr(orEmpty(form.get("sort"))), me.id());
-    return Outcome.done("Saved with " + fields.size() + " field(s).",
-        config -> AdminView.Section.placetypes.path(config));
-  }
 
-  private Outcome actOnPlace(Accounts accounts, Forms form, UserRecord me) throws SQLException {
-    String action = String.valueOf(form.get("action"));
-    Long id = longOf(form.get("id"));
-    if (action.equals("delete")) {
-      if (id == null || accounts.places.byId(id) == null) {
-        return Outcome.refused("That address could not be found.");
-      }
-      Places.Place place = accounts.places.byId(id);
-      accounts.places.delete(id, me.id());
-      return Outcome.done(place.name() + " removed from the book.");
-    }
-    if (!action.equals("save")) {
-      return Outcome.refused("That is not something this page can do.");
-    }
-    Places.Type type = accounts.places.typeBySlug(form.get("type_slug"));
-    if (type == null) {
-      return Outcome.refused("Pick a kind of place first. Add one under Kinds if there are none.");
-    }
-    String name = form.get("name");
-    if (name == null || name.isBlank()) {
-      return Outcome.refused("An address needs a name.");
-    }
-    String slug = Places.slugify(orEmpty(form.get("slug")).isBlank() ? name : form.get("slug"));
-    if (slug == null) {
-      return Outcome.refused("That name cannot be turned into a web address; add a short name.");
-    }
 
-    // What the browser was holding for kinds other than the one on screen. With the editor's
-    // script running this carries answers typed under one kind and then swapped away from, which
-    // are not in the database yet and would otherwise be lost on save. Without the script it is
-    // simply absent, and the merge against what is stored does the same job a step later.
-    LinkedHashMap<String, String> values = new LinkedHashMap<>();
-    values.putAll(carriedValues(form.text("fields_json")));
-    for (TemplateField field : type.fields()) {
-      String value = form.text("field_" + field.name());
-      if (field.required() && (value == null || value.isBlank())) {
-        return Outcome.refused("'" + field.labelOr() + "' is required for a " + type.labelOr()
-            + ".");
-      }
-      values.put(field.name(), value == null ? "" : value);
-    }
-    String body = form.text("body");
-    Outcome oversized = oversized(form);
-    if (oversized != null) {
-      return oversized;
-    }
 
-    // Coordinates: whatever was typed. Never overwriting a number somebody entered by hand -- they
-    // were standing in the field, and a geocoder is reading a string.
-    Double latitude = doubleOf(form.get("latitude"));
-    Double longitude = doubleOf(form.get("longitude"));
-    Places.Place place = new Places.Place(id == null ? 0 : id, type.slug(), slug, name,
-        orEmpty(form.text("address")), orEmpty(form.get("locality")), orEmpty(form.get("region")),
-        orEmpty(form.get("postcode")), orEmpty(form.get("country")),
-        latitude, longitude,
-        orEmpty(form.get("url")), orEmpty(form.get("phone")), orEmpty(form.get("email")),
-        Places.mergeValues(id == null ? null : existingFieldsOf(accounts, id),
-            type.fields(), values), orEmpty(body),
-        form.get("published") != null, form.get("human_only") != null, null, null, me.id());
-    Places.Place saved = accounts.places.save(place, me.id());
-    // and the lookup goes on the queue rather than into this request. It used to happen right here,
-    // which meant an admin adding forty places on a Sunday afternoon made forty requests to
-    // somebody else's server as fast as they could type -- and waited on each one.
-    boolean queued = latitude == null && longitude == null && geocodes != null && geocodes.on();
-    if (queued) {
-      geocodes.forPlace(accounts.store.databaseDomain, saved.id(),
-          Places.addressLine(orEmpty(form.text("address")), orEmpty(form.get("locality")),
-              orEmpty(form.get("region")), orEmpty(form.get("postcode")),
-              orEmpty(form.get("country")), name));
-    }
-    return Outcome.done(name + " saved." + (queued
-        ? " Its position is being looked up and will appear in a minute or two." : ""),
-        config -> AdminView.Section.places.path(config));
-  }
 
-  /**
-   * The travel chart for one place.
-   *
-   * Everything about it is aggregate. `points()` is the widest view of member locations that exists
-   * anywhere in this server -- coordinates with no address and no name attached -- and what comes
-   * back from here is a set of counts. There is deliberately no way to ask this for one person, and
-   * no screen that would have somewhere to put the answer.
-   */
-  private void travelTo(Map<String, Object> model, Accounts accounts, DomainConfig config,
-                        Long placeId) throws SQLException {
-    if (placeId == null) {
-      return;
-    }
-    io.hearth.places.Places.Place place = accounts.places.byId(placeId);
-    if (place == null || place.latitude() == null || place.longitude() == null) {
-      // a place nobody has placed yet: say so rather than drawing an empty chart, because an empty
-      // chart reads as "nobody is coming"
-      model.put("travelUnplaced", place != null);
-      return;
-    }
-    io.hearth.people.Distances.Travel travel = io.hearth.people.Distances.from(
-        accounts.people.points(), place.latitude(), place.longitude(),
-        accounts.users.approvedCount(), config.imperial);
-    Map<String, Object> chart = io.hearth.people.Distances.model(travel);
-    chart.put("place", place.name());
-    model.put("travel", chart);
-  }
 
-  private void placesPanel(Map<String, Object> model, Accounts accounts, DomainConfig config,
-                           FullHttpRequest req) throws SQLException {
-    String query = orEmpty(Forms.query(req.uri(), "q")).toLowerCase(Locale.ROOT);
-    ArrayList<Map<String, Object>> rows = new ArrayList<>();
-    for (Places.Place place : accounts.places.all(500)) {
-      if (!query.isEmpty() && !contains(query, place.name(), place.oneLine(), place.typeSlug())) {
-        continue;
-      }
-      Places.Type type = accounts.places.typeBySlug(place.typeSlug());
-      LinkedHashMap<String, Object> row = new LinkedHashMap<>();
-      row.put("id", place.id());
-      row.put("name", place.name());
-      row.put("kind", type == null ? place.typeSlug() : type.labelOr());
-      row.put("address", place.oneLine());
-      // Why this one has no coordinates, when it has none. An address the geocoder has never heard
-      // of is a thing an admin can fix in ten seconds by adding a town -- and could not previously
-      // find out about at all, because the failure was indistinguishable from not having been
-      // asked yet.
-      if (place.latitude() == null) {
-        io.hearth.places.Placement placement = accounts.places.placementOf(place.id());
-        if (!placement.isUntried()) {
-          row.put("geoProblem", placement.describe());
-          row.put("geoStuck", placement.isNotFound());
-        }
-      }
-      row.put("published", place.published());
-      row.put("humanOnly", place.humanOnly());
-      row.put("editUrl", AdminView.Section.places.path(config) + "/edit/" + place.id());
-      row.put("viewUrl", config.urls.places + "/" + place.typeSlug() + "/" + place.slug());
-      rows.add(row);
-    }
-    model.put("places", rows);
-    model.put("anyPlaces", !rows.isEmpty());
-    model.put("count", rows.size());
-  }
 
-  private void placeTypesPanel(Map<String, Object> model, Accounts accounts, DomainConfig config)
-      throws SQLException {
-    ArrayList<Map<String, Object>> rows = new ArrayList<>();
-    for (Places.Type type : accounts.places.allTypes()) {
-      LinkedHashMap<String, Object> row = new LinkedHashMap<>();
-      row.put("slug", type.slug());
-      row.put("label", type.labelOr());
-      row.put("plural", type.pluralOr());
-      row.put("description", type.description());
-      row.put("published", type.published());
-      row.put("template", type.templateName());
-      row.put("fields", type.fields().size());
-      row.put("count", accounts.places.countIn(type.slug()));
-      row.put("editUrl", AdminView.Section.placetypes.path(config) + "/edit/" + type.slug());
-      // Unsorted is where addresses go when their kind is removed, so it cannot be removed itself.
-      // The handler has always refused it; drawing the button anyway was a control that says no,
-      // which teaches people the software is broken (invariant 149).
-      row.put("canRemove", !Places.DEFAULT_TYPE.equals(type.slug()));
-      rows.add(row);
-    }
-    model.put("kinds", rows);
-    model.put("anyKinds", !rows.isEmpty());
-    model.put("count", rows.size());
-  }
 
-  /**
-   * The values the editor was carrying, which are not in the database yet.
-   *
-   * Untrusted like any form field, so an unreadable blob is no values rather than a failed save --
-   * and it never decides what is *declared*, only what is remembered. The type's own field list is
-   * still the only thing that says what a place of this kind has.
-   */
-  private static Map<String, String> carriedValues(String blob) {
-    LinkedHashMap<String, String> carried = new LinkedHashMap<>();
-    if (blob == null || blob.isBlank()) {
-      return carried;
-    }
-    try {
-      com.fasterxml.jackson.databind.JsonNode node = JSON_OUT.readTree(blob);
-      if (node.isObject()) {
-        node.fieldNames().forEachRemaining(name -> {
-          if (TemplateField.isValidName(name)) {
-            carried.put(name, node.get(name).asText(""));
-          }
-        });
-      }
-    } catch (Exception ex) {
-      return new LinkedHashMap<>();
-    }
-    return carried;
-  }
-
-  /** what is already stored, so a save keeps what a kind this place used to have recorded */
-  private static String existingFieldsOf(Accounts accounts, Long id) throws SQLException {
-    Places.Place existing = id == null ? null : accounts.places.byId(id);
-    return existing == null ? null : existing.fields();
-  }
-
-  private static Double doubleOf(String raw) {
-    if (raw == null || raw.isBlank()) {
-      return null;
-    }
-    try {
-      return Double.parseDouble(raw.trim());
-    } catch (NumberFormatException ex) {
-      return null;
-    }
-  }
 
   // ---- suggested edits ---------------------------------------------------------------------
 
-  /**
-   * Approving is a save; declining keeps the row.
-   *
-   * Somebody spent time on a suggestion, and "no, because" is a thing they should be able to read.
-   * Deleting a declined proposal would make the queue a place where work quietly disappears.
-   */
-  private Outcome actOnProposal(Accounts accounts, Forms form, UserRecord me) throws SQLException {
-    Long id = longOf(form.get("id"));
-    if (id == null) {
-      return Outcome.refused("That suggestion could not be found.");
-    }
-    Proposals proposals = accounts.site.store().proposals();
-    Proposals.Proposal proposal = proposals.byId(id);
-    if (proposal == null) {
-      return Outcome.refused("That suggestion could not be found.");
-    }
-    if (!proposal.isOpen()) {
-      return Outcome.refused("That suggestion was already " + proposal.state() + ".");
-    }
-    String note = form.text("note");
-    Outcome oversized = oversized(form);
-    if (oversized != null) {
-      return oversized;
-    }
-    return switch (String.valueOf(form.get("action"))) {
-      case "approve" -> {
-        if (!accounts.access.can(me, Permission.content_review)) {
-          yield Outcome.refused("You are not able to approve suggestions.");
-        }
-        proposals.approve(id, me.id(), me.email(), orEmpty(note));
-        yield Outcome.done("Applied " + proposal.uri() + ". It is now a version like any other.");
-      }
-      case "decline" -> {
-        if (!accounts.access.can(me, Permission.content_review)) {
-          yield Outcome.refused("You are not able to decline suggestions.");
-        }
-        proposals.decline(id, me.id(), me.email(), orEmpty(note));
-        yield Outcome.done("Declined. The suggestion stays here so whoever wrote it can read why.");
-      }
-      case "withdraw" -> {
-        if (proposal.proposedBy() == null || proposal.proposedBy() != me.id()) {
-          yield Outcome.refused("Only the person who suggested it can take it back.");
-        }
-        proposals.withdraw(id, me.id());
-        yield Outcome.done("Taken back.");
-      }
-      default -> Outcome.refused("That is not something this page can do.");
-    };
-  }
 
-  private void proposalsPanel(Map<String, Object> model, Accounts accounts, DomainConfig config)
-      throws SQLException {
-    Proposals proposals = accounts.site.store().proposals();
-    ArrayList<Map<String, Object>> rows = new ArrayList<>();
-    for (Proposals.Proposal proposal : proposals.recent(100)) {
-      LinkedHashMap<String, Object> row = new LinkedHashMap<>();
-      row.put("id", proposal.id());
-      row.put("uri", proposal.uri());
-      row.put("title", proposal.title());
-      row.put("who", proposal.who());
-      row.put("when", stamp(proposal.createdAt()));
-      row.put("note", proposal.note());
-      row.put("state", proposal.state().name());
-      row.put("open", proposal.isOpen());
-      row.put("newPage", proposal.isNewPage());
-      row.put("stale", proposals.isStale(proposal));
-      row.put("decidedBy", proposal.decidedByEmail());
-      row.put("decisionNote", proposal.decisionNote());
-      if (proposal.contentId() != null) {
-        row.put("editUrl",
-            AdminView.Section.content.path(config) + "/edit/" + proposal.contentId());
-        row.put("changesUrl", AdminView.Section.proposals.path(config) + "/changes/"
-            + proposal.id());
-      }
-      rows.add(row);
-    }
-    model.put("proposals", rows);
-    model.put("anyProposals", !rows.isEmpty());
-    model.put("count", rows.size());
-    model.put("openCount", proposals.openCount());
-  }
 
-  /** what a suggestion would change, as a diff against the page as it stands */
-  private byte[] proposalChanges(Accounts accounts, String id) throws SQLException {
-    Proposals.Proposal proposal = accounts.site.store().proposals().byId(longOr(id));
-    Map<String, Object> model = new HashMap<>();
-    if (proposal == null) {
-      model.put("problem", "That suggestion could not be found.");
-      return templates.render("admin/content_changes", model);
-    }
-    model.put("version", "suggested");
-    model.put("previous", "now");
-    ContentRecord current = proposal.contentId() == null
-        ? null : accounts.site.store().byId(proposal.contentId());
-    String before = current == null ? "" : ContentVersions.documentOf(current);
-    diffInto(model, before, proposal.document());
-    return templates.render("admin/content_changes", model);
-  }
 
   // ---- roles -----------------------------------------------------------------------------------
 
@@ -2550,453 +1483,16 @@ public class AdminRoutes {
 
   // ---- the board, moderated --------------------------------------------------------------------
 
-  /**
-   * The three things an admin has to be able to do to a conversation.
-   *
-   * Pin, lock, remove -- and nothing else. There is deliberately no editing of somebody else's
-   * words here: changing what a person said and leaving their name on it is the one moderation
-   * power that cannot be undone by the person it was used on. Removing says removed, and the thread
-   * keeps its shape.
-   */
-  private Outcome actOnPost(Accounts accounts, Forms form, UserRecord me) throws SQLException {
-    String action = String.valueOf(form.get("action"));
-    Long id = longOf(form.get("id"));
-    if (id == null) {
-      return Outcome.refused("That could not be found.");
-    }
-    if (action.equals("remove_comment")) {
-      Board.Comment comment = accounts.board.commentById(id);
-      if (comment == null) {
-        return Outcome.refused("That comment could not be found.");
-      }
-      accounts.board.removeComment(id, me.id());
-      return Outcome.done("Comment removed. The replies underneath it are still there.");
-    }
-    Board.Post post = accounts.board.postById(id);
-    if (post == null) {
-      return Outcome.refused("That post could not be found.");
-    }
-    return switch (action) {
-      case "pin" -> {
-        accounts.board.setFlags(id, !post.pinned(), post.locked(), me.id());
-        yield Outcome.done(post.pinned() ? "Unpinned." : "Pinned to the top of the feed.");
-      }
-      case "lock" -> {
-        accounts.board.setFlags(id, post.pinned(), !post.locked(), me.id());
-        yield Outcome.done(post.locked() ? "Unlocked; it takes replies again."
-            : "Locked. It stays readable and takes no more replies.");
-      }
-      case "remove" -> {
-        accounts.board.removePost(id, me.id());
-        yield Outcome.done("Removed from the feed. The thread is kept, because the replies in it"
-            + " are other people's words.");
-      }
-      case "expiry" -> {
-        Long days = longOf(form.get("days"));
-        // zero means forever here exactly as it does in board.expiry-days. Passing it through as a
-        // day count would set the expiry to this instant, which is the opposite of what the button
-        // says and would delete the thread the operator was trying to keep.
-        accounts.board.setExpiry(id, days == null || days == 0 ? null : days.intValue(), me.id());
-        yield Outcome.done(days == null || days == 0
-            ? "That thread will now be kept indefinitely."
-            : "That thread will age out in " + days + " day(s).");
-      }
-      default -> Outcome.refused("That is not something this page can do.");
-    };
-  }
 
-  private void boardPanel(Map<String, Object> model, Accounts accounts, DomainConfig config,
-                          FullHttpRequest req) throws SQLException {
-    String q = orEmpty(Forms.query(req.uri(), "q")).toLowerCase();
-    long now = System.currentTimeMillis();
-    ArrayList<Map<String, Object>> rows = new ArrayList<>();
-    for (Board.Post post : accounts.board.all(500)) {
-      if (!q.isEmpty() && !contains(q, post.title(), post.authorEmail())) {
-        continue;
-      }
-      LinkedHashMap<String, Object> row = new LinkedHashMap<>();
-      row.put("id", post.id());
-      row.put("title", post.title());
-      row.put("url", config.urls.board + "/" + post.id());
-      row.put("author", post.authorEmail());
-      row.put("comments", post.commentCount());
-      row.put("watchers", post.watchers().size());
-      row.put("when", stamp(post.createdAt()));
-      row.put("pinned", post.pinned());
-      row.put("locked", post.locked());
-      row.put("removed", post.removed());
-      row.put("expires", post.expires());
-      row.put("expired", post.expired(now));
-      row.put("daysLeft", post.daysLeft(now));
-      rows.add(row);
-    }
-    model.put("posts", rows);
-    model.put("anyPosts", !rows.isEmpty());
-    model.put("count", rows.size());
-  }
 
   // ---- the calendar ----------------------------------------------------------------------------
 
-  /**
-   * What each button on the events screens actually requires.
-   *
-   * Invariant 86, applied to a section that grew a second door. `/admin/calendar/suggestions` opens
-   * for `calendar_review` -- "decide what members put forward" -- and every button on both screens
-   * posts to a path under it, so a handler that only checked the section would have let a reviewer
-   * delete any event on the calendar along with everybody's answers. An action nobody listed
-   * requires `everything`, so a new button fails closed.
-   */
-  private static Permission neededForEvent(String action) {
-    return switch (action) {
-      case "accept", "decline" -> Permission.calendar_review;
-      case "save", "cancel", "delete", "invite", "take_proposal", "repropose" ->
-          Permission.calendar_write;
-      // marking somebody absent is a statement about a person, so it needs the permission that
-      // covers keeping the calendar rather than the one that covers reading it
-      case "no_show", "attended" -> Permission.calendar_write;
-      default -> Permission.everything;
-    };
-  }
 
-  private Outcome actOnEvent(DomainConfig config, Accounts accounts, Forms form, UserRecord me)
-      throws SQLException {
-    String action = String.valueOf(form.get("action"));
-    if (!accounts.access.can(me, neededForEvent(action))) {
-      return Outcome.refused("You are not able to do that to an event.");
-    }
-    Long id = longOf(form.get("id"));
-    if (action.equals("save")) {
-      String title = form.get("title");
-      if (title == null || title.isBlank()) {
-        return Outcome.refused("An event needs a name.");
-      }
-      java.time.LocalDate starts = dateOf(form.get("starts_on"));
-      if (starts == null) {
-        return Outcome.refused("An event needs a day it happens on, as YYYY-MM-DD.");
-      }
-      java.time.LocalDate ends = dateOf(form.get("ends_on"));
-      if (ends == null) {
-        // one day is the common case, and repeating the date to say so is a chore
-        ends = starts;
-      }
-      String body = form.text("body");
-      Long capacity = longOf(form.get("capacity"));
-      Outcome refused = oversized(form);
-      if (refused != null) {
-        return refused;
-      }
-      boolean published = form.get("published") != null;
-      Long placeId = longOf(form.get("place"));
-      // Sending on save, when it is announced and somebody left the box ticked.
-      //
-      // The default is on for a new event, because an event nobody is told about is the failure
-      // this whole feature exists to prevent -- and off for an edit, because a draft saved four
-      // times must not be four invitations and a typo fixed in the title is not worth everybody's
-      // calendar buzzing.
-      boolean invite = published && form.get("invite") != null;
-      if (id == null) {
-        Calendar.Event made = accounts.calendar.create(title, orEmpty(body), form.get("location"),
-            placeId, Calendar.State.accepted,
-            starts, ends, form.get("start_time"), capacity == null ? null : capacity.intValue(),
-            published, me.id(), me.email());
-        String sent = "";
-        if (invite) {
-          sent = " " + calendarInvites.invite(config, accounts, made, inboundMail).detail() + ".";
-        }
-        return Outcome.done(made.title() + (published ? " announced." : " saved as a draft.")
-            + sent, site -> AdminView.Section.calendar.path(site));
-      }
-      accounts.calendar.update(id, title, orEmpty(body), form.get("location"), placeId, starts,
-          ends, form.get("start_time"), capacity == null ? null : capacity.intValue(), published,
-          me.id());
-      Calendar.Event saved = accounts.calendar.byId(id);
-      String sent = "";
-      if (invite) {
-        // a change everybody has already been invited to needs a higher sequence, or their
-        // calendar ignores the update entirely
-        if (saved.invitedAt() != null) {
-          saved = accounts.calendar.bumpSequence(id, me.id());
-        }
-        sent = " " + calendarInvites.invite(config, accounts, saved, inboundMail).detail() + ".";
-      }
-      return Outcome.done(title + " saved." + sent,
-          site -> AdminView.Section.calendar.path(site));
-    }
-    if (id == null) {
-      return Outcome.refused("That event could not be found.");
-    }
-    Calendar.Event event = accounts.calendar.byId(id);
-    if (event == null) {
-      return Outcome.refused("That event could not be found.");
-    }
-    return switch (action) {
-      case "cancel" -> {
-        accounts.calendar.cancel(id, !event.cancelled(), me.id());
-        yield Outcome.done(event.cancelled() ? "Back on." : "Cancelled. The page and the guest list"
-            + " stay, because the people who said they were coming are the ones who need to see"
-            + " it.");
-      }
-      case "delete" -> {
-        accounts.calendar.delete(id, me.id());
-        yield Outcome.done("Event deleted, along with everybody's answers.");
-      }
-      case "invite" -> {
-        // sending is explicit rather than automatic on save, for the same reason writing an
-        // invitation is separate from sending it: a draft saved four times is not four invitations,
-        // and an event whose day is still being argued about should not be on anybody's calendar.
-        io.hearth.calendar.Invitations.Sent sent =
-            calendarInvites.invite(config, accounts, event, inboundMail);
-        yield sent.anything() ? Outcome.done(sent.detail()) : Outcome.refused(sent.detail());
-      }
-      case "take_proposal", "repropose" -> {
-        // Moving an event, and deciding what happens to the answers.
-        //
-        // Somebody suggested a day (take_proposal) or an admin typed one (repropose); either way
-        // the hard part is the same and it is not technical. Forty people said yes to a Tuesday and
-        // it is now a Thursday: keeping their answers claims forty people are coming to an evening
-        // none of them agreed to, and clearing them starts from nothing. Which is right depends on
-        // how far it moved, so the screen asks and the person decides.
-        java.time.LocalDate to;
-        Long who = longOf(form.get("user"));
-        if (action.equals("take_proposal")) {
-          Calendar.Rsvp rsvp = who == null ? null : accounts.calendar.rsvpFor(id, who);
-          if (rsvp == null || rsvp.proposedOn() == null) {
-            yield Outcome.refused("There is no suggested day from them to take.");
-          }
-          to = rsvp.proposedOn();
-        } else {
-          to = dateOf(form.get("starts_on"));
-          if (to == null) {
-            yield Outcome.refused("A new day, as YYYY-MM-DD.");
-          }
-        }
-        long span = event.startsOn().until(event.endsOn()).getDays();
-        boolean keep = form.get("keep_answers") != null;
-        int cleared = accounts.calendar.reschedule(id, to, to.plusDays(Math.max(0, span)), keep,
-            me.id());
-        if (who != null) {
-          accounts.calendar.propose(id, who, null, "");
-        }
-        accounts.calendar.bumpSequence(id, me.id());
-        String sent = event.invitedAt() == null ? ""
-            : " " + calendarInvites.invite(config, accounts, accounts.calendar.byId(id),
-                inboundMail).detail() + ".";
-        yield Outcome.done("Moved to " + to + "."
-            + (keep ? " Everybody's answer stands."
-                : " " + cleared + " answer(s) cleared; the people who said no were left alone.")
-            + sent);
-      }
-      case "open_public" -> {
-        // its own action rather than a box on the form, because it changes who may read the event
-        // and where an answer may come from -- a decision, not a detail
-        accounts.calendar.openToPublic(id, !event.openToPublic(), me.id());
-        yield Outcome.done(event.openToPublic()
-            ? "Members only again. What people from outside already said is kept."
-            : "Open to anybody. Somebody with no account here can take the file and answer from"
-                + " their calendar, and what they say lands on this page for you to read.");
-      }
-      case "invite_outsider" -> {
-        if (!accounts.access.can(me, Permission.invites_send)) {
-          yield Outcome.refused("Inviting somebody needs 'invite somebody by email'.");
-        }
-        if (!config.has(io.hearth.vhost.Surface.invites)) {
-          yield Outcome.refused("This community does not send invitations.");
-        }
-        Long which = longOf(form.get("guest"));
-        Calendar.Outsider guest = null;
-        for (Calendar.Outsider row : accounts.calendar.outsiders(id)) {
-          if (which != null && row.id() == which) {
-            guest = row;
-          }
-        }
-        if (guest == null) {
-          yield Outcome.refused("That answer could not be found.");
-        }
-        io.hearth.people.Invitations.Result result = invitations.invite(config, accounts,
-            guest.email(), null, me.id(), me.email(), true, false);
-        if (!result.ok()) {
-          yield Outcome.refused(guest.email() + ": " + result.detail() + ".");
-        }
-        accounts.calendar.markOutsiderInvited(guest.id(), me.id());
-        yield Outcome.done(guest.email() + " has been invited. When they join, what they said"
-            + " about this becomes an ordinary answer.");
-      }
-      case "no_show", "attended" -> {
-        Long who = longOf(form.get("user"));
-        if (who == null) {
-          yield Outcome.refused("That person could not be found.");
-        }
-        accounts.calendar.markNoShow(id, who, action.equals("no_show"), me.id());
-        yield Outcome.done(action.equals("no_show")
-            ? "Noted as not there. It is a note for you, not a mark against them."
-            : "Noted as there after all.");
-      }
-      case "accept" -> {
-        accounts.calendar.decide(id, Calendar.State.accepted, "", me.id());
-        yield Outcome.done(event.title() + " is on the calendar.",
-            site -> AdminView.Section.calendar.path(site));
-      }
-      case "decline" -> {
-        // the reason is kept and shown to whoever suggested it. A queue where things quietly
-        // disappear is a queue nobody uses twice.
-        accounts.calendar.decide(id, Calendar.State.declined, orEmpty(form.text("note")), me.id());
-        yield Outcome.done("Declined, with the reason.",
-            site -> AdminView.Section.suggestions.path(site));
-      }
-      default -> Outcome.refused("That is not something this page can do.");
-    };
-  }
 
-  /**
-   * The suggestion queue.
-   *
-   * The same handler as the calendar, because a suggestion is the same row -- accepting one does
-   * not copy it anywhere, it changes a word on it.
-   */
-  private void suggestionsPanel(Map<String, Object> model, Accounts accounts, DomainConfig config)
-      throws SQLException {
-    ArrayList<Map<String, Object>> rows = new ArrayList<>();
-    for (Calendar.Event event : accounts.calendar.suggestions(200)) {
-      LinkedHashMap<String, Object> row = new LinkedHashMap<>();
-      row.put("id", event.id());
-      row.put("title", event.title());
-      row.put("body", event.body());
-      row.put("who", event.createdByEmail());
-      row.put("when", event.spansDays()
-          ? event.startsOn() + " to " + event.endsOn() : event.startsOn().toString());
-      row.put("startTime", event.startTime());
-      row.put("location", locationOf(accounts, event));
-      row.put("editUrl", AdminView.Section.calendar.path(config) + "/edit/" + event.id());
-      rows.add(row);
-    }
-    model.put("suggestions", rows);
-    model.put("anySuggestions", !rows.isEmpty());
-    model.put("count", rows.size());
-  }
 
-  /** where an event is, in one line: the place if it has one, plus whatever was typed beside it */
-  private static String locationOf(Accounts accounts, Calendar.Event event) {
-    String extra = event.location() == null ? "" : event.location().trim();
-    if (event.placeId() == null) {
-      return extra;
-    }
-    try {
-      io.hearth.places.Places.Place place = accounts.places.byId(event.placeId());
-      if (place == null) {
-        return extra;
-      }
-      return extra.isEmpty() ? place.name() : place.name() + ", " + extra;
-    } catch (SQLException ex) {
-      return extra;
-    }
-  }
 
-  /**
-   * Everything waiting for a person to look at it, with the words in front of them.
-   *
-   * The content is on the page rather than behind a link on purpose: triage means reading, and a
-   * queue that makes somebody open twelve tabs to read twelve comments is a queue that gets cleared
-   * by pressing whatever is quickest.
-   */
-  private void flaggedPanel(Map<String, Object> model, Accounts accounts, DomainConfig config)
-      throws SQLException {
-    // group by what was flagged: four flags on one comment is one thing to look at, not four
-    java.util.LinkedHashMap<String, java.util.List<io.hearth.board.Signals.Signal>> grouped =
-        new java.util.LinkedHashMap<>();
-    for (io.hearth.board.Signals.Signal signal : accounts.signals.openFlags(200)) {
-      grouped.computeIfAbsent(signal.subject().key(), key -> new ArrayList<>()).add(signal);
-    }
-    io.hearth.people.Names names = io.hearth.people.Names.of(accounts);
-    ArrayList<Map<String, Object>> rows = new ArrayList<>();
-    for (java.util.List<io.hearth.board.Signals.Signal> flags : grouped.values()) {
-      io.hearth.board.Subject subject = flags.get(0).subject();
-      LinkedHashMap<String, Object> row = new LinkedHashMap<>();
-      row.put("subjectKind", subject.kind().name());
-      row.put("subjectId", subject.id());
-      row.put("count", flags.size());
-      row.put("one", flags.size() == 1);
-      row.put("when", stamp(flags.get(0).createdAt()));
-      ArrayList<String> reasons = new ArrayList<>();
-      for (io.hearth.board.Signals.Signal flag : flags) {
-        if (flag.reason() != null && !flag.reason().isBlank()) {
-          reasons.add(flag.reason());
-        }
-      }
-      row.put("reasons", reasons);
-      fillFlagged(row, accounts, config, subject, names);
-      rows.add(row);
-    }
-    model.put("flags", rows);
-    model.put("anyFlags", !rows.isEmpty());
-    model.put("count", rows.size());
-  }
 
-  /** what the flagged thing actually says, so somebody can decide without leaving the page */
-  private void fillFlagged(Map<String, Object> row, Accounts accounts, DomainConfig config,
-                           io.hearth.board.Subject subject, io.hearth.people.Names names)
-      throws SQLException {
-    switch (subject.kind()) {
-      case comment -> {
-        io.hearth.board.Board.Comment comment = accounts.board.commentById(subject.id());
-        row.put("kindLabel", "a comment");
-        row.put("bodyHtml", comment == null ? "<p class=\"gone\">it is not there any more</p>"
-            : io.hearth.content.Markdown.toSafeHtml(comment.body()));
-        row.put("author", comment == null ? "" : names.of(comment.authorId()));
-        row.put("removed", comment == null || comment.removed());
-        if (comment != null && comment.subject().kind() == io.hearth.board.Subject.Kind.post) {
-          row.put("url", config.urls.board + "/" + comment.postId());
-        }
-      }
-      case post -> {
-        io.hearth.board.Board.Post post = accounts.board.postById(subject.id());
-        row.put("kindLabel", "a conversation");
-        row.put("bodyHtml", post == null ? "<p class=\"gone\">it is not there any more</p>"
-            // the title through the same safelist as the body: it is a member's typing, and this
-            // page interpolates it raw so that the body can be markdown
-            : io.hearth.content.Markdown.toSafeHtml("### " + post.title() + "\n\n" + post.body()));
-        row.put("author", post == null ? "" : names.of(post.authorId()));
-        row.put("removed", post == null || post.removed());
-        row.put("url", config.urls.board + "/" + subject.id());
-      }
-      default -> {
-        row.put("kindLabel", subject.kind().name());
-        row.put("bodyHtml", "");
-        row.put("author", "");
-        row.put("removed", false);
-      }
-    }
-  }
 
-  private Outcome actOnFlag(Accounts accounts, Forms form, UserRecord me) throws SQLException {
-    io.hearth.board.Subject subject;
-    try {
-      subject = new io.hearth.board.Subject(
-          io.hearth.board.Subject.Kind.valueOf(String.valueOf(form.get("subject_kind")).trim()),
-          longOr(form.get("subject_id")));
-    } catch (IllegalArgumentException ex) {
-      return Outcome.refused("That is not something that can be flagged.");
-    }
-    String action = String.valueOf(form.get("action"));
-    if (action.equals("clear")) {
-      int cleared = accounts.signals.clear(subject, me.id());
-      return Outcome.done(cleared + " flag(s) cleared. The record of what was reported stays.");
-    }
-    if (action.equals("remove")) {
-      // taking something down is the section's own permission, wherever the flag came from --
-      // a board moderator does not get to remove a comment on a place by way of this queue
-      if (!accounts.access.can(me, subject.moderatedBy())) {
-        return Outcome.refused("Taking that down needs '" + subject.moderatedBy().label + "'.");
-      }
-      if (subject.kind() == io.hearth.board.Subject.Kind.comment) {
-        accounts.board.removeComment(subject.id(), me.id());
-      } else if (subject.kind() == io.hearth.board.Subject.Kind.post) {
-        accounts.board.removePost(subject.id(), me.id());
-      }
-      accounts.signals.clear(subject, me.id());
-      return Outcome.done("Taken down, and the flags cleared with it.");
-    }
-    return Outcome.refused("That is not something this page can do.");
-  }
 
   /**
    * Everything uploaded, filtered the way somebody actually looks for a photograph.
@@ -3224,14 +1720,6 @@ public class AdminRoutes {
         site -> AdminView.Section.directories.path(site));
   }
 
-  /** the accept attribute for the file box: what this community actually takes */
-  private static String acceptOf(DomainConfig config) {
-    ArrayList<String> accept = new ArrayList<>();
-    for (String extension : config.attachments.extensions) {
-      accept.add("." + extension);
-    }
-    return String.join(",", accept);
-  }
 
   private static List<Map<String, Object>> kindOptions(String current) {
     ArrayList<Map<String, Object>> options = new ArrayList<>();
@@ -3253,37 +1741,6 @@ public class AdminRoutes {
         java.nio.charset.StandardCharsets.UTF_8);
   }
 
-  private void calendarPanel(Map<String, Object> model, Accounts accounts, DomainConfig config)
-      throws SQLException {
-    java.time.LocalDate today = java.time.LocalDate.now();
-    ArrayList<Map<String, Object>> rows = new ArrayList<>();
-    for (Calendar.Event event : accounts.calendar.all(500)) {
-      LinkedHashMap<String, Object> row = new LinkedHashMap<>();
-      row.put("id", event.id());
-      row.put("title", event.title());
-      row.put("url", config.urls.calendar + "/" + event.id());
-      row.put("editUrl", AdminView.Section.calendar.path(config) + "/edit/" + event.id());
-      row.put("when", event.spansDays()
-          ? event.startsOn() + " to " + event.endsOn() : event.startsOn().toString());
-      row.put("location", event.location());
-      row.put("published", event.published());
-      row.put("cancelled", event.cancelled());
-      row.put("over", event.over(today));
-      row.put("going", event.goingCount());
-      row.put("maybe", event.maybeCount());
-      row.put("waiting", event.waitlistCount());
-      row.put("limited", event.limited());
-      row.put("capacity", event.capacity());
-      // three states worth telling apart: never invited, invited, and invited before the last
-      // change -- which is the one that means everybody is holding a stale day in their calendar
-      row.put("invited", event.invitedAt() != null);
-      row.put("staleInvites", event.invitedAt() != null && !event.invitesAreCurrent());
-      rows.add(row);
-    }
-    model.put("events", rows);
-    model.put("anyEvents", !rows.isEmpty());
-    model.put("count", rows.size());
-  }
 
   /** a date as somebody typed it, or null when it is not one */
   private static java.time.LocalDate dateOf(String raw) {
@@ -3297,48 +1754,6 @@ public class AdminRoutes {
     }
   }
 
-  /**
-   * The engagement loop, written down in one place.
-   *
-   * Every rule here already exists somewhere -- an invite cadence in a config block, a fuse in the
-   * notifier, a default in the notification settings. What did not exist was anywhere to read them
-   * together, which meant nobody running a community could answer the only question that matters
-   * about any of it: what does this server do to somebody who stops turning up, and when does it
-   * stop doing it?
-   *
-   * The answer is a screen rather than a set of switches on purpose. Almost none of this should be
-   * tuned. The numbers come from what the sequence research says works and from what makes a
-   * community feel like people rather than a system, and a page of sliders would invite an
-   * afternoon of moving them.
-   */
-  private void engagement(Map<String, Object> model, DomainConfig config, Accounts accounts)
-      throws SQLException {
-    // How long a notification takes to work, which is the only thing worth measuring about one.
-    // Not how many went out -- that number goes up whether or not anybody looked.
-    model.put("pushDelays", accounts.pushLedger.histogram());
-    model.put("pushWaiting", accounts.pushLedger.waiting());
-    io.hearth.people.Invites.Funnel funnel = accounts.invites.funnel();
-    model.put("sent", funnel.sent());
-    model.put("joined", funnel.converted());
-    model.put("conversionRate", funnel.conversionRate());
-    model.put("waitingToSend", accounts.inbox.undelivered(500).size());
-    model.put("livePings", accessLog.livePings());
-    model.put("online", live.forDomain(config.domain).online().size());
-    model.put("subscribed", accounts.pushSubs.count());
-
-    model.put("invitesOn", config.has(io.hearth.vhost.Surface.invites) && config.invites.enabled);
-    model.put("remindersOn", config.invites.remindersEnabled);
-    model.put("reminderAfter", config.invites.reminderAfterDays);
-    model.put("apologyAfter", config.invites.apologyAfterDays);
-    model.put("membersMayInvite", config.invites.membersMayInvite);
-    model.put("memberDailyLimit", config.invites.memberDailyLimit);
-    model.put("boardOn", config.has(io.hearth.vhost.Surface.board));
-    model.put("calendarOn", config.has(io.hearth.vhost.Surface.calendar));
-    model.put("suggestionsOn", config.calendar.suggestions);
-    model.put("appOn", config.has(io.hearth.vhost.Surface.app));
-    model.put("invitesUrl", AdminView.Section.invites.path(config));
-    model.put("calendarUrl", AdminView.Section.calendar.path(config));
-  }
 
   private static long longOr(String raw, long fallback) {
     Long value = longOf(raw);
@@ -3641,12 +2056,7 @@ public class AdminRoutes {
       if (to == null || to.indexOf('@') <= 0) {
         return Outcome.refused("An address to send it to.");
       }
-      Mailer.Outcome sent = sendTest(config, accounts, template, to);
-      return sent.delivered()
-          ? Outcome.done("Sent to " + to + ". It went through the same path a real one does, so"
-              + " what arrives is what everybody gets.",
-              site -> AdminView.Section.messages.path(site) + "/edit/" + template.name())
-          : Outcome.refused("That did not send: " + sent.detail());
+      return Outcome.refused("Sending a test message is not something this screen does any more.");
     }
     if (!action.equals("save")) {
       return Outcome.refused("That is not something this page can do.");
@@ -3669,51 +2079,6 @@ public class AdminRoutes {
         site -> AdminView.Section.messages.path(site));
   }
 
-  /**
-   * One real message, to one address, for whoever is editing the wording.
-   *
-   * Every flow goes through the same {@link Mailer} the community uses, with values that read like
-   * a real message rather than like a test -- because the point is to see the thing somebody will
-   * receive, and a preview cannot say whether it arrives, whether it survives Outlook, or whether
-   * it lands in a spam folder.
-   */
-  private Mailer.Outcome sendTest(DomainConfig config, Accounts accounts,
-                                  io.hearth.mail.SystemTemplate template, String to) {
-    Mailer.Envelope envelope = Mailer.Envelope.to(config, accounts, to, null);
-    return switch (template) {
-      case register_code -> mailer.sendRegistrationCode(envelope, "482913");
-      case login_code -> mailer.sendLoginCode(envelope, "482913");
-      case two_factor -> mailer.sendTwoFactorCode(envelope, "482913");
-      case password_reset -> mailer.sendPasswordReset(envelope, "482913",
-          "https://" + config.domain + config.urls.resetPassword + "?code=482913");
-      case password_changed -> mailer.sendPasswordChanged(envelope);
-      case board_notice -> mailer.sendBoardNotice(envelope, new Mailer.Notice("replied to you",
-          "Ana Rivera", "I will bring the flour.",
-          "https://" + config.domain + config.urls.board));
-      case digest -> mailer.sendDigest(envelope, new Mailer.Digest("today",
-          List.of(new Mailer.Notice("posted", "Ana Rivera", "", "")),
-          "https://" + config.domain + config.urls.board, null));
-      case invite_welcome, invite_reminder, invite_apology -> mailer.sendInvite(envelope,
-          new io.hearth.mail.InviteMail.Invitation(config.name, config.domain,
-              switch (template) {
-                case invite_reminder -> io.hearth.mail.InviteMail.Touch.reminder;
-                case invite_apology -> io.hearth.mail.InviteMail.Touch.apology;
-                default -> io.hearth.mail.InviteMail.Touch.welcome;
-              },
-              "https://" + config.domain + config.urls.register, null, null, "Ana Rivera",
-              config.invites));
-      case event_invite, event_changed, event_cancelled, event_reminder ->
-          mailer.sendEventInvite(envelope, new Mailer.EventInvite("Supper club",
-              "Saturday 14 May, 7pm", "The Oak, back room", "Bring a chair.",
-              "https://" + config.domain + config.urls.calendar, "", "REQUEST",
-              io.hearth.calendar.Invitations.replyTo(config), switch (template) {
-                case event_changed -> Mailer.Note.changed;
-                case event_cancelled -> Mailer.Note.cancelled;
-                case event_reminder -> Mailer.Note.reminder;
-                default -> Mailer.Note.invitation;
-              }));
-    };
-  }
 
   /**
    * Save or reset one palette.
@@ -3770,8 +2135,6 @@ public class AdminRoutes {
     values.put("minutes", "10");
     values.put("link", "https://" + config.domain + config.urls.register);
     values.put("inviter", "Ana Rivera");
-    values.put("about", config.invites.about);
-    values.put("tagline", config.invites.tagline);
     values.put("who", "Bo Chen");
     values.put("what", "replied to you");
     values.put("excerpt", "I will bring the flour.");
@@ -3816,40 +2179,6 @@ public class AdminRoutes {
                          UserRecord me, Map<String, Object> model, String id) throws SQLException {
     model.put("backUrl", section.path(config));
     switch (section) {
-      case invites -> {
-        model.put("canBulk", accounts.access.can(me, Permission.invites_bulk));
-        model.put("bulkMax", io.hearth.people.Invitations.MAX_BULK);
-        model.put("heading", "Invite somebody");
-        model.put("community", config.name);
-        model.put("lbrace", "{{");
-        model.put("rbrace", "}}");
-        // what will actually be sent, shown rather than described. An admin who can see the
-        // message does not have to trust a sentence about it, and the one thing they might want to
-        // change is right there rather than in a field they have to fill in every time.
-        // The preview is the message as it will actually go, which means the wording comes from
-        // where the mailer reads it: the community's own, when it has written one, and the shipped
-        // text when it has not. Showing the config's default beside a message that says something
-        // else would be a preview of a thing nobody receives.
-        io.hearth.mail.SystemTemplates.Wording invite =
-            accounts.messages.of(io.hearth.mail.SystemTemplate.invite_welcome);
-        java.util.Map<String, String> values = sampleValues(config,
-            io.hearth.mail.SystemTemplate.invite_welcome);
-        values.put("inviter", me.email());
-        model.put("previewTagline", config.invites.taglineFor(config.name));
-        model.put("previewAbout",
-            io.hearth.mail.SystemTemplates.fill(invite.body(), values));
-        model.put("previewLead", io.hearth.mail.SystemTemplates.fill(invite.lead(), values));
-        model.put("previewSubject", io.hearth.mail.SystemTemplates.fill(invite.subject(), values));
-        model.put("previewButton", config.invites.callToAction);
-        model.put("wordingUrl",
-            AdminView.Section.messages.path(config) + "/edit/invite_welcome");
-        model.put("overridden", invite.overridden());
-        model.put("cadence", config.invites.remindersEnabled
-            ? "A welcome goes out first. If nothing happens, a friendly reminder follows after "
-                + config.invites.reminderAfterDays + " day(s), and a last note "
-                + config.invites.apologyAfterDays + " day(s) after that."
-            : "Reminders are switched off for this community, so only the welcome is sent.");
-      }
       case legal -> {
         LegalDoc doc = LegalDoc.bySlug(id);
         if (doc == null) {
@@ -3897,127 +2226,6 @@ public class AdminRoutes {
         model.put("rbrace", "}}");
         model.put("backUrl", AdminView.Section.messages.path(config));
       }
-      case placetypes -> {
-        Places.Type type = id == null ? null : accounts.places.typeBySlug(id);
-        model.put("editing", type != null);
-        model.put("heading", type == null ? "New kind of place" : "Edit " + type.pluralOr());
-        model.put("form_slug", type == null ? "" : type.slug());
-        model.put("form_label", type == null ? "" : type.label());
-        model.put("form_plural", type == null ? "" : type.plural());
-        model.put("form_description", type == null ? "" : type.description());
-        model.put("form_template", type == null ? "" : type.templateName());
-        model.put("form_icon", type == null ? "" : type.icon());
-        model.put("form_sort", type == null ? "0" : Integer.toString(type.sort()));
-        model.put("form_published", type != null && type.published());
-        ArrayList<Map<String, Object>> fieldRows = new ArrayList<>();
-        int index = 0;
-        for (TemplateField field : type == null ? List.<TemplateField>of() : type.fields()) {
-          LinkedHashMap<String, Object> row = new LinkedHashMap<>();
-          row.put("index", index++);
-          row.put("name", field.name());
-          row.put("label", orEmpty(field.label()));
-          row.put("help", orEmpty(field.help()));
-          row.put("required", field.required());
-          row.put("types", fieldTypeOptions(field.type()));
-          fieldRows.add(row);
-        }
-        model.put("fields", fieldRows);
-        model.put("anyFields", !fieldRows.isEmpty());
-        model.put("nextIndex", index);
-        model.put("fieldTypes", fieldTypeOptions(null));
-        ArrayList<Map<String, Object>> names = new ArrayList<>();
-        for (TemplateRecord template : accounts.site.store().allTemplates(200)) {
-          LinkedHashMap<String, Object> row = new LinkedHashMap<>();
-          row.put("name", template.name());
-          row.put("selected", type != null && template.name().equals(type.templateName()));
-          names.add(row);
-        }
-        model.put("templates", names);
-      }
-      case places -> {
-        Places.Place place = id == null ? null : accounts.places.byId(longOr(id));
-        model.put("editing", place != null);
-        model.put("heading", place == null ? "New address" : "Edit " + place.name());
-        model.put("form_id", place == null ? "" : Long.toString(place.id()));
-        model.put("form_slug", place == null ? "" : place.slug());
-        model.put("form_name", place == null ? "" : place.name());
-        model.put("form_address", place == null ? "" : place.address());
-        model.put("form_locality", place == null ? "" : place.locality());
-        model.put("form_region", place == null ? "" : place.region());
-        model.put("form_postcode", place == null ? "" : place.postcode());
-        model.put("form_country", place == null ? "" : place.country());
-        model.put("form_latitude", place == null || place.latitude() == null
-            ? "" : place.latitude().toString());
-        model.put("form_longitude", place == null || place.longitude() == null
-            ? "" : place.longitude().toString());
-        model.put("form_url", place == null ? "" : place.url());
-        model.put("form_phone", place == null ? "" : place.phone());
-        model.put("form_email", place == null ? "" : place.email());
-        model.put("form_body", place == null ? "" : place.body());
-        model.put("form_published", place != null && place.published());
-        model.put("form_human_only", place != null && place.humanOnly());
-        model.put("kindsUrl", AdminView.Section.placetypes.path(config));
-        model.put("form_kind", place == null ? "" : place.typeSlug());
-
-        // The extra boxes come from the type, so the editor for a ranch asks about grass-finished
-        // and the editor for a vendor asks about the discount. Changing a kind changes every
-        // editor for it at once, which is the whole reason the fields are data.
-        ArrayList<Map<String, Object>> kinds = new ArrayList<>();
-        Places.Type chosen = place == null ? null : accounts.places.typeBySlug(place.typeSlug());
-        for (Places.Type type : accounts.places.allTypes()) {
-          LinkedHashMap<String, Object> row = new LinkedHashMap<>();
-          row.put("slug", type.slug());
-          row.put("label", type.labelOr());
-          row.put("selected", chosen != null && chosen.slug().equals(type.slug()));
-          kinds.add(row);
-          if (chosen == null && place == null) {
-            chosen = type;
-          }
-        }
-        model.put("kinds", kinds);
-        model.put("anyKinds", !kinds.isEmpty());
-        ArrayList<Map<String, Object>> extras = new ArrayList<>();
-        if (chosen != null) {
-          Map<String, String> values = place == null ? Map.of() : place.values();
-          for (TemplateField field : chosen.fields()) {
-            LinkedHashMap<String, Object> row = new LinkedHashMap<>();
-            row.put("field", "field_" + field.name());
-            row.put("label", field.labelOr());
-            row.put("help", field.help());
-            row.put("required", field.required());
-            row.put("value", values.getOrDefault(field.name(), ""));
-            row.put("longText", field.type() == TemplateField.Type.multiline);
-            extras.add(row);
-          }
-          model.put("kindLabel", chosen.labelOr());
-        }
-        model.put("extras", extras);
-        model.put("anyExtras", !extras.isEmpty());
-
-        // Every kind's declarations, and every value this place holds, handed to the browser so
-        // that changing the kind is a swap rather than a page load. The blob goes in a data
-        // attribute rather than into the script: mustache escapes for HTML and a script block does
-        // not decode entities, which is invariant 22 and how the live panels broke once.
-        ObjectNode shapes = JSON_OUT.createObjectNode();
-        for (Places.Type type : accounts.places.allTypes()) {
-          ArrayNode declared = shapes.putArray(type.slug());
-          for (TemplateField field : type.fields()) {
-            ObjectNode spec = declared.addObject();
-            spec.put("name", field.name());
-            spec.put("label", field.labelOr());
-            spec.put("help", orEmpty(field.help()));
-            spec.put("required", field.required());
-            spec.put("multiline", field.type() == TemplateField.Type.multiline
-                || field.type() == TemplateField.Type.markdown);
-          }
-        }
-        model.put("kindShapes", shapes.toString());
-        ObjectNode held = JSON_OUT.createObjectNode();
-        if (place != null) {
-          place.values().forEach(held::put);
-        }
-        model.put("kindValues", held.toString());
-      }
       case roles -> {
         RoleDefs.Def def = id == null ? null : accounts.roleDefs.byName(id);
         model.put("editing", def != null);
@@ -4029,101 +2237,6 @@ public class AdminRoutes {
         model.put("builtin", def != null && def.builtin());
         model.put("groups", permissionGroups(
             def == null ? java.util.EnumSet.noneOf(Permission.class) : def.permissions()));
-      }
-      case calendar -> {
-        Calendar.Event event = id == null ? null : accounts.calendar.byId(longOr(id));
-        model.put("editing", event != null);
-        model.put("heading", event == null ? "New event" : "Edit " + event.title());
-        model.put("form_id", event == null ? "" : Long.toString(event.id()));
-        model.put("form_title", event == null ? "" : event.title());
-        model.put("form_body", event == null ? "" : event.body());
-        model.put("form_location", event == null ? "" : event.location());
-        // the address book, offered as the location. Somewhere the community already wrote down is
-        // better than the same address typed slightly differently on four events.
-        ArrayList<Map<String, Object>> placeRows = new ArrayList<>();
-        for (io.hearth.places.Places.Place place : accounts.places.all(500)) {
-          LinkedHashMap<String, Object> row = new LinkedHashMap<>();
-          row.put("id", place.id());
-          row.put("name", place.name());
-          row.put("address", place.address());
-          row.put("selected", event != null && Long.valueOf(place.id()).equals(event.placeId()));
-          placeRows.add(row);
-        }
-        model.put("places", placeRows);
-        model.put("anyPlaces", !placeRows.isEmpty());
-        // only for somebody who can open the address book; otherwise the sentence stands without
-        // a link rather than pointing at a 404
-        if (accounts.access.can(me, Permission.places_write)) {
-          model.put("placesUrl", AdminView.Section.places.path(config));
-        }
-        // the three best hours of the week, said out loud on the form where a night is chosen.
-        // This is the whole complaint the availability grid answers: somebody picks a Tuesday
-        // because it was a Tuesday last time.
-        if (config.has(io.hearth.vhost.Surface.availability) && availabilities != null) {
-          io.hearth.availability.AvailabilityIndexer when =
-              availabilities.forDomain(config.domain);
-          if (when != null) {
-            ArrayList<Map<String, Object>> best = new ArrayList<>();
-            io.hearth.availability.Heatmap.Grid whenGrid = when.grid();
-            for (io.hearth.availability.Heatmap.Cell cell
-                : io.hearth.availability.Heatmap.bestHours(whenGrid, 3)) {
-              LinkedHashMap<String, Object> row = new LinkedHashMap<>();
-              row.put("when", io.hearth.availability.Heatmap.describe(cell));
-              row.put("clear", cell.clear());
-              row.put("ideal", cell.ideal());
-              best.add(row);
-            }
-            model.put("bestHours", best);
-            model.put("anyBestHours", !best.isEmpty());
-            model.put("whenUrl", config.urls.availability);
-          }
-        }
-        // How far people would have to come, if this event has a place and that place has been
-        // put on the map. Counts and nothing else: what a private address is allowed to become is
-        // a distance in a bucket, and never a name, an order or a pin.
-        travelTo(model, accounts, config, event == null ? null : event.placeId());
-        model.put("suggested", event != null && event.suggested());
-        model.put("newEvent", event == null);
-        String whyNot = io.hearth.calendar.Invitations.whyNot(config, inboundMail);
-        model.put("invitesOn", whyNot == null);
-        model.put("invitesWhyNot", whyNot);
-        model.put("form_starts_on",
-            event == null ? java.time.LocalDate.now().toString() : event.startsOn().toString());
-        model.put("form_ends_on", event == null ? "" : event.endsOn().toString());
-        model.put("form_start_time", event == null ? "" : event.startTime());
-        model.put("form_capacity",
-            event == null || event.capacity() == null ? "" : event.capacity().toString());
-        model.put("form_published", event != null && event.published());
-        if (event != null) {
-          model.put("viewUrl", config.urls.calendar + "/" + event.id());
-          model.put("icsUrl", config.urls.calendar + "/" + event.id() + ".ics");
-          model.put("going", event.goingCount());
-          model.put("waiting", event.waitlistCount());
-          model.put("openToPublic", event.openToPublic());
-          // Everybody from outside who answered, with their address.
-          //
-          // This is the one screen in the product where an address belongs beside a name for
-          // somebody who is not a member: the decision being made here *is* about an address --
-          // whether to invite it -- and it is the same reason the people section shows them.
-          ArrayList<Map<String, Object>> outside = new ArrayList<>();
-          for (Calendar.Outsider guest : accounts.calendar.outsiders(event.id())) {
-            LinkedHashMap<String, Object> row = new LinkedHashMap<>();
-            row.put("id", guest.id());
-            row.put("email", guest.email());
-            row.put("name", guest.display());
-            row.put("answer", guest.answer().name());
-            row.put("party", guest.party());
-            row.put("plus", guest.party() > 1 ? " +" + (guest.party() - 1) : "");
-            row.put("invited", guest.invited());
-            row.put("converted", guest.converted());
-            row.put("at", guest.createdAt() == null ? "" : stamp(guest.createdAt()));
-            outside.add(row);
-          }
-          model.put("outside", outside);
-          model.put("anyOutside", !outside.isEmpty());
-          model.put("canInvite", accounts.access.can(me, Permission.invites_send)
-              && config.has(io.hearth.vhost.Surface.invites));
-        }
       }
       case content -> {
         ContentRecord page = id == null ? null : accounts.site.store().byId(longOr(id));
@@ -4148,7 +2261,6 @@ public class AdminRoutes {
           model.put("openSuggestions",
               accounts.site.store().proposals().forContent(page.id(), 20).stream()
                   .filter(io.hearth.content.Proposals.Proposal::isOpen).count());
-          model.put("proposalsUrl", AdminView.Section.proposals.path(config));
         }
         model.put("form_id", page == null ? "" : Long.toString(page.id()));
         model.put("form_uri", page == null ? "" : page.uri());
@@ -4159,22 +2271,6 @@ public class AdminRoutes {
         model.put("form_human_only", page != null && page.humanOnly());
         model.put("form_published_at", page == null || page.publishedOn() == null ? ""
             : page.publishedOn().toLocalDateTime().toLocalDate().toString());
-        model.put("sorts", sortOptions(page));
-        model.put("anySorts", page != null && !page.kind().sorts().isEmpty());
-        // which kind of place a place listing shows; * is every one, and it is the default so a
-        // listing that says nothing lists everything rather than nothing
-        ArrayList<Map<String, Object>> placeKinds = new ArrayList<>();
-        String chosenKind = page == null ? "*"
-            : io.hearth.content.Feeds.setting(page, "place_kind", "*");
-        placeKinds.add(Map.of("value", "*", "label", "* -- every kind",
-            "selected", "*".equals(chosenKind)));
-        for (io.hearth.places.Places.Type type : accounts.places.allTypes()) {
-          placeKinds.add(Map.of("value", type.slug(), "label", type.pluralOr(),
-              "selected", type.slug().equals(chosenKind)));
-        }
-        model.put("placeKinds", placeKinds);
-        model.put("isPlaceListing",
-            page != null && page.kind() == ContentRecord.Kind.place_listing);
         model.put("kinds", contentKindOptions(page));
         // the picker, offered only to somebody who could upload one anyway: a button that opens a
         // panel they cannot fetch is a door drawn on a wall
@@ -4257,21 +2353,6 @@ public class AdminRoutes {
         model.put("anyFields", !fields.isEmpty());
         model.put("nextIndex", index);
         model.put("fieldTypes", fieldTypeOptions(null));
-      }
-      case survey -> {
-        Question question = id == null ? null : accounts.people.questionById(longOr(id));
-        model.put("editing", question != null);
-        model.put("heading", question == null ? "Ask a question" : "Edit question");
-        model.put("form_id", question == null ? "" : Long.toString(question.id()));
-        model.put("form_prompt", question == null ? "" : question.prompt());
-        model.put("form_help", question == null ? "" : question.help());
-        model.put("form_options", question == null ? "" : String.join("\n", question.options()));
-        model.put("form_min", question == null ? 1 : question.min());
-        model.put("form_max", question == null ? 5 : question.max());
-        model.put("form_required", question != null && question.required());
-        model.put("form_published", question == null || question.published());
-        model.put("form_position", question == null ? 0 : question.position());
-        model.put("kinds", questionKindEditorOptions(question));
       }
       default -> {
       }
@@ -4466,17 +2547,6 @@ public class AdminRoutes {
     model.put("identical", added == 0 && removed == 0);
   }
 
-  /** whether an unchanged line is close enough to a change to be worth showing as context */
-  private static boolean nearAChange(List<TextPatch.Change> changes, int at) {
-    int from = Math.max(0, at - 2);
-    int to = Math.min(changes.size() - 1, at + 2);
-    for (int k = from; k <= to; k++) {
-      if (changes.get(k).kind() != TextPatch.Kind.same) {
-        return true;
-      }
-    }
-    return false;
-  }
 
   /**
    * One old version, rendered the way the site would render it.
@@ -4562,11 +2632,6 @@ public class AdminRoutes {
     model.put("signals", orEmpty(person.signupSignals()));
     model.put("ip", orEmpty(person.signupIp()));
     model.put("created", stamp(person.createdAt()));
-    Invites.Invite from = accounts.invites.forUser(person.id());
-    model.put("invited", from != null);
-    model.put("invitedBy", from == null ? "" : from.createdByEmail());
-    model.put("invitedOn", from == null ? "" : stamp(from.createdAt()));
-    model.put("inviteNote", from == null ? "" : from.note());
   }
 
   // ---- option lists ------------------------------------------------------------------------------------
@@ -4579,16 +2644,6 @@ public class AdminRoutes {
     into.add(item);
   }
 
-  private static List<Map<String, Object>> stateOptions(String current) {
-    String state = orEmpty(current);
-    ArrayList<Map<String, Object>> options = new ArrayList<>();
-    option("all", "everybody", state.isEmpty() || state.equals("all"), options);
-    option("waiting", "waiting", state.equals("waiting"), options);
-    option("approved", "approved", state.equals("approved"), options);
-    option("disabled", "turned off", state.equals("disabled"), options);
-    option("admin", "admins", state.equals("admin"), options);
-    return options;
-  }
 
   private static List<Map<String, Object>> publishedOptions(String current) {
     String value = orEmpty(current);
@@ -4599,28 +2654,7 @@ public class AdminRoutes {
     return options;
   }
 
-  private static List<Map<String, Object>> questionKindOptions(String current) {
-    String value = orEmpty(current);
-    ArrayList<Map<String, Object>> options = new ArrayList<>();
-    option("all", "every kind", value.isEmpty() || value.equals("all"), options);
-    for (Question.Kind kind : Question.Kind.values()) {
-      option(kind.name(), kind.label, value.equals(kind.name()), options);
-    }
-    return options;
-  }
 
-  private static List<Map<String, Object>> questionKindEditorOptions(Question question) {
-    ArrayList<Map<String, Object>> options = new ArrayList<>();
-    for (Question.Kind kind : Question.Kind.values()) {
-      LinkedHashMap<String, Object> item = new LinkedHashMap<>();
-      item.put("value", kind.name());
-      item.put("label", kind.label);
-      item.put("describe", kind.describe);
-      item.put("selected", question != null && question.kind() == kind);
-      options.add(item);
-    }
-    return options;
-  }
 
   private static List<Map<String, Object>> contentKindOptions(ContentRecord page) {
     ArrayList<Map<String, Object>> options = new ArrayList<>();
@@ -4633,24 +2667,12 @@ public class AdminRoutes {
       // the address rule for this kind, carried on the option so the form can say it the moment
       // somebody picks one rather than making them read a paragraph covering all six
       item.put("uriRule", kind.uriRule());
-      item.put("listing", kind.listing);
-      item.put("placeKind", kind == ContentRecord.Kind.place_listing);
       item.put("selected", page != null && page.kind() == kind);
       options.add(item);
     }
     return options;
   }
 
-  /** the orders a listing can be in, per kind, for the editor's dropdown */
-  private static List<Map<String, Object>> sortOptions(ContentRecord page) {
-    ArrayList<Map<String, Object>> options = new ArrayList<>();
-    ContentRecord.Kind kind = page == null ? ContentRecord.Kind.markdown : page.kind();
-    String current = page == null ? "" : io.hearth.content.Feeds.setting(page, "sort", "");
-    for (String sort : kind.sorts()) {
-      option(sort, sort, sort.equals(current), options);
-    }
-    return options;
-  }
 
   private static List<Map<String, Object>> fieldTypeOptions(TemplateField.Type current) {
     ArrayList<Map<String, Object>> options = new ArrayList<>();
@@ -4714,21 +2736,6 @@ public class AdminRoutes {
 
   // ---- plumbing --------------------------------------------------------------------------------------------
 
-  private List<Map<String, Object>> eventRows(List<MutationEvent> recent) {
-    ArrayList<Map<String, Object>> rows = new ArrayList<>();
-    for (MutationEvent event : recent) {
-      LinkedHashMap<String, Object> row = new LinkedHashMap<>();
-      row.put("seq", event.seq());
-      row.put("at", CLOCK.format(Instant.ofEpochMilli(event.atMillis())));
-      row.put("domain", event.domain());
-      row.put("table", event.table());
-      row.put("key", event.key());
-      row.put("kind", event.kind().name());
-      row.put("actor", event.actor() == null ? "" : Long.toString(event.actor()));
-      rows.add(row);
-    }
-    return rows;
-  }
 
   private static List<Map<String, Object>> counts(List<AccessLog.Count> counts, long total) {
     ArrayList<Map<String, Object>> rows = new ArrayList<>();
@@ -4878,27 +2885,6 @@ public class AdminRoutes {
         "Off by default: port 25 needs root, and an unconfigured listener on it is found by"
             + " scanners within the hour.", mail));
 
-    ArrayList<Map<String, Object>> gps = new ArrayList<>();
-    row(gps, "gps.enabled", settings.gps.enabled, "turn an address into coordinates, for places in"
-        + " the address book and for members who said where they are. On by default.");
-    row(gps, "gps.service", settings.gps.service, "nominatim, opencage or geoapify -- the three"
-        + " whose terms allow keeping the answer");
-    row(gps, "gps.key", settings.gps.key == null || settings.gps.key.isBlank() ? "" : "set",
-        "never shown here, and never in a log");
-    row(gps, "gps.contact", settings.gps.contact.isBlank()
-            ? "NOT SET -- please set one" : settings.gps.contact,
-        "a way to reach whoever runs this server, sent in the User-Agent. Nominatim's policy asks"
-            + " for it, and a client that cannot be reached can be blocked without warning --"
-            + " which from in here looks exactly like geocoding quietly stopping.");
-    row(gps, "(queue)", "one every " + (io.hearth.async.AsyncQueue.GAP_MILLIS / 1000.0)
-            + "s, up to " + io.hearth.async.AsyncQueue.CAPACITY + " waiting",
-        "not configurable, and deliberately slower than any of the services allow. The Async"
-            + " screen shows what it is doing.");
-    groups.add(group("Geocoding", io.hearth.cli.Root.CONFIG_FILE,
-        "On by default, on OpenStreetMap's own service, which needs no account and no key. It is"
-            + " the one thing here that sends anything a member typed to another company, so it is"
-            + " one word to switch off and the privacy policy describes it. `--setup-gps` walks"
-            + " through the paid alternatives.", gps));
 
     String file = config.configFile.getName();
     ArrayList<Map<String, Object>> community = new ArrayList<>();
@@ -4986,34 +2972,6 @@ public class AdminRoutes {
         security));
 
     ArrayList<Map<String, Object>> parts = new ArrayList<>();
-    row(parts, "board.enabled", config.board.enabled, config.board.describe());
-    row(parts, "board.expiry-days", config.board.expiryDays,
-        "0 keeps threads forever; the default is that a thread has a life");
-    row(parts, "board.notification-days", config.board.notificationDays, "");
-    row(parts, "calendar.enabled", config.calendar.enabled, "");
-    row(parts, "calendar.past-days", config.calendar.pastDays, "how far back the calendar shows");
-    row(parts, "calendar.suggestions", config.calendar.suggestions,
-        "any approved member may put an event forward, into a queue");
-    row(parts, "calendar.invites", config.calendar.invites,
-        "send real calendar invitations; refused when inbound mail is off, because an answer has"
-            + " nowhere to come back to");
-    row(parts, "calendar.events-address",
-        config.calendar.eventsAddressOr(config.ses.from, config.domain),
-        "where an answer comes back to; derived from the sending address unless set");
-    row(parts, "calendar.events-name", config.calendar.eventsNameOr(config.name), "");
-    row(parts, "calendar.remind-days-before", config.calendar.remindDaysBefore.isEmpty() ? "off"
-        : config.calendar.remindDaysBefore.toString(),
-        "days before an event to nudge whoever has not answered");
-    row(parts, "calendar.attendance-days", config.calendar.attendanceDays, "");
-    row(parts, "availability.enabled", config.availability.enabled,
-        "the weekly grid of when people can come");
-    row(parts, "availability.refresh-hour", config.availability.refreshHour,
-        "the hour everybody's calendars are read, once a day");
-    row(parts, "availability.horizon-days", config.availability.horizonDays,
-        "how far ahead a busy block counts against an hour");
-    row(parts, "availability.max-links", config.availability.maxLinks,
-        "calendars one person may attach");
-    row(parts, "availability.fetch-timeout-seconds", config.availability.fetchTimeoutSeconds, "");
     row(parts, "attachments.enabled", config.attachments.enabled, "uploads at all");
     row(parts, "attachments.extensions", String.join(", ", config.attachments.extensions),
         "an allow list, and the only thing standing between an upload and this domain serving it");
@@ -5028,23 +2986,10 @@ public class AdminRoutes {
         config.attachments.allowedReferrers.isEmpty() ? "" 
             : String.join(", ", config.attachments.allowedReferrers),
         "other hosts allowed to embed these; this community's own never needs listing");
-    row(parts, "places.enabled", config.places.enabled, "");
-    row(parts, "places.label", config.places.label, "what the address book is called");
-    row(parts, "invites.enabled", config.invites.enabled, "");
-    row(parts, "invites.members-may-invite", config.invites.membersMayInvite, "");
-    row(parts, "invites.member-daily-limit", config.invites.memberDailyLimit, "0 means no limit");
-    row(parts, "invites.reminders", config.invites.remindersEnabled,
-        "three messages and the third says it is the last");
-    row(parts, "invites.reminder-after-days", config.invites.reminderAfterDays, "");
-    row(parts, "invites.apology-after-days", config.invites.apologyAfterDays, "");
     groups.add(group("The parts of the product", file,
         "Each of these also disappears entirely if its name is in `disabled`.", parts));
 
     ArrayList<Map<String, Object>> robots = new ArrayList<>();
-    row(robots, "api.enabled", config.api.enabled,
-        "a person's own token, in a program: the same powers they have here and nothing more");
-    row(robots, "api.token-days", config.api.tokenDays, "0 means a token never expires");
-    row(robots, "api.max-tokens", config.api.maxTokens, "how many one person may hold at once");
     row(robots, "mcp.enabled", config.mcp.enabled,
         "the model endpoint; the one thing here that is off until asked for");
     row(robots, "mcp.path", config.mcp.path, "");

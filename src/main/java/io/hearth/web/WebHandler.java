@@ -54,20 +54,9 @@ public class WebHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
   private final AdminRoutes admin;
   private final SelfRoutes self;
   private final io.hearth.mcp.McpRoutes mcp;
-  private final io.hearth.api.ApiRoutes api;
-  private final io.hearth.availability.AvailabilityRoutes availability;
   private final io.hearth.attach.AttachmentRoutes attachments;
-  private final io.hearth.board.BoardRoutes board;
-  private final io.hearth.calendar.CalendarRoutes calendar;
   private final PwaRoutes pwa;
-  private final io.hearth.places.PlaceRoutes places;
   private final io.hearth.legal.LegalRoutes legal;
-  private final io.hearth.people.MemberRoutes members;
-  private final io.hearth.people.SurveyRoutes survey;
-  private final io.hearth.tasks.TaskRoutes tasks;
-  private final HomeRoutes dashboard;
-  private final io.hearth.people.OrientationRoutes welcome;
-  private final io.hearth.live.LiveRoutes liveRoutes;
   private final ThirdParty thirdParty;
   private final ThemeRoutes theme;
   private final io.hearth.certs.Challenges challenges;
@@ -76,20 +65,9 @@ public class WebHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
 
   public WebHandler(DomainTree domains, AuthSystem auth, Pages pages, AccountRoutes accounts,
                     AdminRoutes admin, SelfRoutes self, io.hearth.mcp.McpRoutes mcp,
-                    io.hearth.api.ApiRoutes api,
-                    io.hearth.availability.AvailabilityRoutes availability,
                     io.hearth.attach.AttachmentRoutes attachments,
-                    io.hearth.board.BoardRoutes board,
-                    io.hearth.calendar.CalendarRoutes calendar,
                     PwaRoutes pwa,
-                    io.hearth.places.PlaceRoutes places,
                     io.hearth.legal.LegalRoutes legal,
-                    io.hearth.people.MemberRoutes members,
-                    io.hearth.people.SurveyRoutes survey,
-                    io.hearth.tasks.TaskRoutes tasks,
-                    HomeRoutes dashboard,
-                    io.hearth.people.OrientationRoutes welcome,
-                    io.hearth.live.LiveRoutes liveRoutes,
                     io.hearth.certs.Challenges challenges,
                     AccessLog accessLog, Verbose verbose) {
     this.domains = domains;
@@ -99,20 +77,9 @@ public class WebHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
     this.admin = admin;
     this.self = self;
     this.mcp = mcp;
-    this.api = api;
-    this.availability = availability;
     this.attachments = attachments;
-    this.board = board;
-    this.calendar = calendar;
     this.pwa = pwa;
-    this.places = places;
     this.legal = legal;
-    this.members = members;
-    this.survey = survey;
-    this.tasks = tasks;
-    this.dashboard = dashboard;
-    this.welcome = welcome;
-    this.liveRoutes = liveRoutes;
     this.thirdParty = new ThirdParty(verbose);
     this.theme = new ThemeRoutes(verbose);
     this.challenges = challenges;
@@ -178,27 +145,6 @@ public class WebHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
         Responses.send(ctx, req, HttpResponseStatus.OK, "text/plain",
             answer.getBytes(java.nio.charset.StandardCharsets.UTF_8));
       }
-      return;
-    }
-
-    // The invitation tracking pixel. Before the shield because it is a long random path, which is
-    // exactly what the shield drops -- and a mail client fetching it is not a browser, has no
-    // cookie, and gets exactly one transparent pixel whatever happens.
-    if (io.hearth.people.InvitePixel.isPixel(Forms.path(uri))) {
-      String token = io.hearth.people.InvitePixel.tokenOf(Forms.path(uri));
-      recorder.status(200);
-      Accounts pixelAccounts = host == null ? null : auth.forDomain(host);
-      if (pixelAccounts != null) {
-        try {
-          pixelAccounts.invites.markOpened(token);
-          verbose.detail("invite pixel fetched on " + host);
-        } catch (java.sql.SQLException ex) {
-          LOG.warn("invite-pixel-failed", ex);
-        }
-      }
-      Responses.send(ctx, req, HttpResponseStatus.OK, "image/gif",
-          io.hearth.people.InvitePixel.GIF,
-          new String[]{HttpHeaderNames.CACHE_CONTROL.toString(), "no-store, no-cache, must-revalidate"});
       return;
     }
 
@@ -350,64 +296,15 @@ public class WebHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
       mcp.handle(config, accountsForDomain, ctx, req, recorder);
       return;
     }
-    // A program's door, and the page a person makes its key on.
-    //
-    // After the approval gate, so somebody who has not been let in cannot mint one from the
-    // waiting page; before the "POST only to a form endpoint" refusal, because a bundle arrives as
-    // a POST with a JSON body to a path no form ever pointed at.
-    if (accountsForDomain != null && config.has(io.hearth.vhost.Surface.api)
-        && io.hearth.api.ApiRoutes.owns(path)) {
-      verbose.detail("api " + path + " on " + config.domain);
-      api.handle(config, accountsForDomain, ctx, req, recorder);
-      return;
-    }
     if (accountsForDomain != null && isAdminPath(config, path)) {
       verbose.detail("admin " + path + " on " + config.domain);
       admin.handle(config, accountsForDomain, ctx, req, recorder);
       return;
     }
 
-    // The live channel and the rooms. Before the board and after the approval gate: somebody who
-    // has not been let in yet gets the waiting page here exactly as they do everywhere else, and
-    // the scripts themselves are answered without a session because they are the same bytes for
-    // everybody.
-    if (io.hearth.live.LiveRoutes.owns(path)) {
-      verbose.detail("live " + path + " on " + config.domain);
-      liveRoutes.handle(config, accountsForDomain, ctx, req, recorder);
-      return;
-    }
-    if (accountsForDomain != null && config.has(io.hearth.vhost.Surface.tasks)
-        && io.hearth.tasks.TaskRoutes.owns(config, path)) {
-      verbose.detail("tasks " + path + " on " + config.domain);
-      tasks.handle(config, accountsForDomain, ctx, req, recorder);
-      return;
-    }
-    if (accountsForDomain != null && config.has(io.hearth.vhost.Surface.board) && io.hearth.board.BoardRoutes.owns(config, path)) {
-      verbose.detail("board " + path + " on " + config.domain);
-      board.handle(config, accountsForDomain, ctx, req, recorder);
-      return;
-    }
 
-    if (accountsForDomain != null && config.has(io.hearth.vhost.Surface.calendar)
-        && io.hearth.calendar.CalendarRoutes.owns(config, path)) {
-      verbose.detail("calendar " + path + " on " + config.domain);
-      calendar.handle(config, accountsForDomain, ctx, req, recorder);
-      return;
-    }
 
-    if (accountsForDomain != null && config.has(io.hearth.vhost.Surface.members)
-        && io.hearth.people.MemberRoutes.owns(config, path)) {
-      verbose.detail("members " + path + " on " + config.domain);
-      members.handle(config, accountsForDomain, ctx, req, recorder);
-      return;
-    }
 
-    if (accountsForDomain != null && config.has(io.hearth.vhost.Surface.places)
-        && io.hearth.places.PlaceRoutes.owns(config, path)) {
-      verbose.detail("places " + path + " on " + config.domain);
-      places.handle(config, accountsForDomain, ctx, req, recorder);
-      return;
-    }
 
     // The app shell, the manifest and the service worker. After the approval gate on purpose: an
     // unapproved person gets the waiting page in the shell exactly as they do on the site, rather
@@ -422,33 +319,6 @@ public class WebHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
     SiteUrls.Route route = config.routes.get(path);
     if (route == SiteUrls.Route.self && accountsForDomain != null) {
       self.handle(config, accountsForDomain, ctx, req, recorder);
-      return;
-    }
-    if (accountsForDomain != null && route == SiteUrls.Route.home) {
-      verbose.detail("home " + path + " on " + config.domain);
-      dashboard.handle(config, accountsForDomain, ctx, req, recorder);
-      return;
-    }
-    // The questions, and the welcome that starts them. Both are reachable by somebody who has not
-    // been approved yet -- they are two of the three things such a person can do, and the answers
-    // are most of what an admin reads before deciding.
-    if (accountsForDomain != null && config.has(io.hearth.vhost.Surface.survey)
-        && route == SiteUrls.Route.survey) {
-      verbose.detail("survey " + path + " on " + config.domain);
-      survey.handle(config, accountsForDomain, ctx, req, recorder);
-      return;
-    }
-    // when somebody can come, and -- for whoever plans things -- when everybody can. After the
-    // approval gate like the rest of the community: what it holds is a member's own week.
-    if (accountsForDomain != null && config.has(io.hearth.vhost.Surface.availability)
-        && route == SiteUrls.Route.availability) {
-      verbose.detail("availability " + path + " on " + config.domain);
-      availability.handle(config, accountsForDomain, ctx, req, recorder);
-      return;
-    }
-    if (accountsForDomain != null && route == SiteUrls.Route.orientation) {
-      verbose.detail("orientation " + path + " on " + config.domain);
-      welcome.handle(config, accountsForDomain, ctx, req, recorder);
       return;
     }
     // only the forms this class knows how to render. A section whose surface is switched off is
@@ -494,30 +364,6 @@ public class WebHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
         recorder.status(200);
         Responses.send(ctx, req, HttpResponseStatus.OK, "text/html; charset=utf-8",
             listing.html());
-        return;
-      }
-      // ...and then the community's own pages for what it already holds: the events, the address
-      // book, the members. Last, so a page somebody actually wrote always beats a pattern that
-      // wanted the same address.
-      io.hearth.content.Feeds.Viewer who = session == null
-          ? io.hearth.content.Feeds.Viewer.anonymous : io.hearth.content.Feeds.Viewer.member;
-      io.hearth.content.Feeds.Answer feed =
-          accountsForDomain.feeds.answer(path, Forms.queryString(uri), who);
-      if (feed.found()) {
-        verbose.detail(() -> "feed " + path + " -> 200 (" + feed.page().html().length + " bytes)");
-        recorder.status(200);
-        Responses.send(ctx, req, HttpResponseStatus.OK, "text/html; charset=utf-8",
-            feed.page().html());
-        return;
-      }
-      if (feed.needsMember()) {
-        // the page exists and they have to be somebody first. A 404 here would be a lie about a
-        // page that is on the community's own navigation, and the errand rides along.
-        verbose.detail(() -> "feed " + path + " needs a member -> the sign-in form");
-        recorder.status(303);
-        Responses.send(ctx, req, HttpResponseStatus.SEE_OTHER, null, Responses.EMPTY,
-            new String[]{HttpHeaderNames.LOCATION.toString(),
-                Landing.carry(config.urls.login, Landing.here(req))});
         return;
       }
     }
@@ -566,11 +412,6 @@ public class WebHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
     }
     if (io.hearth.legal.LegalRoutes.owns(path)) {
       // what somebody is agreeing to cannot be behind the approval they are waiting for
-      return true;
-    }
-    if (io.hearth.live.LiveRoutes.isScript(path)) {
-      // the same public bytes for everybody, and the page that needs them may be one an unapproved
-      // person is legitimately looking at
       return true;
     }
     if (PwaRoutes.owns(path)) {

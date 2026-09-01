@@ -346,24 +346,11 @@ public class McpRoutes {
                                                   UserRecord me) throws SQLException {
     boolean write = !config.mcp.readOnly;
     ArrayList<Map<String, Object>> powers = new ArrayList<>();
-    boolean board = config.has(io.hearth.vhost.Surface.board)
-        && accounts.access.can(me, io.hearth.auth.Permission.board_read);
-    if (board) {
-      powers.add(power("Read the discussion board", true));
-      powers.add(power("Post, reply and vote there as you", write
-          && accounts.access.can(me, io.hearth.auth.Permission.board_write)));
-    }
     boolean pages = accounts.access.can(me, io.hearth.auth.Permission.content_read);
-    powers.add(power(pages ? "Read your pages, templates and survey questions"
+    powers.add(power(pages ? "Read your pages and templates, including drafts"
         : "Read the pages everybody can read", true));
-    powers.add(power("Read everyone's survey answers, without names attached",
-        accounts.access.can(me, io.hearth.auth.Permission.survey_write)));
     powers.add(power("Create, change and delete pages and templates",
         write && accounts.access.can(me, io.hearth.auth.Permission.content_write)));
-    powers.add(power("Put events in the calendar",
-        write && accounts.access.can(me, io.hearth.auth.Permission.calendar_write)));
-    powers.add(power("Ask new survey questions and retire old ones",
-        write && accounts.access.can(me, io.hearth.auth.Permission.survey_write)));
     powers.add(power("See anything marked human only", false));
     powers.add(power("Read or change member accounts, emails or approvals", false));
     powers.add(power("Do anything here that you cannot do yourself", false));
@@ -470,8 +457,7 @@ public class McpRoutes {
     JsonNode id = body.get("id");
     String method = body.hasNonNull("method") ? body.get("method").asText() : "";
     AiSurface surface = new AiSurface(accounts, config.mcp.readOnly)
-        .withBoardExpiry(config.board.expiryDays)
-        .inCommunity(config, io.hearth.board.PollClock.forOneCommunity(verbose))
+        .inCommunity(config)
         .actingAs(me.id(), me.email());
     McpTools tools = new McpTools(surface);
 
@@ -561,13 +547,6 @@ public class McpRoutes {
       out.append(" You can read and shape the site's pages, templates and survey.");
     } else {
       out.append(" You can read what they can read.");
-    }
-    if (config.has(io.hearth.vhost.Surface.board)
-        && accounts.access.can(me, io.hearth.auth.Permission.board_write)) {
-      out.append(" You can take part in the discussion board as they would: read it, post, reply,"
-          + " put a vote to the group and vote in one. Vote what they actually think -- ask them"
-          + " rather than guessing, because a vote is the one thing here meant to be somebody's"
-          + " own.");
     }
     out.append(" If a tool refuses for want of a permission, tell them which one rather than"
         + " looking for another way round it.");

@@ -75,49 +75,9 @@ public class AmazonSes implements Mailer {
     return send(envelope, Messages.passwordChanged(envelope));
   }
 
-  @Override
-  public Outcome sendInvite(Envelope envelope, InviteMail.Invitation invitation) {
-    return send(envelope, Messages.invite(envelope, invitation));
-  }
 
-  @Override
-  public Outcome sendBoardNotice(Envelope envelope, Notice notice) {
-    return send(envelope, Messages.boardNotice(envelope, notice));
-  }
 
-  @Override
-  public Outcome sendDigest(Envelope envelope, Digest digest) {
-    return send(envelope, Messages.digest(envelope, digest));
-  }
 
-  @Override
-  public Outcome sendEventInvite(Envelope envelope, EventInvite invite) {
-    if (!config.enabled) {
-      return Outcome.failed("SES is not configured for " + envelope.domain());
-    }
-    Messages.Built message = Messages.eventInvite(envelope, invite);
-    try {
-      // Raw rather than Simple, because this message has a shape: `text/calendar` as a third
-      // alternative is what turns an email into accept/maybe/decline buttons, and the simple API
-      // can express a subject and two bodies and nothing else.
-      byte[] mime = Mime.withCalendar(fromLine(envelope), envelope.email(), message.subject(),
-          message.text(), message.html(), invite.ics(), invite.method(), "invite.ics",
-          io.hearth.auth.Tokens.newHandle());
-      ObjectNode request = JSON.createObjectNode();
-      request.put("FromEmailAddress", fromLine(envelope));
-      // the reply address is the one answers come back to, and for an invitation that is an address
-      // this server *receives* at rather than the one it sends from
-      request.putArray("ReplyToAddresses").add(invite.replyTo());
-      request.putObject("Destination").putArray("ToAddresses").add(envelope.email());
-      request.putObject("Content").putObject("Raw")
-          .put("Data", java.util.Base64.getEncoder().encodeToString(mime));
-      return post(envelope, message.subject(),
-          request.toString().getBytes(StandardCharsets.UTF_8));
-    } catch (Exception ex) {
-      LOG.error("ses-send-failed", ex);
-      return Outcome.failed("could not reach SES: " + ex.getMessage());
-    }
-  }
 
   /**
    * The one place a message actually leaves.

@@ -8,7 +8,6 @@ import io.hearth.certs.CertificateManager;
 import io.hearth.certs.Challenges;
 import io.hearth.certs.TlsContexts;
 import io.hearth.auth.AuthSystem;
-import io.hearth.board.Notifier;
 import io.hearth.auth.LoginSecurity;
 import io.hearth.cli.Args;
 import io.hearth.cli.Ask;
@@ -163,8 +162,6 @@ public class Server {
           done = setup.domain(args.domainSetup);
         } else if (args.setupEmail != null) {
           done = setup.email(args.setupEmail);
-        } else if (args.setupGps) {
-          done = setup.gps();
         } else {
           done = setup.testEmail(args.testEmailDomain, args.testEmailTo);
         }
@@ -271,25 +268,16 @@ public class Server {
     } else if (mailer.realCount() < scan.tree.all().size()) {
       Boot.warn("some domains have no provider; their codes print to this terminal");
     }
-    // one thread for the whole box: delivery is never on the request path, because a reply in a
-    // thread with forty watchers is forty signed requests to Amazon
-    Notifier notifier = new Notifier(auth, scan.tree.all(), mailer, io.hearth.sms.NoSms.INSTANCE,
-        verbose, 60, settings.smtp.enabled);
-
     Boot.section("mail in");
-    // a calendar reply first, and whatever it was not, printed. The order is the point: an Accept
-    // pressed in somebody's mail client has to become an RSVP without them opening the site.
-    io.hearth.places.Geocoder geocoder = settings.gps.build(verbose);
-    io.hearth.smtp.MailReceiver receiver = new io.hearth.smtp.CommunityMailReceiver(auth, scan.tree,
-        new io.hearth.smtp.TerminalMailReceiver(), geocoder, verbose);
+    // whatever arrives, printed. There is nothing here that turns a message into a row any more:
+    // the calendar went, and with it the one thing inbound mail was ever asked to act on.
+    io.hearth.smtp.MailReceiver receiver = new io.hearth.smtp.TerminalMailReceiver();
     io.hearth.smtp.SmtpServer smtp = new io.hearth.smtp.SmtpServer(settings.smtp, scan.tree,
         receiver, firstDomainOf(scan.tree), verbose);
     Boot.info("smtp", settings.smtp.describe());
-    Boot.info("geocoding", settings.gps.describe());
     if (settings.smtp.enabled) {
       Boot.info("routing", "only domains with a config file; this server never relays");
-      Boot.info("handling", "calendar replies become RSVPs, invitations become events;"
-          + " everything else prints here");
+      Boot.info("handling", "everything that arrives is printed here");
     }
 
     Boot.section("http");
@@ -297,48 +285,10 @@ public class Server {
     Pages pages = new Pages(templates);
     AccountRoutes accountRoutes = new AccountRoutes(templates, mailer, verbose);
     io.hearth.mcp.AiLog aiLog = new io.hearth.mcp.AiLog();
-    // one hub per community, wired to the event bus before the socket opens so a write from
-    // anywhere -- a browser, a model, the admin -- shows up live without that code knowing
-    io.hearth.live.Live live = io.hearth.live.Live.of(scan.tree.all().keySet(), events, verbose);
     AdminRoutes adminRoutes =
-        new AdminRoutes(templates, events, accessLog, aiLog, mailer, live,
-            settings.smtp.enabled, geocoder, settings, verbose);
-    SelfRoutes selfRoutes = new SelfRoutes(templates, mailer, accessLog, verbose);
+        new AdminRoutes(templates, events, accessLog, aiLog, mailer, settings, verbose);
+    SelfRoutes selfRoutes = new SelfRoutes(templates, accessLog, verbose);
     io.hearth.mcp.McpRoutes mcpRoutes = new io.hearth.mcp.McpRoutes(templates, aiLog, verbose);
-    io.hearth.api.ApiRoutes apiRoutes =
-        new io.hearth.api.ApiRoutes(templates, new io.hearth.web.Flash(), verbose);
-    // one grid per community, wired to the event bus before the socket opens and pulling calendars
-    // on its own thread: nothing about this may ever happen while somebody is waiting for a page
-    io.hearth.availability.Availabilities availabilities = io.hearth.availability.Availabilities.of(
-        scan.tree, auth, io.hearth.availability.CalendarFetch.overHttps(), events, verbose);
-    io.hearth.availability.AvailabilityRoutes availabilityRoutes =
-        new io.hearth.availability.AvailabilityRoutes(templates, availabilities, verbose);
-    adminRoutes.knowsAbout(availabilities);
-    // One queue for the whole box, because the rate limit is a property of this server as somebody
-    // else's client rather than of a community. Everything that wants an address turned into a
-    // point goes through it, slowly, out of the way of anybody waiting for a page.
-    io.hearth.async.AsyncQueue async = new io.hearth.async.AsyncQueue(verbose);
-    io.hearth.places.Geocodes geocodes =
-        new io.hearth.places.Geocodes(async, geocoder, auth, verbose);
-    adminRoutes.knowsAbout(geocodes);
-    selfRoutes.knowsAbout(geocodes);
-    // one sample a minute, on the pass that already wakes every minute: a second thread to read
-    // two files out of /proc would be a second thread
-    notifier.alsoEachPass(() -> adminRoutes.machine().sample());
-    // Polls whose moment has come: counted, and -- when they were about a date -- put in the
-    // calendar. On the pass rather than on a page load, because a vote that only closed when
-    // somebody happened to look at it would close on Monday morning.
-    io.hearth.board.PollClock pollClock =
-        new io.hearth.board.PollClock(auth, scan.tree.all(), verbose);
-    notifier.alsoEachPass(() -> pollClock.sweep(System.currentTimeMillis()));
-    // and the same pass picks up anybody who said where they are and has not been placed yet. A
-    // bounded slice, because a community importing three hundred members at once should take the
-    // afternoon over it rather than the queue's whole capacity in one minute.
-    notifier.alsoEachPass(() -> {
-      for (String domain : scan.tree.all().keySet()) {
-        geocodes.sweep(domain, 25);
-      }
-    });
     // uploads: one directory under the root, one cache in front of it, and a ceiling taken from
     // the most generous community on the box -- the pipeline needs one number and cannot ask a
     // domain, so the largest wins and UploadGate keeps it to the upload path
@@ -354,23 +304,9 @@ public class Server {
     attachmentRoutes.sharesFlashWith(adminRoutes.flash());
     adminRoutes.knowsAbout(attachmentRoutes);
     Boot.info("attachments", attachmentFiles.describe());
-    io.hearth.board.BoardRoutes boardRoutes = new io.hearth.board.BoardRoutes(templates, verbose);
-    io.hearth.calendar.CalendarRoutes calendarRoutes =
-        new io.hearth.calendar.CalendarRoutes(templates, verbose);
     io.hearth.web.PwaRoutes pwaRoutes = new io.hearth.web.PwaRoutes(templates, verbose);
-    io.hearth.places.PlaceRoutes placeRoutes =
-        new io.hearth.places.PlaceRoutes(templates, verbose);
     io.hearth.legal.LegalRoutes legalRoutes =
         new io.hearth.legal.LegalRoutes(templates, verbose);
-    io.hearth.live.LiveRoutes liveRoutes = new io.hearth.live.LiveRoutes(live, verbose);
-    io.hearth.people.MemberRoutes memberRoutes =
-        new io.hearth.people.MemberRoutes(templates, verbose);
-    io.hearth.people.SurveyRoutes surveyRoutes =
-        new io.hearth.people.SurveyRoutes(templates, verbose);
-    io.hearth.tasks.TaskRoutes taskRoutes = new io.hearth.tasks.TaskRoutes(templates, verbose);
-    io.hearth.web.HomeRoutes homeRoutes = new io.hearth.web.HomeRoutes(templates, verbose);
-    io.hearth.people.OrientationRoutes orientationRoutes =
-        new io.hearth.people.OrientationRoutes(templates, verbose);
     Challenges challenges = new Challenges();
     CertificateManager certificates = null;
     TlsContexts tls = null;
@@ -423,16 +359,13 @@ public class Server {
     }
 
     WebServer server = new WebServer(webConfig, scan.tree, auth, pages, accountRoutes, adminRoutes,
-        selfRoutes, mcpRoutes, apiRoutes, availabilityRoutes, attachmentRoutes, boardRoutes, calendarRoutes, pwaRoutes, placeRoutes, legalRoutes, memberRoutes, surveyRoutes, taskRoutes,
-        homeRoutes, orientationRoutes, liveRoutes, challenges, tlsContexts, accessLog, verbose);
+        selfRoutes, mcpRoutes, attachmentRoutes, pwaRoutes, legalRoutes,
+        challenges, tlsContexts, accessLog, verbose);
     Runtime.getRuntime().addShutdownHook(new Thread(() -> {
       Boot.step("shutting down");
       if (certManager != null) {
         certManager.shutdown();
       }
-      notifier.shutdown();
-      availabilities.shutdown();
-      async.close();
       smtp.shutdown();
       server.shutdown();
       auth.close();
@@ -444,11 +377,8 @@ public class Server {
     // plus what the community decided, before the socket opens. Nothing is serving yet, so the
     // first request already sees the community's own answers rather than the file's.
     auth.applyAllSettings(verbose);
-    notifier.start();
-    async.start();
     // after the databases are open, so the first build has something to read, and before the socket
     // is accepting, so nobody waits on it
-    availabilities.start();
     Thread listener = new Thread(server, "web-server");
     listener.start();
     if (!server.waitForReady(10000)) {

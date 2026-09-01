@@ -6,8 +6,6 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.hearth.auth.Accounts;
 import io.hearth.auth.SessionRecord;
 import io.hearth.auth.UserRecord;
-import io.hearth.board.Board;
-import io.hearth.calendar.Calendar;
 import io.hearth.store.Schema;
 
 import java.sql.Connection;
@@ -87,67 +85,13 @@ public final class DataExport {
     written.put("links", profile.links());
     written.put("orientation_step", profile.orientationStep());
 
-    // The private half, which is in here precisely because it is private. The policy promises to
-    // show somebody everything held about them, and the one field nobody else can read is the one
-    // field a person is most entitled to see a copy of.
-    Home home = accounts.people.homeOf(person.id());
-    ObjectNode where = root.putObject("your_address");
-    if (forSelf) {
-      where.put("note", "You are the only person who can read this. It is never shown on your"
-          + " profile, in the members list, to an administrator, or to anything automated. The only"
-          + " thing derived from it is your distance from a proposed venue, counted into a chart of"
-          + " distances that carries no names.");
-      where.put("address", home.address());
-      where.put("latitude", home.latitude());
-      where.put("longitude", home.longitude());
-      where.put("how_exact", home.precision());
-      where.put("how_it_went", home.placement().word());
-      where.put("looked_up_at", stamp(home.triedAt()));
-    } else {
-      where.put("note", "Withheld. Only the person themselves can read their address, and this"
-          + " copy was not made by them. They have " + (home.hasAddress() ? "given one." : "not"
-          + " given one."));
-      where.put("counted_in_travel_charts", home.hasPoint());
-    }
 
-    ArrayNode answers = root.putArray("answers");
-    AnswerSheet sheet = accounts.people.answersOf(person.id());
-    for (Question question : accounts.people.allQuestions()) {
-      String answer = sheet.answerTo(question.id());
-      if (answer == null || answer.isBlank()) {
-        continue;
-      }
-      ObjectNode row = answers.addObject();
-      row.put("question", question.prompt());
-      row.put("answer", answer);
-    }
 
     ArrayNode roles = root.putArray("roles");
     for (String role : accounts.roles.of(person.id())) {
       roles.add(role);
     }
 
-    // Their log, in full, because it is theirs and nobody else can read it. This is the one part
-    // of an export that cannot be reconstructed from anything on a screen, so leaving it out would
-    // make the policy's "a copy you can take elsewhere" untrue for the thing people would most
-    // want to take.
-    ArrayNode logged = root.putArray("what_you_recorded");
-    for (io.hearth.tasks.Records.Entry entry : accounts.tasks.recentFor(person.id(), 5000)) {
-      ObjectNode row = logged.addObject();
-      io.hearth.tasks.Records.Def def = entry.defId() == null ? null
-          : accounts.tasks.def(entry.defId());
-      row.put("what", def == null ? null : def.name());
-      row.put("said", def == null ? null : entry.describe(def.measure()));
-      row.put("weight", entry.weight());
-      row.put("reps", entry.reps());
-      row.put("seconds", entry.seconds());
-      row.put("distance", entry.distance());
-      row.put("difficulty", entry.difficulty());
-      row.put("time_cost", entry.timeCost());
-      row.put("impact", entry.impact());
-      row.put("note", entry.note());
-      row.put("at", entry.recordedAt().toInstant().toString());
-    }
 
     ArrayNode sessions = root.putArray("sessions");
     for (SessionRecord session : accounts.sessions.activeFor(person.id())) {
@@ -160,71 +104,6 @@ public final class DataExport {
       row.put("connector", session.agent());
     }
 
-    ArrayNode posts = root.putArray("posts");
-    for (Board.Post post : accounts.board.all(2000)) {
-      if (post.authorId() != person.id()) {
-        continue;
-      }
-      ObjectNode row = posts.addObject();
-      row.put("title", post.title());
-      row.put("body", post.body());
-      row.put("written", stamp(post.createdAt()));
-      row.put("removed", post.removed());
-    }
-
-    ArrayNode comments = root.putArray("comments");
-    commentsOf(accounts, person.id(), comments);
-
-    ArrayNode events = root.putArray("events_you_answered");
-    for (Calendar.Event event : accounts.calendar.all(2000)) {
-      Calendar.Rsvp rsvp = accounts.calendar.rsvpFor(event.id(), person.id());
-      if (rsvp == null) {
-        continue;
-      }
-      ObjectNode row = events.addObject();
-      row.put("event", event.title());
-      row.put("day", String.valueOf(event.startsOn()));
-      row.put("answer", rsvp.answer().name());
-      row.put("bringing", rsvp.party() - 1);
-      row.put("note", rsvp.note());
-    }
-
-    // and anything they said about an event before they had an account here, which is held
-    // against their address rather than against them and is theirs all the same
-    ArrayNode outside = root.putArray("events_you_answered_before_joining");
-    for (Calendar.Event event : accounts.calendar.all(2000)) {
-      Calendar.Outsider guest = accounts.calendar.outsiderFor(event.id(), person.email());
-      if (guest == null) {
-        continue;
-      }
-      ObjectNode row = outside.addObject();
-      row.put("event", event.title());
-      row.put("day", String.valueOf(event.startsOn()));
-      row.put("answer", guest.answer().name());
-      row.put("name_your_calendar_sent", guest.name());
-      row.put("became_a_member_answer", guest.converted());
-    }
-
-    ArrayNode when = root.putArray("when_you_said_you_can_come");
-    for (io.hearth.availability.Availability.Window window
-        : accounts.availability.windowsFor(person.id())) {
-      ObjectNode row = when.addObject();
-      row.put("day", window.day().name());
-      row.put("from", window.from());
-      row.put("to", window.to());
-      row.put("note", window.note());
-    }
-    // the addresses of their calendars, which are frequently secrets and are theirs. What those
-    // calendars said is not exported, because it is not kept: this server reads busy times and
-    // keeps two numbers per block, never a title.
-    ArrayNode calendars = root.putArray("calendars_you_linked");
-    for (io.hearth.availability.Availability.Link link
-        : accounts.availability.linksFor(person.id())) {
-      ObjectNode row = calendars.addObject();
-      row.put("label", link.label());
-      row.put("url", link.url());
-      row.put("added", stamp(link.createdAt()));
-    }
 
     ArrayNode uploads = root.putArray("files_you_uploaded");
     for (io.hearth.attach.Attachments.Attachment file
@@ -237,66 +116,9 @@ public final class DataExport {
       row.put("uploaded", stamp(file.createdAt()));
     }
 
-    ArrayNode invitations = root.putArray("invitations_you_sent");
-    for (Invites.Invite invite : accounts.invites.all(2000)) {
-      if (invite.createdBy() == null || invite.createdBy() != person.id()) {
-        continue;
-      }
-      ObjectNode row = invitations.addObject();
-      row.put("to", invite.email());
-      row.put("sent", stamp(invite.sentAt()));
-      row.put("stage", invite.stage());
-    }
-
-    ArrayNode notes = root.putArray("notifications");
-    for (io.hearth.board.Inbox.Note note : accounts.inbox.forUser(person.id(), 1000)) {
-      ObjectNode row = notes.addObject();
-      row.put("text", note.text());
-      row.put("when", stamp(note.createdAt()));
-      row.put("unread", note.unread());
-    }
-
-    io.hearth.board.NotifyPrefs.Prefs prefs = accounts.notifyPrefs.forUser(person.id());
-    ObjectNode settings = root.putObject("notification_settings");
-    settings.put("replies_to_threads_you_watch", prefs.replyMode().name());
-    settings.put("replies_to_you", prefs.responseMode().name());
-    settings.put("by_email", prefs.email());
-    settings.put("phone", prefs.phone());
-
-    try {
-      return JSON.writerWithDefaultPrettyPrinter().writeValueAsBytes(root);
-    } catch (com.fasterxml.jackson.core.JsonProcessingException ex) {
-      // a tree we built ourselves out of strings and numbers; this cannot happen
-      throw new IllegalStateException("could not write the export", ex);
-    }
+    return root.toPrettyString().getBytes(java.nio.charset.StandardCharsets.UTF_8);
   }
 
-  /**
-   * Their comments, by a query rather than by walking every thread.
-   *
-   * The board's own reader is organised around a conversation -- give it a subject and it returns
-   * the tree. Nothing needed "everything one person said" until somebody asked for their own copy,
-   * and doing it by loading every thread would be one query per post on a page nobody looks at
-   * twice.
-   */
-  private static void commentsOf(Accounts accounts, long userId, ArrayNode into)
-      throws SQLException {
-    try (Connection connection = accounts.store.connection();
-         PreparedStatement statement = connection.prepareStatement(
-             "SELECT subject_kind, subject_id, body, created_at, removed_at FROM "
-                 + Schema.COMMENTS + " WHERE author_id = ? ORDER BY created_at")) {
-      statement.setLong(1, userId);
-      try (ResultSet rows = statement.executeQuery()) {
-        while (rows.next()) {
-          ObjectNode row = into.addObject();
-          row.put("on", rows.getString("subject_kind") + " " + rows.getLong("subject_id"));
-          row.put("body", rows.getString("body"));
-          row.put("written", stamp(rows.getTimestamp("created_at")));
-          row.put("removed", rows.getTimestamp("removed_at") != null);
-        }
-      }
-    }
-  }
 
   private static String stamp(Timestamp when) {
     return when == null ? null : java.time.Instant.ofEpochMilli(when.getTime()).toString();

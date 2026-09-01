@@ -54,64 +54,7 @@ public enum SystemTemplate {
       "Your {{community}} code",
       "One more step to sign in to {{community}}.",
       "Use this code to finish. It is good for {{minutes}} minutes.",
-      "code", "minutes"),
-
-  invite_welcome("An invitation",
-      "{{inviter}} invited you to {{community}}",
-      "{{inviter}} invited you to join {{community}}.",
-      "{{about}}",
-      "inviter", "about", "tagline", "link"),
-
-  invite_reminder("The second invitation",
-      "Still a place for you at {{community}}",
-      "A little while ago you were invited to {{community}}. The invitation is still open -- this"
-          + " is just in case it got buried.",
-      "{{about}}",
-      "inviter", "about", "tagline", "link"),
-
-  invite_apology("The last invitation",
-      "Last note from {{community}}",
-      "Sorry to write again. This is the last one, and then we will leave you alone: your"
-          + " invitation to {{community}} is still there if you want it.",
-      "{{about}}",
-      "inviter", "about", "tagline", "link"),
-
-  board_notice("A reply on the board",
-      "{{who}} {{what}} on {{community}}",
-      "{{who}} {{what}}.",
-      "",
-      "who", "what", "excerpt", "link"),
-
-  digest("The daily or weekly summary",
-      "{{count}} new on {{community}} {{period}}",
-      "Here is what happened {{period}}.",
-      "",
-      "count", "period", "link"),
-
-  event_invite("A calendar invitation",
-      "{{title}} -- {{when}}",
-      "You are invited to {{title}}, {{when}}.",
-      "Everybody at {{community}} is welcome. Answering from your calendar is enough -- it comes"
-          + " straight back to us, and everybody can see who is coming.",
-      "title", "when", "where", "details", "link"),
-
-  event_changed("An event that moved",
-      "Changed: {{title}} -- {{when}}",
-      "{{title}} has moved. It is now {{when}}.",
-      "Your calendar should be showing this invitation again. Answering from it is enough.",
-      "title", "when", "where", "details", "link"),
-
-  event_cancelled("An event called off",
-      "Cancelled: {{title}}",
-      "{{title}} is not happening.",
-      "Sorry. It should disappear from your calendar on its own.",
-      "title", "when", "where", "details", "link"),
-
-  event_reminder("A nudge about an event",
-      "{{title}} -- {{when}}",
-      "{{title}} is {{when}} and we have not heard from you yet.",
-      "A no is as useful as a yes -- it is how anybody knows how many chairs to put out.",
-      "title", "when", "where", "details", "link");
+      "code", "minutes");
 
   /** what an operator calls it on the screen */
   public final String label;
