@@ -38,6 +38,7 @@ public final class AdminView {
     directories("templates/directories", "Directories", "logs", content,
         Permission.templates_write),
     navigation("navigation", "Navigation", "logs", content, Permission.navigation_write),
+    tables("tables", "Tables", "logs", content, Permission.tables_write),
     attachments("attachments", "Files", "content", content, Permission.attachments_write),
     bundles("content/bundles", "Import & export", "logs", content, Permission.content_write),
     unused("attachments/unused", "Unused files", "x", attachments, Permission.attachments_write),

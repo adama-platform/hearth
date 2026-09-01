@@ -348,7 +348,7 @@ public class WebHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
 
     // a page from the content table, if one answers this path
     if (accountsForDomain != null) {
-      Site.Rendered page = accountsForDomain.site.page(path);
+      Site.Rendered page = accountsForDomain.site.page(path, pageContext(accountsForDomain, req));
       if (page != null) {
         verbose.detail(() -> "content " + path + " -> 200 (" + page.html().length + " bytes)");
         recorder.status(200);
@@ -406,6 +406,35 @@ public class WebHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
    * The admin section is on the list because it does its own, stricter check -- an unapproved person
    * gets a 404 from it, which is the same answer everybody who is not an admin gets.
    */
+  /**
+   * What a dynamic page on this domain may reach, for this one request.
+   *
+   * Built per request because both halves are per request: the query string is, and the set of
+   * tables is whatever the community has right now. A domain whose data file would not open gets
+   * the empty context -- its pages still render, they just have no tables, which is a far better
+   * outcome than the site being down because somebody's table would not load.
+   */
+  private static Site.PageContext pageContext(io.hearth.auth.Accounts accounts,
+                                              FullHttpRequest req) {
+    if (accounts.tables == null) {
+      return Site.PageContext.NONE;
+    }
+    io.hearth.tables.TableBindings bindings =
+        new io.hearth.tables.TableBindings(accounts.tables);
+    String prologue = bindings.prologue(Forms.queryParameters(req.uri()));
+    return new Site.PageContext() {
+      @Override
+      public String prologue() {
+        return prologue;
+      }
+
+      @Override
+      public io.hearth.js.JavaScript.Host host() {
+        return bindings;
+      }
+    };
+  }
+
   private static boolean isAlwaysReachable(DomainConfig config, String path) {
     if (isAdminPath(config, path) || io.hearth.mcp.McpRoutes.owns(config, path)) {
       return true;

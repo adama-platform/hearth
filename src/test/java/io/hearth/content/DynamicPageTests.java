@@ -233,31 +233,82 @@ public class DynamicPageTests {
   }
 
   /**
-   * An agent cannot write one, and is not told the kind exists.
+   * An agent may write a program, and is told exactly what one can do.
    *
-   * This is the sharpest edge the dynamic kind added. An agent acts as the person who connected
-   * it, that person may well hold content_write, and "write me an about page" must not be a route
-   * to running code on this server. Both directions are checked: it cannot create one, and it
-   * cannot convert a document it is allowed to edit into one.
+   * This reverses the rule the kind shipped with, and the reversal is the interesting part. The
+   * original refusal was about blast radius -- "write me an about page" must not become a way to
+   * get code executed. What changed is that the radius is now drawn and small: a program gets
+   * render, meta, query and this community's declared table functions, no network, no writes, one
+   * second, a fresh isolate. There is nothing in that list an agent can reach that a page it wrote
+   * in HTML could not, and the source sits in the content table, versioned, readable back.
+   *
+   * The guidance is asserted here too, because a capability a model has to guess at is one it will
+   * guess wrong: `site_spec` has to name the functions rather than describe them in prose.
    */
   @Test
-  public void anAgentCannotWriteAProgram() throws Exception {
+  public void anAgentCanWriteAProgramAndIsToldHowItWorks() throws Exception {
     io.hearth.testkit.McpClient grok =
         new io.hearth.testkit.McpClient(server.port, "example.org")
             .connect(admin, "https://grok.com/connectors/callback");
 
-    String refusal = grok.call("content_save", "uri", "/agent-code",
-        "kind", "javascript", "body", "render('hi');").refusal();
-    assertTrue(refusal, refusal.contains("runs code on the server"));
-    assertEquals("and nothing was written", null,
-        server.auth.forDomain("example.org").site.store().byUri("/agent-code"));
+    grok.call("content_save", "uri", "/agent-made", "kind", "javascript",
+        "published", true, "body", "meta('title','By a model'); render('<p>hello</p>');");
 
-    saveProgram("/mine", "render('mine');");
-    String second = grok.call("content_save", "uri", "/mine", "body", "just words").refusal();
-    assertTrue(second, second.contains("only a person"));
+    assertEquals("javascript",
+        server.auth.forDomain("example.org").site.store().byUri("/agent-made").kind().name());
+    Browser.Page page = visitor().get("/agent-made");
+    assertEquals(200, page.status());
+    assertTrue(page.body(), page.contains("<p>hello</p>"));
 
     String spec = grok.call("site_spec").toolResult().toString();
-    assertFalse("a kind it may never use is not advertised", spec.contains("javascript"));
+    assertTrue("the kind is advertised", spec.contains("javascript"));
+    assertTrue("and the two functions that build a page", spec.contains("render(text)"));
+    assertTrue(spec, spec.contains("meta(key, value)"));
+    assertTrue("and the one that reads the request", spec.contains("query(name)"));
+    assertTrue("and what is deliberately absent", spec.contains("no fetch"));
+  }
+
+  /**
+   * The guidance names this community's own tables, and is generated rather than written down.
+   *
+   * A model told about a function that does not exist writes a page that throws on its first line,
+   * so the list has to come from the catalogue every time it is asked for.
+   */
+  @Test
+  public void theGuidanceNamesTheTablesThatExistRightNow() throws Exception {
+    io.hearth.testkit.McpClient grok =
+        new io.hearth.testkit.McpClient(server.port, "example.org")
+            .connect(admin, "https://grok.com/connectors/callback");
+
+    assertFalse(grok.call("site_spec").toolResult().toString().contains("rsvps_get_id"));
+
+    server.auth.forDomain("example.org").tables.create(new io.hearth.tables.UserTable("rsvps",
+        java.util.List.of(new io.hearth.tables.UserField("who",
+            io.hearth.tables.UserField.Type.text, false)),
+        java.util.List.of("who")), null);
+
+    String spec = grok.call("site_spec").toolResult().toString();
+    assertTrue("the table appears the moment it exists", spec.contains("rsvps_get_id(id)"));
+    assertTrue("with the index that was declared", spec.contains("rsvps_list_who(value)"));
+    assertTrue("and the shape of a row", spec.contains("\"who\":\"a string\""));
+    assertTrue("and that a page cannot write to it", spec.contains("no way to write a table"));
+  }
+
+  @Test
+  public void anAgentStillCannotTouchAHumanOnlyProgram() throws Exception {
+    saveProgram("/locked", "render('mine');");
+    admin.get("/admin/content");
+    long id = server.auth.forDomain("example.org").site.store().byUri("/locked").id();
+    admin.submitTo("/admin/content", Map.of("action", "save", "id", String.valueOf(id),
+        "uri", "/locked", "title", "Stored title", "kind", "javascript", "template_name", "",
+        "published", "on", "human_only", "on", "body", "render('mine');"));
+
+    io.hearth.testkit.McpClient grok =
+        new io.hearth.testkit.McpClient(server.port, "example.org")
+            .connect(admin, "https://grok.com/connectors/callback");
+    String refusal = grok.call("content_save", "uri", "/locked",
+        "kind", "javascript", "body", "render('theirs');").refusal();
+    assertTrue(refusal, refusal.contains("human only"));
   }
 
   @Test

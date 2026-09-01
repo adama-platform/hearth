@@ -223,6 +223,7 @@ public class AdminRoutes {
         case ai -> actOnConnector(accounts, form, me);
         case roles -> actOnRole(accounts, form, me);
         case cleanup -> actOnCleanup(accounts, form, me);
+        case tables -> actOnTable(config, accounts, form, me);
         default -> Outcome.refused("That is not something this page can do.");
       };
     }
@@ -909,6 +910,7 @@ public class AdminRoutes {
       case analytics -> analytics(model, config);
       case caching -> model.put("capacity", accessLog.capacity());
       case cleanup -> cleanup(model, accounts);
+      case tables -> tablesSection(model, accounts, config, req);
       case logs -> {
         model.put("q", orEmpty(Forms.query(req.uri(), "q")));
         model.put("errorsOnly", "1".equals(Forms.query(req.uri(), "errors")));
@@ -1206,6 +1208,26 @@ public class AdminRoutes {
 
 
 
+  /** every table this community has, with the functions it gives a page; `[]` when there are none */
+  private static String tablesJson(Accounts accounts) {
+    ArrayList<Map<String, Object>> tables = new ArrayList<>();
+    if (accounts.tables != null) {
+      for (io.hearth.tables.UserTable table : accounts.tables.all()) {
+        LinkedHashMap<String, Object> one = new LinkedHashMap<>();
+        one.put("table", table.name());
+        one.put("functions", table.functions());
+        ArrayList<String> shape = new ArrayList<>();
+        shape.add("id");
+        for (io.hearth.tables.UserField field : table.fields()) {
+          shape.add(field.name());
+        }
+        one.put("shape", String.join(", ", shape));
+        tables.add(one);
+      }
+    }
+    return io.hearth.tables.UserTables.toJson(tables);
+  }
+
   private void contentPanel(Map<String, Object> model, Accounts accounts, DomainConfig config,
                             FullHttpRequest req) throws SQLException {
     String query = orEmpty(Forms.query(req.uri(), "q")).toLowerCase(Locale.ROOT);
@@ -1310,6 +1332,166 @@ public class AdminRoutes {
     model.put("actions", rows);
     model.put("anyActions", !rows.isEmpty());
     model.put("count", rows.size());
+  }
+
+  /**
+   * The tables this community invented, and the editor for one of them.
+   *
+   * `/admin/tables` lists them; `/admin/tables/edit/<name>` is one table's own page and
+   * `/admin/tables/new` is a blank one -- identity in the path, because a listing is not a form.
+   *
+   * The screen leads with the JavaScript each table produces rather than with its columns, because
+   * that is the thing somebody came here to find out. A table is a means; the four functions are
+   * the feature.
+   */
+  private void tablesSection(Map<String, Object> model, Accounts accounts, DomainConfig config,
+                             FullHttpRequest req) {
+    // the listing only; `/admin/tables/new` and `/admin/tables/edit/<name>` are parsed as a
+    // create and an edit by AdminView and land in formModel, like every other section's editor
+    String prefix = AdminView.Section.tables.path(config);
+    model.put("newUrl", prefix + "/new");
+    model.put("backUrl", prefix);
+    if (accounts.tables == null) {
+      model.put("unavailable", true);
+      model.put("tables", new ArrayList<>());
+      model.put("any", false);
+      return;
+    }
+    ArrayList<Map<String, Object>> rows = new ArrayList<>();
+    for (io.hearth.tables.UserTable table : accounts.tables.all()) {
+      LinkedHashMap<String, Object> row = new LinkedHashMap<>();
+      row.put("name", table.name());
+      row.put("fields", table.fields().size());
+      row.put("indexes", String.join(", ", table.indexes()));
+      row.put("anyIndexes", !table.indexes().isEmpty());
+      long count;
+      try {
+        count = accounts.tables.count(table.name());
+      } catch (SQLException ex) {
+        count = -1;
+      }
+      row.put("rows", count < 0 ? "?" : String.valueOf(count));
+      row.put("functions", table.functions());
+      row.put("editUrl", prefix + "/edit/" + table.name());
+      rows.add(row);
+    }
+    model.put("tables", rows);
+    model.put("any", !rows.isEmpty());
+    model.put("count", rows.size());
+    model.put("file", accounts.tables.file().getName() + ".mv.db");
+  }
+
+  /** the editor for one table, or a blank one */
+  private void tableForm(Map<String, Object> model, Accounts accounts,
+                         io.hearth.tables.UserTable table) {
+    model.put("editing", table != null);
+    model.put("heading", table == null ? "A new table" : "Table: " + table.name());
+    model.put("form_name", table == null ? "" : table.name());
+    ArrayList<Map<String, Object>> fields = new ArrayList<>();
+    if (table != null) {
+      for (io.hearth.tables.UserField field : table.fields()) {
+        LinkedHashMap<String, Object> one = new LinkedHashMap<>();
+        one.put("name", field.name());
+        one.put("type", field.type().name());
+        one.put("indexed", table.hasIndex(field.name()));
+        one.put("types", typeOptions(field.type()));
+        fields.add(one);
+      }
+    }
+    model.put("fields", fields);
+    model.put("anyFields", !fields.isEmpty());
+    model.put("blankTypes", typeOptions(io.hearth.tables.UserField.Type.text));
+    model.put("functions", table == null ? new ArrayList<>() : table.functions());
+    model.put("rowCount", rowCountOf(accounts, table));
+  }
+
+  private static String rowCountOf(Accounts accounts, io.hearth.tables.UserTable table) {
+    if (table == null || accounts.tables == null) {
+      return "0";
+    }
+    try {
+      return String.valueOf(accounts.tables.count(table.name()));
+    } catch (SQLException ex) {
+      return "?";
+    }
+  }
+
+  private static List<Map<String, Object>> typeOptions(io.hearth.tables.UserField.Type selected) {
+    ArrayList<Map<String, Object>> options = new ArrayList<>();
+    for (io.hearth.tables.UserField.Type type : io.hearth.tables.UserField.Type.values()) {
+      LinkedHashMap<String, Object> one = new LinkedHashMap<>();
+      one.put("value", type.name());
+      one.put("label", type.label);
+      one.put("selected", type == selected);
+      options.add(one);
+    }
+    return options;
+  }
+
+  /**
+   * Create, change or drop one table.
+   *
+   * The whole field list arrives on every save, which makes this a replace rather than a merge --
+   * correct here and the opposite of the rule for a page's declared values, because the form always
+   * shows every field. A field missing from the submission is a field somebody removed, and
+   * `alter` says so in the confirmation rather than doing it quietly.
+   */
+  private Outcome actOnTable(DomainConfig config, Accounts accounts, Forms form, UserRecord me)
+      throws SQLException {
+    if (accounts.tables == null) {
+      return Outcome.refused("This community's data file could not be opened.");
+    }
+    String action = String.valueOf(form.get("action"));
+    String name = io.hearth.tables.UserTable.normalize(form.get("name"));
+    try {
+      if (action.equals("drop")) {
+        long held = accounts.tables.count(name);
+        accounts.tables.drop(name, me.id());
+        verbose.detail("admin: " + me.email() + " dropped the table " + name);
+        return Outcome.done(name + " is gone, with " + held + " row(s) in it.",
+            site -> AdminView.Section.tables.path(site));
+      }
+      if (!action.equals("save")) {
+        return Outcome.refused("That is not something this page can do.");
+      }
+      Outcome oversized = oversized(form);
+      if (oversized != null) {
+        return oversized;
+      }
+      ArrayList<io.hearth.tables.UserField> fields = new ArrayList<>();
+      ArrayList<String> indexes = new ArrayList<>();
+      for (int k = 0; k < io.hearth.tables.UserTable.MAX_FIELDS; k++) {
+        String fieldName = io.hearth.tables.UserTable.normalize(form.get("f_name_" + k));
+        if (fieldName.isEmpty()) {
+          continue;
+        }
+        io.hearth.tables.UserField.Type type =
+            io.hearth.tables.UserField.Type.of(form.get("f_type_" + k));
+        if (type == null) {
+          return Outcome.refused("'" + fieldName + "' has no type this server knows.");
+        }
+        fields.add(new io.hearth.tables.UserField(fieldName, type, false));
+        if (form.get("f_index_" + k) != null) {
+          indexes.add(fieldName);
+        }
+      }
+      io.hearth.tables.UserTable wanted =
+          new io.hearth.tables.UserTable(name, fields, indexes);
+      boolean exists = accounts.tables.byName(name) != null;
+      if (exists) {
+        List<String> done = accounts.tables.alter(wanted, me.id());
+        return Outcome.done(done.isEmpty()
+                ? name + " is unchanged."
+                : name + ": " + String.join(", ", done) + ".",
+            site -> AdminView.Section.tables.path(site) + "/edit/" + name);
+      }
+      accounts.tables.create(wanted, me.id());
+      verbose.detail("admin: " + me.email() + " created the table " + name);
+      return Outcome.done(name + " is ready. Its functions are on this page.",
+          site -> AdminView.Section.tables.path(site) + "/edit/" + name);
+    } catch (io.hearth.tables.UserTables.Refused refused) {
+      return Outcome.refused(refused.getMessage());
+    }
   }
 
   /**
@@ -2293,6 +2475,8 @@ public class AdminRoutes {
                          UserRecord me, Map<String, Object> model, String id) throws SQLException {
     model.put("backUrl", section.path(config));
     switch (section) {
+      case tables -> tableForm(model, accounts,
+          accounts.tables == null ? null : accounts.tables.byName(id));
       case legal -> {
         LegalDoc doc = LegalDoc.bySlug(id);
         if (doc == null) {
@@ -2394,6 +2578,10 @@ public class AdminRoutes {
         // every template's fields, so changing the template swaps the right boxes in without
         // another round trip
         model.put("templateFieldsJson", templateFieldJson(accounts, page));
+        // what a program on this page could call, for the reference the editor shows. Rendered by
+        // the server because only the server knows which tables exist right now -- and carried in a
+        // script tag rather than interpolated into the script, per invariant 61.
+        model.put("tablesJson", tablesJson(accounts));
         model.put("wantsTemplate", page == null || page.kind().wantsTemplate());
         model.put("form_page_size", page == null ? ""
             : orEmpty(io.hearth.content.Site.fieldsOf(page).get("page_size")));

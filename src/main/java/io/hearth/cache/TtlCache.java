@@ -100,6 +100,31 @@ public class TtlCache<K, V> {
     return removed;
   }
 
+  /**
+   * Drop every entry whose *key* matches, which is the other half of {@link #invalidateIf}.
+   *
+   * The value predicate is right when the cache knows what it holds -- a rendered page carries the
+   * template it used, so "every page using this template" is answerable from the value. It is no
+   * use at all when the thing that changed is identified by the key and the value is an anonymous
+   * list of rows: the user tables cache keys entries by the question that produced them, so
+   * "everything about table `signups`" is a prefix and nothing else.
+   *
+   * Without this the only expressible sweep was `value -> true`, which clears the whole cache for
+   * every write to any table.
+   */
+  public int invalidateKeysIf(Predicate<K> doomed) {
+    int removed = 0;
+    for (Map.Entry<K, Entry<V>> entry : entries.entrySet()) {
+      if (doomed.test(entry.getKey())) {
+        if (entries.remove(entry.getKey(), entry.getValue())) {
+          removed++;
+        }
+      }
+    }
+    invalidations.addAndGet(removed);
+    return removed;
+  }
+
   public int clear() {
     int size = entries.size();
     entries.clear();

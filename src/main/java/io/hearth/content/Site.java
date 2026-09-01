@@ -126,7 +126,36 @@ public class Site {
    * lookups marginally cheaper and invalidation wrong -- dropping one key left the other serving a
    * stale page. One key per entry, and invalidation matches on the id inside the value.
    */
+  /**
+   * What a dynamic page is allowed to reach, supplied by whoever is serving the request.
+   *
+   * A seam rather than a dependency: {@code Site} knows how to render, and has no business knowing
+   * about user tables or query strings. The request path builds one of these and hands it in; every
+   * other caller passes {@link PageContext#NONE} and gets exactly what it got before.
+   */
+  public interface PageContext {
+    PageContext NONE = new PageContext() {
+      @Override
+      public String prologue() {
+        return "";
+      }
+
+      @Override
+      public io.hearth.js.JavaScript.Host host() {
+        return request -> "null";
+      }
+    };
+
+    String prologue();
+
+    io.hearth.js.JavaScript.Host host();
+  }
+
   public Rendered page(String uri) {
+    return page(uri, PageContext.NONE);
+  }
+
+  public Rendered page(String uri, PageContext context) {
     Rendered hit = rendered.get(uri);
     if (hit != null) {
       return hit;
@@ -135,7 +164,7 @@ public class Site {
     if (page == null || !page.published()) {
       return null;
     }
-    Rendered made = render(page);
+    Rendered made = render(page, context);
     // A program is run for every request that asks for it.
     //
     // Caching it would make "dynamic" a name for "rendered once per TTL", and it would make the
@@ -426,6 +455,10 @@ public class Site {
    * what makes "this one is 40ms" mean something.
    */
   Rendered render(ContentRecord page) {
+    return render(page, PageContext.NONE);
+  }
+
+  Rendered render(ContentRecord page, PageContext context) {
     long started = System.nanoTime();
     try {
       // a page reconstructed from history has no timestamp, and rendering must not depend on one
@@ -439,7 +472,7 @@ public class Site {
         case javascript -> null;   // handled below, because it also contributes to the model
         default -> page.body();
       };
-      String html = body == null ? runProgram(page) : wrap(page, body);
+      String html = body == null ? runProgram(page, context) : wrap(page, body);
       return new Rendered(page.id(), page.uri(), page.templateName(),
           html.getBytes(StandardCharsets.UTF_8), updatedAt);
     } catch (RuntimeException ex) {
@@ -459,8 +492,9 @@ public class Site {
    * an author looking at a blank screen has nothing to act on, and this is the one content kind
    * where the failure is theirs to fix.
    */
-  private String runProgram(ContentRecord page) {
-    io.hearth.js.JavaScript.Run run = io.hearth.js.JavaScript.shared().run(page.body());
+  private String runProgram(ContentRecord page, PageContext context) {
+    io.hearth.js.JavaScript.Run run = io.hearth.js.JavaScript.shared().run(page.body(),
+        new io.hearth.js.JavaScript.Page(context.prologue(), context.host()));
     if (run.failed()) {
       verbose.detail(() -> "content: " + page.uri() + " failed to run -- " + run.error());
       return wrap(page, "<p class=\"js-error\"><strong>This page did not run.</strong> "

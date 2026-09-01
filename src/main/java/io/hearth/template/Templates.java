@@ -62,7 +62,8 @@ public class Templates {
       "admin/legal", "admin/legal_form",
       "admin/messages", "admin/messages_form",
       "admin/attachments", "admin/attachments_panel", "admin/unused",
-      "admin/settings", "admin/cleanup");
+      "admin/settings", "admin/cleanup",
+      "admin/tables", "admin/tables_form");
 
   /**
    * Templates whose output is not HTML.

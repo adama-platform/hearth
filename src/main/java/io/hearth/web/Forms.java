@@ -201,6 +201,40 @@ public class Forms {
     }
   }
 
+  /**
+   * Every query parameter, first value wins.
+   *
+   * For a dynamic page, which is handed the whole query string rather than asking for one name at
+   * a time. Capped in two directions -- how many parameters and how long each is -- because this is
+   * the one place a request line becomes a JavaScript object, and a URL with four hundred
+   * parameters in it should cost the same as one with four.
+   */
+  public static java.util.Map<String, String> queryParameters(String uri) {
+    java.util.LinkedHashMap<String, String> out = new java.util.LinkedHashMap<>();
+    if (uri == null) {
+      return out;
+    }
+    try {
+      QueryStringDecoder decoder = new QueryStringDecoder(uri, StandardCharsets.UTF_8);
+      for (java.util.Map.Entry<String, List<String>> entry : decoder.parameters().entrySet()) {
+        if (out.size() >= 64) {
+          break;
+        }
+        List<String> values = entry.getValue();
+        if (values == null || values.isEmpty() || entry.getKey().length() > 64) {
+          continue;
+        }
+        String value = values.get(0);
+        if (value.length() <= MAX_FIELD_LENGTH) {
+          out.put(entry.getKey(), value);
+        }
+      }
+    } catch (IllegalArgumentException ex) {
+      return out;
+    }
+    return out;
+  }
+
   /** the path with any query string removed */
   public static String path(String uri) {
     String target = uri;

@@ -1,0 +1,39 @@
+{{<shell}}{{$content}}
+<h1>Tables</h1>
+<p class="hint">Somewhere for a dynamic page to keep things. Each table you make becomes a small set
+  of JavaScript functions &mdash; the only way a page can ask it anything, so every query is one
+  somebody wrote down.</p>
+
+{{#unavailable}}<p class="problem">This community's data file could not be opened, so there are no
+  tables. The site is serving normally; only this is affected.</p>{{/unavailable}}
+
+{{^unavailable}}
+<div class="doing"><a class="btn" href="{{newUrl}}">New table</a></div>
+
+{{^any}}<p class="hint">No tables yet.</p>{{/any}}
+{{#any}}
+<p class="count">{{count}} table(s), in <code>{{file}}</code></p>
+<table>
+  <thead><tr><th>table</th><th>fields</th><th>indexed</th><th>rows</th><th>what a page can call</th><th></th></tr></thead>
+  <tbody>{{#tables}}<tr>
+    <td class="mono"><a href="{{editUrl}}">{{name}}</a></td>
+    <td class="dim">{{fields}}</td>
+    <td class="dim mono">{{#anyIndexes}}{{indexes}}{{/anyIndexes}}{{^anyIndexes}}&mdash;{{/anyIndexes}}</td>
+    <td class="dim mono">{{rows}}</td>
+    <td class="dim mono">{{#functions}}<div>{{.}}</div>{{/functions}}</td>
+    <td class="actions"><a href="{{editUrl}}">edit</a></td>
+  </tr>{{/tables}}</tbody>
+</table>
+{{/any}}
+
+<h2>Reading one from a page</h2>
+<pre><code>var rows = signups_list_job('bread');
+rows.forEach(function (r) { render('&lt;li&gt;' + r.who + '&lt;/li&gt;'); });</code></pre>
+<p class="hint">Every row arrives with its <code>id</code> and the fields you declared, typed the way
+  you declared them. A page reads; it never writes &mdash; a dynamic page runs for every request
+  including a crawler's, and a page that could insert would be a table filling itself with whatever
+  fetched it.</p>
+<p class="hint">These tables live in a file of their own beside the accounts database, so nothing
+  you do here can reshape the community's own tables.</p>
+{{/unavailable}}
+{{/content}}{{/shell}}

@@ -37,6 +37,17 @@ public class Accounts {
   public final io.hearth.mcp.OauthClients oauthClients;
   /** the static pages this database serves, and the caches in front of them */
   public final Site site;
+
+  /**
+   * The tables this community invented, in a database file of their own.
+   *
+   * Beside {@link #store} rather than inside it: that one has a schema this software declares and
+   * an upgrader that never drops, and this one is reshaped by whoever is holding the form. Two
+   * files means a CREATE somebody typed cannot be on the same connection as every account here.
+   * Null only if the data file could not be opened, which is a complaint at boot rather than a
+   * reason not to start -- a community's website should still serve when its tables will not.
+   */
+  public final io.hearth.tables.UserTables tables;
   /** profiles, questions and answers */
   public final PeopleStore people;
   /** keeps the remaining-question counts current, off the request path */
@@ -87,6 +98,12 @@ public class Accounts {
   public Accounts(Store store, String databaseDomain, LoginSecurity security,
                   java.util.Set<String> bootstrapAdmins, Caches caches, EventBus events,
                   java.time.ZoneId zone, Verbose verbose) {
+    this(store, databaseDomain, security, bootstrapAdmins, caches, events, zone, null, verbose);
+  }
+
+  public Accounts(Store store, String databaseDomain, LoginSecurity security,
+                  java.util.Set<String> bootstrapAdmins, Caches caches, EventBus events,
+                  java.time.ZoneId zone, java.io.File storesRoot, Verbose verbose) {
     this.databaseDomain = databaseDomain;
     this.security = security;
     this.store = store;
@@ -99,6 +116,15 @@ public class Accounts {
     this.bans = new Bans(store, databaseDomain);
     this.oauthClients = new io.hearth.mcp.OauthClients(store);
     this.site = new Site(databaseDomain, store, caches, events, verbose);
+    io.hearth.tables.UserTables opened = null;
+    if (storesRoot != null) {
+      try {
+        opened = io.hearth.tables.UserTables.open(storesRoot, databaseDomain, events);
+      } catch (java.sql.SQLException ex) {
+        verbose.say("tables for " + databaseDomain + " could not be opened: " + ex.getMessage());
+      }
+    }
+    this.tables = opened;
     this.people = new PeopleStore(store);
     this.pushSubs = new io.hearth.push.PushSubs(store);
     this.pushLedger = new io.hearth.push.PushLedger(store);

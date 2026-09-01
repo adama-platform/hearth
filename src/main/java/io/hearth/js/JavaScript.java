@@ -7,6 +7,11 @@ import com.caoccao.javet.exceptions.JavetTerminatedException;
 import com.caoccao.javet.interop.V8Guard;
 import com.caoccao.javet.interop.V8Host;
 import com.caoccao.javet.interop.V8Runtime;
+import com.caoccao.javet.interop.callback.IJavetDirectCallable;
+import com.caoccao.javet.interop.callback.JavetCallbackContext;
+import com.caoccao.javet.interop.callback.JavetCallbackType;
+import com.caoccao.javet.values.V8Value;
+import com.caoccao.javet.values.reference.V8ValueObject;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -74,7 +79,9 @@ public final class JavaScript {
   private static final String PROLOGUE =
       "var __out=[],__meta={};"
           + "function render(s){__out.push(s==null?'':String(s));}"
-          + "function meta(k,v){if(k!=null){__meta[String(k)]=(v==null?'':String(v));}}";
+          + "function meta(k,v){if(k!=null){__meta[String(k)]=(v==null?'':String(v));}}"
+          + "function __call(t,op,a){var r=__data(JSON.stringify({t:t,op:op,a:a}));"
+          + "var p=JSON.parse(r);if(p&&p.__error){throw new Error(p.__error);}return p;}";
 
   /** a newline first, so an author's trailing `// comment` cannot swallow it */
   private static final String EPILOGUE =
@@ -149,11 +156,22 @@ public final class JavaScript {
    * message, because the caller is a request that has to answer something.
    */
   public Run run(String source) {
+    return run(source, Page.NONE);
+  }
+
+  /**
+   * Run one page body, with whatever this page is allowed to reach.
+   *
+   * {@link Page} carries two things: a line of JavaScript defining the functions this particular
+   * page gets, and the Java side that answers when one of them is called. Both are per-request,
+   * because which tables exist and what the query string said are both per-request.
+   */
+  public Run run(String source, Page page) {
     long started = System.nanoTime();
     if (source == null || source.isBlank()) {
       return new Run("", Map.of(), null, 0, System.nanoTime() - started);
     }
-    Future<Run> future = pool.submit(() -> execute(source));
+    Future<Run> future = pool.submit(() -> execute(source, page));
     try {
       // the guard stops V8 at TIMEOUT_MS; this waits a little longer, so the ordinary case is the
       // guard reporting a termination rather than this cancelling a task that was about to answer
@@ -171,12 +189,17 @@ public final class JavaScript {
     }
   }
 
-  private Run execute(String source) {
+  private Run execute(String source, Page page) {
     long started = System.nanoTime();
     try (V8Runtime runtime = V8Host.getV8Instance().createV8Runtime()) {
+      bindData(runtime, page);
       try (V8Guard guard = runtime.getGuard(TIMEOUT_MS)) {
         guard.setDebugModeEnabled(false);
-        String json = runtime.getExecutor(PROLOGUE + "\n" + source + EPILOGUE).executeString();
+        // still exactly one line before the author's first: page.prologue() is checked for
+        // newlines when it is built, because a second line here silently shifts every error
+        // somebody is ever shown by one
+        String json = runtime.getExecutor(PROLOGUE + page.prologue() + "\n" + source + EPILOGUE)
+            .executeString();
         return parse(json, System.nanoTime() - started);
       }
     } catch (JavetTerminatedException ex) {
@@ -193,6 +216,37 @@ public final class JavaScript {
       LOG.error("javascript-engine-failed", ex);
       return failed("This server has no JavaScript engine for its platform.",
           0, System.nanoTime() - started);
+    }
+  }
+
+  /**
+   * The one function that crosses into Java, and the only one.
+   *
+   * Everything a page can reach goes through {@code __data(json) -> json}: one string in, one
+   * string out, dispatched on the Java side. That keeps the marshalling to something a person can
+   * read -- there is no object graph being converted across the boundary and no callback API to
+   * hold wrong -- and it means adding a capability is adding a case in a switch rather than a new
+   * binding with new lifetime rules.
+   *
+   * A failure comes back as {@code {"__error": "..."}} and the prologue throws it, so a page that
+   * asks for something it may not have gets a JavaScript error on the line that asked, rather than
+   * a null it will trip over three lines later.
+   */
+  private static void bindData(V8Runtime runtime, Page page) throws JavetException {
+    try (V8ValueObject global = runtime.getGlobalObject()) {
+      global.bindFunction(new JavetCallbackContext("__data",
+          JavetCallbackType.DirectCallNoThisAndResult,
+          (IJavetDirectCallable.NoThisAndResult<Exception>) (V8Value... args) -> {
+            String request = args.length > 0 && args[0] != null ? args[0].toString() : "";
+            String answer;
+            try {
+              answer = page.host().data(request);
+            } catch (RuntimeException ex) {
+              LOG.error("javascript-host-failed", ex);
+              answer = "{\"__error\":\"that could not be answered\"}";
+            }
+            return runtime.createV8ValueString(answer == null ? "null" : answer);
+          }));
     }
   }
 
@@ -235,6 +289,33 @@ public final class JavaScript {
         shared = null;
       }
     }
+  }
+
+  /**
+   * What a page is allowed to reach, for one request.
+   *
+   * The prologue must be a single line and is checked here rather than trusted, because the error
+   * line numbers every author sees are computed by subtracting exactly one.
+   */
+  public record Page(String prologue, Host host) {
+    public static final Page NONE = new Page("", request -> "null");
+
+    public Page {
+      if (prologue == null) {
+        prologue = "";
+      }
+      if (prologue.indexOf('\n') >= 0 || prologue.indexOf('\r') >= 0) {
+        throw new IllegalArgumentException("a page prologue has to be one line");
+      }
+      if (host == null) {
+        host = request -> "null";
+      }
+    }
+  }
+
+  /** the Java side of {@code __data}: one JSON request in, one JSON answer out */
+  public interface Host {
+    String data(String requestJson);
   }
 
   /**

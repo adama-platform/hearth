@@ -1,0 +1,107 @@
+{{<shell}}{{$content}}
+<p class="crumb"><a href="{{backUrl}}">&larr; Tables</a></p>
+<h1>{{heading}}</h1>
+
+{{#editing}}
+<p class="hint">{{rowCount}} row(s). Adding a field is safe. Removing one deletes what was in it,
+  and changing a field's type is refused rather than guessed at &mdash; add a new field instead.</p>
+<div class="card">
+  <p class="meta"><span class="dim">what a page can call</span></p>
+  {{#functions}}<div class="mono">{{.}}</div>{{/functions}}
+</div>
+{{/editing}}
+
+<form class="editor" method="post" action="{{backUrl}}">
+  <input type="hidden" name="csrf" value="{{csrf}}">
+  <input type="hidden" name="action" value="save">
+
+  <div class="field">
+    <label for="t-name">table name</label>
+    <input id="t-name" type="text" name="name" value="{{form_name}}" maxlength="31"
+           pattern="[a-z][a-z0-9_]*" required {{#editing}}readonly{{/editing}}>
+    <p class="hint">Lowercase letters, digits and underscores. This becomes the front of every
+      function name, so <code>signups</code> gives you <code>signups_get_id</code>.</p>
+  </div>
+
+  <h2>Fields</h2>
+  <p class="hint">Every table already has an <code>id</code>. Tick <strong>index</strong> on a field
+    to get a <code>_list_</code> function for it &mdash; that is the only way a page can look
+    something up by anything other than its id, so index what you intend to search by.</p>
+
+  <div data-fields>
+    {{#fields}}
+    <div class="row" data-field>
+      <div><label>name</label><input type="text" name="f_name_{{@index}}" value="{{name}}" pattern="[a-z][a-z0-9_]*"></div>
+      <div><label>type</label><select name="f_type_{{@index}}">{{#types}}<option value="{{value}}"{{#selected}} selected{{/selected}}>{{label}}</option>{{/types}}</select></div>
+      <div><label>&nbsp;</label><label class="check"><input type="checkbox" name="f_index_{{@index}}"{{#indexed}} checked{{/indexed}}> index</label></div>
+    </div>
+    {{/fields}}
+  </div>
+
+  <template data-blank>
+    <div class="row" data-field>
+      <div><label>name</label><input type="text" pattern="[a-z][a-z0-9_]*"></div>
+      <div><label>type</label><select>{{#blankTypes}}<option value="{{value}}">{{label}}</option>{{/blankTypes}}</select></div>
+      <div><label>&nbsp;</label><label class="check"><input type="checkbox"> index</label></div>
+    </div>
+  </template>
+
+  <div class="doing">
+    <button type="button" class="quiet" data-add>Add a field</button>
+  </div>
+
+  <div class="doing">
+    <button type="submit">{{#editing}}Save{{/editing}}{{^editing}}Create{{/editing}}</button>
+  </div>
+</form>
+
+{{#editing}}
+<h2>Drop it</h2>
+<form method="post" action="{{backUrl}}" onsubmit="return confirm('Drop {{form_name}} and every row in it? This cannot be undone.')">
+  <input type="hidden" name="csrf" value="{{csrf}}">
+  <input type="hidden" name="action" value="drop">
+  <input type="hidden" name="name" value="{{form_name}}">
+  <div class="doing"><button type="submit" class="quiet">Drop this table</button></div>
+</form>
+<p class="hint">Dropping deletes the rows with it, and any page calling its functions will start
+  saying so on the line that called them.</p>
+{{/editing}}
+
+<script nonce="{{nonce}}">
+// Rows are added in the browser and numbered on submit.
+//
+// The names have to be f_name_0, f_name_1 and so on because the handler walks that sequence, and a
+// row deleted in the middle would leave a hole the walk stops at. So the numbering is assigned
+// once, at submit, from whatever rows are actually present -- rather than being baked into each
+// row when it is created and going stale the moment somebody removes one.
+(function () {
+  var host = document.querySelector('[data-fields]');
+  var blank = document.querySelector('[data-blank]');
+  var add = document.querySelector('[data-add]');
+  if (!host || !blank || !add) { return; }
+
+  function renumber() {
+    var rows = host.querySelectorAll('[data-field]');
+    for (var i = 0; i < rows.length; i++) {
+      var inputs = rows[i].querySelectorAll('input, select');
+      inputs[0].name = 'f_name_' + i;
+      inputs[1].name = 'f_type_' + i;
+      inputs[2].name = 'f_index_' + i;
+    }
+  }
+
+  add.addEventListener('click', function () {
+    host.appendChild(blank.content.cloneNode(true));
+    renumber();
+    var rows = host.querySelectorAll('[data-field] input');
+    if (rows.length) { rows[rows.length - 3].focus(); }
+  });
+
+  // an empty name is how a field is removed: the handler skips it, and alter() drops the column
+  var form = add.closest('form');
+  if (form) { form.addEventListener('submit', renumber); }
+  renumber();
+})();
+</script>
+<p class="hint">To remove a field, clear its name and save.</p>
+{{/content}}{{/shell}}

@@ -57,7 +57,7 @@ public class AuthSystem implements AutoCloseable {
         // the owning domain's clock too, for the same reason as its policy: one account space
         // cannot have two answers to what "today" is
         return new Accounts(store, database, security, admins, governing.caches, events,
-            governing.zone, verbose);
+            governing.zone, stores.root, verbose);
       });
       byDomain.put(config.domain, accounts);
     }

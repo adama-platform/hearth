@@ -11,13 +11,7 @@
   {{#editing}}<input type="hidden" name="id" value="{{form_id}}">{{/editing}}
   <div class="row">
     <div><label for="c-uri">uri</label><input id="c-uri" type="text" name="uri" value="{{form_uri}}" placeholder="/about" required>
-      <p class="hint">The pages that show what the community already holds have a <em>hole</em> in
-        their address, and the request fills it: <code>{{lbrace}}page{{rbrace}}</code> for a listing,
-        <code>{{lbrace}}event_id{{rbrace}}</code>, <code>{{lbrace}}place_id{{rbrace}}</code> or
-        <code>{{lbrace}}member_id{{rbrace}}</code> for one of a thing &mdash;
-        <code>/whats-on/{{lbrace}}page{{rbrace}}</code>,
-        <code>/people/{{lbrace}}member_id{{rbrace}}</code>. Page one of a listing is always the bare
-        path.</p></div>
+      <p class="hint" data-uri-note>Any path, starting with a slash.</p></div>
     <div><label for="c-title">title</label><input id="c-title" type="text" name="title" value="{{form_title}}"></div>
   </div>
   <div class="row">
@@ -50,17 +44,13 @@
     </div>
   </div>
   <div class="fields" data-template-fields></div>
+  <p class="hint" data-vars-note></p>
   <div>
     <label for="c-body">body</label>
-    <p class="hint" data-js-help hidden>This body is a <strong>program</strong>, run every time
-      somebody asks for the page. <code>render(text)</code> appends to the document and
-      <code>meta(key, value)</code> sets the title and anything the template declared &mdash; a
-      value set here wins over the boxes above, because it ran a moment ago and they were typed
-      once. There is no network, no storage and no way back into this server: it builds a string.
-      It gets one second, and a page that overruns is stopped and says so.</p>
     <div class="editorbar">
       <button type="button" class="quiet" data-rich-toggle hidden>plain markdown</button>
       {{#filesUrl}}<button type="button" class="quiet" data-pick="{{.}}" data-pick-into="c-body">Insert a file</button>{{/filesUrl}}
+      <button type="button" class="quiet" data-open-ref hidden>What can I use here?</button>
     </div>
     <div id="c-rich" class="richeditor" data-rich data-markdown-for="c-body" hidden></div>
     <textarea id="c-body" name="body">{{form_body}}</textarea>
@@ -89,6 +79,24 @@
   {{/canSuggest}}
   <a href="{{backUrl}}" class="hint">cancel</a>
 </form>
+
+<!--
+  What a body can use, in a dialog rather than a paragraph above the box.
+
+  It was three sentences of prose sitting between the label and the textarea, which is the worst
+  place for a reference: in the way when you know it, and too short to be useful when you do not.
+  A <dialog> is a real element with a real close button, keyboard escape and a focus ring for free.
+
+  The table functions are rendered by the server because only the server knows what tables exist.
+-->
+<dialog data-ref>
+  <h2 data-ref-title>What can I use here?</h2>
+  <div data-ref-doc></div>
+  <div class="doing"><button type="button" class="quiet" data-ref-close>Close</button></div>
+</dialog>
+
+<script type="application/json" data-tables-json>{{{tablesJson}}}</script>
+
 <script nonce="{{nonce}}">
 // The kind decides whether a template applies at all, and the template decides which extra boxes
 // the page needs. Both are read from data attributes -- never interpolated into this script, because
@@ -134,14 +142,124 @@
     }
     var wants = option && option.getAttribute('data-wants-template') === '1';
     if (templateRow) { templateRow.classList.toggle('hide', !wants); }
-    // the two APIs, shown only for the kind that has them
-    var jsHelp = form.querySelector('[data-js-help]');
-    if (jsHelp) { jsHelp.hidden = kind.value !== 'javascript'; }
+    var refButton = form.querySelector('[data-open-ref]');
+    if (refButton) { refButton.hidden = false; }
     drawFields();
+    describeVariables();
+  }
+
+  // ---- what this body can actually use -------------------------------------------------------
+  //
+  // The complaint this answers: the editor named three things that no longer exist and none of the
+  // ones that do. Both halves are now derived -- the built-ins from one list, the template's own
+  // fields from the same declaration that draws the boxes, and the table functions from the server.
+
+  // Braces built from character escapes rather than from a mustache helper tag.
+  //
+  // Invariant 61: an escaped mustache value must never be interpolated into a script, and the rule
+  // holds even for something as innocent as a brace -- the moment one is allowed the next one is a
+  // community's name. \x7b is '{' and mustache never sees a tag here at all.
+  var LB = '\x7b\x7b', RB = '\x7d\x7d';
+  var BUILT_INS = [
+    [LB + LB.charAt(0) + 'body' + RB + RB.charAt(0), 'the page itself; triple braces because it is markup'],
+    [LB + 'title' + RB, 'this page\u2019s title'],
+    [LB + 'uri' + RB, 'the address it was asked for']
+  ];
+
+  function currentFields() {
+    var name = template ? template.value : '';
+    return (byTemplate[name] || []);
+  }
+
+  function describeVariables() {
+    var note = form.querySelector('[data-vars-note]');
+    if (!note) { return; }
+    var fields = currentFields().map(function (f) { return LB + f.name + RB; });
+    var option = kind.options[kind.selectedIndex];
+    var wants = option && option.getAttribute('data-wants-template') === '1';
+    if (!wants) {
+      note.textContent = 'This kind is served as-is, so the template and its fields are not used.';
+      return;
+    }
+    note.innerHTML = 'The template can use ' + BUILT_INS.map(function (b) {
+      return '<code>' + b[0] + '</code>';
+    }).join(', ') + (fields.length
+      ? ', and this template also declares ' + fields.map(function (f) {
+          return '<code>' + f + '</code>';
+        }).join(', ') + '.'
+      : '. This template declares no fields of its own.');
+  }
+
+  var ref = document.querySelector('[data-ref]');
+  var refDoc = document.querySelector('[data-ref-doc]');
+  var refTitle = document.querySelector('[data-ref-title]');
+  var refButton = form.querySelector('[data-open-ref]');
+  var refClose = document.querySelector('[data-ref-close]');
+  var tablesNode = document.querySelector('[data-tables-json]');
+  var tables = [];
+  try { tables = JSON.parse(tablesNode ? tablesNode.textContent : '[]') || []; } catch (e) { tables = []; }
+
+  function escape(text) {
+    return String(text == null ? '' : text).replace(/[&<>"]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+    });
+  }
+
+  function row(name, what) {
+    return '<tr><td class="mono">' + escape(name) + '</td><td class="dim">' + escape(what) + '</td></tr>';
+  }
+
+  function buildReference() {
+    var isProgram = kind.value === 'javascript';
+    refTitle.textContent = isProgram ? 'What a program can call' : 'What a template can use';
+    var html = '';
+    if (isProgram) {
+      html += '<p>This body is <strong>run</strong> on every request. What it renders is the page.</p>';
+      html += '<table><tbody>';
+      html += row('render(text)', 'append to the document; call it as often as you like');
+      html += row('meta(key, value)', 'set the title, or any field the template declares');
+      html += row('query(name)', 'a query parameter, already the right type: ?page=2 is the number 2');
+      html += row('query(name, fallback)', 'the fallback when it is absent or the wrong shape');
+      html += '</tbody></table>';
+      if (tables.length) {
+        html += '<h3>This community\u2019s tables</h3><table><tbody>';
+        tables.forEach(function (t) {
+          (t.functions || []).forEach(function (fn) {
+            html += row(fn, 'rows of ' + t.table + ' \u2014 ' + (t.shape || ''));
+          });
+        });
+        html += '</tbody></table>';
+      } else {
+        html += '<h3>Tables</h3><p class="hint">This community has no tables yet. Making one under'
+          + ' Content \u203a Tables gives every page a set of functions for reading it.</p>';
+      }
+      html += '<h3>What is not here</h3><p class="hint">No network, no storage, no timers and no way'
+        + ' back into this server \u2014 nothing was bound, so trying is a ReferenceError rather than'
+        + ' a refusal. A page reads; it never writes. One second per request, then it is stopped and'
+        + ' says so. Every request gets a fresh interpreter, so nothing survives to the next one.</p>';
+    } else {
+      html += '<table><tbody>';
+      BUILT_INS.forEach(function (b) { html += row(b[0], b[1]); });
+      currentFields().forEach(function (f) {
+        html += row(LB + f.name + RB, (f.label || f.name) + (f.required ? ' (required)' : ''));
+      });
+      html += '</tbody></table>';
+      html += '<p class="hint">Anything else in braces renders as nothing at all.</p>';
+    }
+    refDoc.innerHTML = html;
+  }
+
+  if (refButton && ref) {
+    refButton.addEventListener('click', function () { buildReference(); ref.showModal(); });
+  }
+  if (refClose && ref) {
+    refClose.addEventListener('click', function () { ref.close(); });
   }
 
   kind.addEventListener('change', onKind);
-  if (template) { template.addEventListener('change', drawFields); }
+  if (template) {
+    template.addEventListener('change', function () { drawFields(); describeVariables(); });
+  }
   onKind();
 })();
 </script>

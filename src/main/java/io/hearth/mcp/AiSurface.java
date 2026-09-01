@@ -258,25 +258,23 @@ public class AiSurface {
     ContentRecord.Kind kind = changes.containsKey("kind")
         ? ContentRecord.Kind.of(str(changes, "kind"))
         : (existing == null ? ContentRecord.Kind.markdown : existing.kind());
-    // An agent writes documents. It does not write programs.
+    // An agent may write a program, and this is where that was decided.
     //
-    // The javascript kind runs its body on this server for every visitor, so allowing it here
-    // would make "write me an about page" a way to get code executed -- and the agent acts as a
-    // person who may well have content_write and no idea they had lent anybody an interpreter.
-    // Refused by name rather than ignored, because a save that quietly stored markdown instead
-    // would teach the model it had succeeded.
+    // It was refused when the kind landed, on the grounds that "write me an about page" should not
+    // be a way to get code executed. That reasoning was about the *blast radius*, and the radius is
+    // what has since been drawn: a program gets `render`, `meta`, `query` and whatever table
+    // functions this community declared. No network, no filesystem, no way back into this server,
+    // no writes to any table, a fresh isolate, and a second to finish in. There is nothing in that
+    // list an agent can reach that a page it wrote in HTML could not.
     //
-    // The check is on the *result*, so it catches converting an existing dynamic page as well as
-    // creating one, and it is here rather than in the tool schema because the schema is a
-    // description and this is the rule.
-    if (kind != null && kind.isProgram()) {
-      throw new Refused("the '" + kind.name() + "' kind runs code on the server and only a person"
-          + " at the admin screen can write one");
-    }
-    if (existing != null && existing.kind().isProgram()) {
-      throw new Refused("'" + uri + "' is a program rather than a document, and only a person at"
-          + " the admin screen can change one");
-    }
+    // What still holds is everything that was already true of any write: it acts as the person who
+    // connected it, it cannot touch a human-only page, and every call is in the AI log under two
+    // names. A program is reviewable in a way a request is not -- the source sits in the content
+    // table, versioned like every other page, and `content_get` reads it back.
+    //
+    // The one thing an agent must not be able to do is widen its own reach, which is why there is
+    // no tool for making a table -- only for writing a page that reads the ones a person declared.
+    // Same shape as invariant 95: the safety is that the tool does not exist.
     String template = changes.containsKey("template")
         ? str(changes, "template")
         : (existing == null ? null : existing.templateName());
@@ -537,6 +535,77 @@ public class AiSurface {
    * place to whoever is writing the pages -- so an agent's first attempt is a working site rather
    * than six refusals it has to learn from.
    */
+  /**
+   * Everything a model needs to write a dynamic page, generated rather than written down.
+   *
+   * <b>The table functions come from the catalogue, so this cannot go stale.</b> That is the point
+   * of putting it here instead of in a paragraph somebody maintains: a table created five minutes
+   * ago appears in the next call, and one that was dropped stops appearing. A model told about a
+   * function that no longer exists writes a page that throws on its first line.
+   *
+   * <b>It says what is absent as loudly as what is present.</b> A model asked for a page that
+   * "saves the form" will otherwise spend its turns looking for the write API, and the honest
+   * answer -- there isn't one, and here is why -- is worth more than the silence.
+   */
+  private Map<String, Object> javascriptGuide() {
+    LinkedHashMap<String, Object> guide = new LinkedHashMap<>();
+    guide.put("what_it_is", "a page whose kind is 'javascript' has a body that is RUN on every"
+        + " request rather than rendered. What it renders is the page. Use it when the answer"
+        + " depends on something -- a query parameter, a table -- and markdown when it does not.");
+    guide.put("render", "render(text) appends to the document. Call it as often as you like; the"
+        + " pieces are joined in order. It is the only way to produce output: the value of the last"
+        + " expression is ignored.");
+    guide.put("meta", "meta(key, value) sets the page title and any field the template declared."
+        + " meta('title', 'Today') wins over the stored title. meta('body', ...) is ignored, so it"
+        + " cannot throw away what render() built.");
+    guide.put("query", "query(name) returns a query-string parameter already converted to the"
+        + " strictest type it honestly is -- ?page=2 arrives as the NUMBER 2, ?on=true as a"
+        + " boolean, anything else as a string. query(name, fallback) returns the fallback when the"
+        + " parameter is absent or is not the same type as the fallback, so query('page', 0) is"
+        + " always a number and arithmetic on it is safe.");
+    ArrayList<Map<String, Object>> tables = new ArrayList<>();
+    if (accounts.tables != null) {
+      for (io.hearth.tables.UserTable table : accounts.tables.all()) {
+        LinkedHashMap<String, Object> one = new LinkedHashMap<>();
+        one.put("table", table.name());
+        LinkedHashMap<String, String> fields = new LinkedHashMap<>();
+        fields.put("id", "a number, always present, and what paging and get_id use");
+        for (io.hearth.tables.UserField field : table.fields()) {
+          fields.put(field.name(), field.type().inJavaScript);
+        }
+        one.put("row_shape", fields);
+        one.put("functions", table.functions());
+        one.put("indexed", table.indexes());
+        tables.add(one);
+      }
+    }
+    guide.put("tables", tables);
+    guide.put("table_functions", "<table>_get_id(id) gives one row or null."
+        + " <table>_list_<field>(value) gives every row whose indexed field equals value, and"
+        + " exists only for fields somebody indexed. <table>_page(idAfter, count) gives the next"
+        + " count rows after that id -- start at 0 and pass the last id you saw. <table>_all()"
+        + " gives every row. Asking for a table that does not exist throws on that line.");
+    guide.put("no_writes", "there is no way to write a table from a page, and that is deliberate:"
+        + " a dynamic page runs for every request including a crawler's, so a page that could"
+        + " insert would fill its table with whatever fetched it. Tables are written from the admin"
+        + " section.");
+    guide.put("no_reach", "there is no fetch, no require, no filesystem, no timers, and no way back"
+        + " into this server. Do not write a page that tries; nothing was bound, so it is a"
+        + " ReferenceError rather than a refusal.");
+    guide.put("limits", "one second per request, then it is stopped and the page says so. Every"
+        + " request gets a fresh interpreter, so nothing you set survives to the next one -- there"
+        + " are no globals to cache anything in. A dynamic page is never cached.");
+    guide.put("errors", "a thrown error becomes a visible notice on the page with your line number,"
+        + " and nothing you rendered before it is kept. Read it back with content_get if a page you"
+        + " wrote is not doing what you expected.");
+    guide.put("example", "meta('title', 'Sign-ups');\n"
+        + "var job = query('job', 'bread');\n"
+        + "signups_list_job(job).forEach(function (r) {\n"
+        + "  render('<li>' + r.who + '</li>');\n"
+        + "});");
+    return guide;
+  }
+
   public Map<String, Object> siteSpec() throws SQLException, Refused {
     // operator machinery: a member has no screen for any of this
     assertCan(io.hearth.auth.Permission.content_read);
@@ -544,12 +613,6 @@ public class AiSurface {
     ArrayList<Map<String, Object>> kinds = new ArrayList<>();
     for (io.hearth.content.ContentRecord.Kind kind
         : io.hearth.content.ContentRecord.Kind.values()) {
-      // a kind an agent may not write is not offered: advertising it would cost the model a turn
-      // learning that, and a listing of things that always refuse is the shape this project
-      // already refuses everywhere else
-      if (kind.isProgram()) {
-        continue;
-      }
       LinkedHashMap<String, Object> one = new LinkedHashMap<>();
       one.put("kind", kind.name());
       one.put("label", kind.label);
@@ -574,6 +637,7 @@ public class AiSurface {
         + " afterwards says which of the two kinds of edit this was.");
     spec.put("attachments", "uploaded files are served at /attachment/<id>.<ext> and can be"
         + " embedded in any page body.");
+    spec.put("javascript", javascriptGuide());
     return spec;
   }
 

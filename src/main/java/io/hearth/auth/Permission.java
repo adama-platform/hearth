@@ -27,6 +27,11 @@ public enum Permission {
   templates_write("Content", "Write templates and the fields they ask for"),
   navigation_write("Content", "Arrange the navigation"),
   attachments_write("Content", "Upload files, and organise or remove what is there"),
+  // Its own permission rather than folded into templates_write, because dropping a table deletes
+  // rows a program was reading and a template has never been able to delete anything. Somebody
+  // trusted to write the site's shape is not automatically somebody trusted to throw away what it
+  // collected.
+  tables_write("Content", "Make and change the tables a dynamic page can read"),
 
   people_read("People", "See the member list and read profiles"),
   people_approve("People", "Approve somebody waiting to join"),
@@ -139,7 +144,7 @@ public enum Permission {
         ? java.util.EnumSet.of(this) : java.util.EnumSet.of(admin_enter, this);
     switch (this) {
       case content_write, content_publish, templates_write,
-           navigation_write -> {
+           tables_write, navigation_write -> {
         also.add(content_read);
         if (this == content_write) {
           also.add(attachments_write);

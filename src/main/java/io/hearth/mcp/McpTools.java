@@ -96,7 +96,9 @@ public class McpTools {
             prop("uri", "string", "the page's path, e.g. /about; creates it if there is none"),
             prop("title", "string", "shown in the browser tab and available to the template"),
             prop("body", "string", "the page source, in the form its kind implies"),
-            prop("kind", "string", "markdown, html, or page (a whole HTML document)"),
+            prop("kind", "string", "markdown, html, page (a whole HTML document), or javascript"
+                + " (a program run on every request -- call site_spec first, its javascript"
+                + " section lists every function available and this community's own tables)"),
             prop("template", "string", "the template to wrap it in; ignored when kind is page"),
             prop("folder", "string", "navigation folder; empty leaves it out of the navigation"),
             objectProp("fields", "values for the fields this page's template declares, as"
@@ -137,24 +139,18 @@ public class McpTools {
 
 
 
-    // ---- polls -----------------------------------------------------------------------------
+    // ---- how to build anything here ------------------------------------------------------------
     //
-    // These descriptions are longer than the others on purpose. A model has no screen: it cannot
-    // see that days and places count differently, that a down vote means nothing on an either-or,
-    // or that a schedule poll ends by putting something in everybody's calendar. Every one of
-    // those is a rule it would otherwise have to discover by being refused.
-
-    // ---- tasks, routines and what was recorded ----------------------------------------------
-    //
-    // These are the person's own, always. There is no argument anywhere here for whose -- a
-    // training log is the most private thing this server holds, and a tool with a "user" parameter
-    // would be one prompt away from reading somebody else's.
+    // Two dead section headers stood here, for the polls and the training log, describing rules a
+    // model would need for features that were removed a while ago.
 
     tools.add(new Tool("site_spec", "How to build a site here",
-        "Everything you need to write pages that work: every kind of page, what address each one"
-            + " requires, what its body is given to render with, and the settings a listing takes."
-            + " Read this before writing anything other than a plain markdown page -- a feed page"
-            + " with the wrong shape of uri is refused, and the rule is different for each kind.",
+        "Everything you need to write pages that work: every kind of page, the address rule for"
+            + " each, how a template declares fields, and -- in its `javascript` section -- every"
+            + " function a dynamic page can call, including this community's own tables and the"
+            + " shape of their rows. That part is generated from what exists right now, so read it"
+            + " again rather than remembering it. Read this before writing anything other than a"
+            + " plain markdown page.",
         schema()));
 
     tools.add(new Tool("navigation_get", "Read the navigation",
@@ -435,7 +431,7 @@ public class McpTools {
     // string -- so every nested object a tool declared arrived as "". place_save has advertised a
     // `fields` object since the address book shipped and reads it with an `instanceof Map` that
     // could never be true, which meant a model filling in a kind's own fields was told it had
-    // worked and nothing was written. That is the precise failure invariant 86 refuses for an
+    // worked and nothing was written. That is the precise failure invariant 94 refuses for an
     // *undeclared* field, arriving through the plumbing instead: silent success for a write that
     // did not happen. Objects are now objects, and ToolArgumentTests holds both halves down.
     if (node.isObject()) {
