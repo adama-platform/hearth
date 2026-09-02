@@ -39,10 +39,18 @@ public class ServerCliTests {
     return captured.toString(StandardCharsets.UTF_8);
   }
 
+  /**
+   * The jar says what it is, and what it is is `MAIN`.
+   *
+   * Asserted against the literal rather than against {@code Server.VERSION}, which would be true
+   * whatever the constant said and would go on passing if somebody reintroduced a version number
+   * by accident. There is no version here on purpose: nobody resolves this jar from a repository,
+   * so a number on it would promise a thing nobody is tracking.
+   */
   @Test
-  public void versionPrintsTheVersion() {
+  public void versionSaysItWasBuiltFromMain() {
     Server.main(new String[]{"--version"});
-    assertTrue(output().contains("Hearth " + Server.VERSION));
+    assertTrue(output(), output().contains("Hearth MAIN"));
   }
 
   @Test

@@ -8,7 +8,8 @@
     <artifactId>hearth</artifactId>
     <name>Hearth</name>
     <description>A single-jar community server for communities of 100 to 1,000 people.</description>
-    <version>${revision}</version>
+    <!-- Not a version: an identifier. See the note in Server.java. -->
+    <version>MAIN</version>
     <dependencies>
         <!-- V8, for the dynamic JavaScript content kind. Two artifacts on purpose: `javet` is the
              Java half and is small, and the native V8 build is a separate per-platform jar. Only
@@ -224,11 +225,8 @@
         </dependency>
     </dependencies>
     <properties>
-        <!-- The version, in one place. `just release 1.2.3` passes -Drevision=1.2.3, which stamps
-             the jar's manifest so the binary somebody downloads can say what it is. A SNAPSHOT
-             default means a jar built by hand never claims to be a release. -->
-        <revision>0.0.1-SNAPSHOT</revision>
-        <javet.version>5.0.11</javet.version>
+    <!-- Not a version: an identifier. See the note in Server.java. -->
+    <version>MAIN</version>        <javet.version>5.0.11</javet.version>
         <maven.compiler.source>21</maven.compiler.source>
         <maven.compiler.target>21</maven.compiler.target>
         <maven.compiler.release>21</maven.compiler.release>
@@ -272,7 +270,7 @@
                                     <mainClass>io.hearth.Server</mainClass>
                                     <manifestEntries>
                                         <Implementation-Title>Hearth</Implementation-Title>
-                                        <Implementation-Version>${revision}</Implementation-Version>
+                                        <Implementation-Version>MAIN</Implementation-Version>
                                     </manifestEntries>
                                 </transformer>
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>

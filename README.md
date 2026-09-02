@@ -188,7 +188,7 @@ it builds clean, runs everything, packages the jar, and then makes real HTTP req
 jar running as a server. Nothing here is claimed to work on a green test suite alone.
 
 **What has never been verified** is written down as such in [CLAUDE.md](CLAUDE.md#not-verified) —
-the release path, the mail validators against real mail, anything under concurrency. That is a
+the mail validators against real mail, anything under concurrency. That is a
 different thing from a defect and gets a different kind of attention.
 
 **It used to be much bigger.** A discussion board, a calendar with RSVPs, an address book, an

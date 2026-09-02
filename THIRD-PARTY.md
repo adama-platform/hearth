@@ -26,8 +26,10 @@ Hearth itself is a separate work; see the repository's own licence.
    rather than typed from memory.
 3. Add a row above.
 
-`just release-check` refuses a release when a vendored package has no licence file, because a
-release is the moment redistribution actually happens.
+Nothing enforces this automatically, and it is worth being honest about: there was a claim here that
+a release-readiness recipe refused to ship when a licence was missing, and that recipe never checked
+licences at all. It has since been removed along with the rest of the release machinery. The
+obligation is real and the check is a person reading this list.
 
 ## What else is in the jar
 

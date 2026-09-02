@@ -65,9 +65,19 @@ build:
 
 # build, test, and drop the single jar at ./hearth.jar
 package:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    # The vendored browser libraries are not in git, and a jar built without them ships an editor
+    # that silently falls back to a plain textarea. Warned rather than fetched: `just package` has
+    # no business reaching the network, and a build that quietly downloads things is a build that
+    # fails differently on a machine with no route out.
+    if [ ! -d src/main/resources/3rd ]; then
+      echo "  note: src/main/resources/3rd is missing -- run 'just third-party' first, or the"
+      echo "        rich editor in this jar falls back to a plain textarea"
+    fi
     mvn -q clean package
     cp target/hearth.jar {{jar}}
-    @ls -lh {{jar}} | awk '{print "  packaged: " $9 " (" $5 ")"}'
+    ls -lh {{jar}} | awk '{print "  packaged: " $9 " (" $5 ")"}'
 
 # package without running tests -- for iterating, not for validating
 package-fast:
@@ -174,8 +184,24 @@ smoke PORT=smoke_port:
     esac
     echo ""
     echo "  databases"
-    for db in /tmp/vc-smoke-stores/*.mv.db; do printf '  ok    %s\n' "$(basename $db)"; done
-    test -f /tmp/vc-smoke-stores/junior.example.org.mv.db && { echo "  FAIL  junior should share example.org"; fail=1; } || true
+    # This looked in /tmp/vc-smoke-stores, which has not existed since the project was renamed --
+    # so the glob never matched, the loop printed the literal `*.mv.db` as though it were a file,
+    # and the assertion under it never ran at all. A check that passes by printing an asterisk is
+    # worse than no check, because the line in the output says everything is fine.
+    dbs=/tmp/hearth-smoke/dbs
+    found=0
+    for db in "$dbs"/*.mv.db; do
+      [ -e "$db" ] || continue
+      printf '  ok    %s\n' "$(basename "$db")"
+      found=$((found + 1))
+    done
+    [ "$found" -gt 0 ] || { echo "  FAIL  no databases were created under $dbs"; fail=1; }
+    if [ -e "$dbs/junior.example.org.mv.db" ]; then
+      echo "  FAIL  junior.example.org has its own database; it shares example.org's"
+      fail=1
+    else
+      echo "  ok    junior.example.org shares example.org's database"
+    fi
     exit $fail
 
 # what a browser actually gets back, for eyeballing
@@ -236,166 +262,17 @@ third-party:
 
 # --- release ----------------------------------------------------------------------------------
 
-# Cut a release: validate, build a stamped jar, tag it, and publish it to GitHub.
+# --- shipping ------------------------------------------------------------------------------------
 #
-#   just release 0.2.0
+# There is no release recipe, and that is a decision rather than a gap.
 #
-# NOTE ON CREDENTIALS. An SSH key signs git operations -- push, pull, tag. It cannot create a
-# GitHub release, because releases are a REST API resource and that API takes a token, never a key.
-# So the tag goes up over SSH and the release needs one of:
+# There used to be one: `just release 1.2.3` validated, stamped the version into the manifest, cut a
+# tag and created a GitHub release. Every part of it served a distribution model this project does
+# not have -- nobody resolves this jar from a repository, and a version number on it promises a
+# thing nobody is tracking. `just package` produces hearth.jar; copy it to the box. The commit is
+# the identity, and `git log` answers that better than a number somebody remembered to bump.
 #
-#   gh auth login                          the gh CLI, which keeps its own token
-#   export GITHUB_TOKEN=ghp_...            a personal access token with `contents: write`
-#
-# This checks for one *before* changing anything, so a missing token is a refusal rather than a
-# repository left with a tag pointing at a release that does not exist.
-release VERSION:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    version="{{VERSION}}"
-    tag="v${version}"
-
-    step() { printf '\n  \033[36m%s\033[0m\n' "$1"; }
-    fail() { printf '  \033[31mFAIL\033[0m  %s\n' "$1" >&2; exit 1; }
-    okay() { printf '  \033[32mok\033[0m    %s\n' "$1"; }
-
-    step "checking"
-    [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] \
-      || fail "'$version' is not a version -- use 1.2.3, or 1.2.3-rc1"
-    [ -z "$(git status --porcelain)" ] \
-      || fail "the working tree is dirty; a release nobody can rebuild from a commit is not one"
-    branch=$(git rev-parse --abbrev-ref HEAD)
-    [ "$branch" = "main" ] || fail "on '$branch'; releases are cut from main"
-    git fetch --quiet origin main
-    [ "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)" ] \
-      || fail "local main and origin/main differ; push or pull first"
-    git rev-parse -q --verify "refs/tags/$tag" >/dev/null \
-      && fail "$tag already exists -- a released version is never rebuilt, pick the next one"
-    okay "clean tree on main, up to date with origin, $tag is free"
-
-    # How this will be published, decided before anything is built or tagged. Finding out after the
-    # tag is pushed leaves the repository claiming a release that is not there.
-    publisher=""
-    if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
-      publisher="gh"
-      okay "publishing with the gh CLI"
-    elif [ -n "${GITHUB_TOKEN:-${GH_TOKEN:-}}" ]; then
-      publisher="api"
-      okay "publishing with GITHUB_TOKEN"
-    else
-      printf '\n'
-      fail "no way to publish.
-
-    Your SSH key can push the tag but cannot create the release: GitHub releases are a REST
-    resource and that API takes a token, not a key. Pick one --
-
-      gh auth login                     install the gh CLI and log in, or
-      export GITHUB_TOKEN=ghp_xxx       a token with 'contents: write' on this repository
-
-    Nothing has been changed. Run this again once one of those is in place."
-    fi
-
-    step "vendoring third-party libraries"
-    # Not in git -- a 2.8MB bundle in history is a repository nobody wants to clone -- so a release
-    # built without this would ship a jar whose editor silently falls back to a plain textarea.
-    just third-party
-
-    step "the gate"
-    just validate
-
-    step "building $tag"
-    mvn -q clean package -Drevision="$version"
-    cp target/hearth.jar hearth.jar
-    reported=$(java -jar hearth.jar --version)
-    [ "$reported" = "Hearth $version" ] \
-      || fail "the jar says '$reported' -- it must be able to tell somebody what it is"
-    okay "$reported ($(du -h hearth.jar | cut -f1))"
-
-    mkdir -p target/release
-    artifact="target/release/hearth-${version}.jar"
-    cp hearth.jar "$artifact"
-    (cd target/release && sha256sum "hearth-${version}.jar" > "hearth-${version}.jar.sha256")
-    okay "sha256 $(cut -d' ' -f1 < "${artifact}.sha256")"
-
-    step "release notes"
-    previous=$(git describe --tags --abbrev=0 2>/dev/null || true)
-    notes="target/release/notes-${version}.md"
-    {
-      echo "## Hearth $version"
-      echo
-      echo '```'
-      echo "java -jar hearth-${version}.jar --root /var/hearth"
-      echo '```'
-      echo
-      if [ -n "$previous" ]; then
-        echo "### Since $previous"
-        echo
-        # subjects only: the bodies in this repository are long, and a release page that reprints
-        # them is one nobody scrolls to the bottom of
-        git log --no-merges --pretty='- %s' "${previous}..HEAD"
-      else
-        echo "The first tagged release."
-      fi
-      echo
-      echo "### Verifying"
-      echo
-      echo '```'
-      echo "sha256sum -c hearth-${version}.jar.sha256"
-      echo '```'
-    } > "$notes"
-    okay "$(grep -c '^- ' "$notes" || true) change(s) since ${previous:-the beginning}"
-
-    step "tagging"
-    git tag -a "$tag" -m "Hearth $version"
-    git push --quiet origin "$tag"
-    okay "$tag pushed"
-
-    step "publishing"
-    if [ "$publisher" = "gh" ]; then
-      gh release create "$tag" \
-        --title "Hearth $version" \
-        --notes-file "$notes" \
-        "$artifact" "${artifact}.sha256"
-    else
-      token="${GITHUB_TOKEN:-${GH_TOKEN:-}}"
-      repo=$(git remote get-url origin | sed -E 's#.*[:/]([^/]+/[^/]+?)(\.git)?$#\1#')
-      body=$(python3 -c "import json,sys; print(json.dumps({'tag_name': sys.argv[1], 'name': 'Hearth ' + sys.argv[2], 'body': open(sys.argv[3]).read()}))" "$tag" "$version" "$notes")
-      created=$(curl -sS -X POST \
-        -H "Authorization: Bearer $token" \
-        -H "Accept: application/vnd.github+json" \
-        -d "$body" "https://api.github.com/repos/${repo}/releases")
-      upload=$(printf '%s' "$created" | python3 -c "import json,sys; d=json.load(sys.stdin); print(d.get('upload_url','').split('{')[0])")
-      [ -n "$upload" ] || fail "GitHub refused the release: $(printf '%s' "$created" | head -c 300)"
-      for file in "$artifact" "${artifact}.sha256"; do
-        curl -sS -X POST \
-          -H "Authorization: Bearer $token" \
-          -H "Content-Type: application/octet-stream" \
-          --data-binary "@${file}" \
-          "${upload}?name=$(basename "$file")" > /dev/null
-        okay "uploaded $(basename "$file")"
-      done
-      printf '  \033[32mok\033[0m    https://github.com/%s/releases/tag/%s\n' "$repo" "$tag"
-    fi
-
-    printf '\n  \033[32mreleased:\033[0m Hearth %s\n\n' "$version"
-
-# What a release would do, without doing any of it.
-release-check:
-    #!/usr/bin/env bash
-    set -uo pipefail
-    printf '\n  release readiness\n'
-    say() { printf '  %-5s %s\n' "$1" "$2"; }
-    [ -z "$(git status --porcelain)" ] && say "ok" "working tree is clean" || say "no" "working tree is dirty"
-    branch=$(git rev-parse --abbrev-ref HEAD)
-    [ "$branch" = "main" ] && say "ok" "on main" || say "no" "on $branch, not main"
-    if command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
-      say "ok" "gh CLI is logged in"
-    elif [ -n "${GITHUB_TOKEN:-${GH_TOKEN:-}}" ]; then
-      say "ok" "GITHUB_TOKEN is set"
-    else
-      say "no" "no gh login and no GITHUB_TOKEN -- an SSH key cannot create a release"
-    fi
-    [ -d src/main/resources/3rd ] && say "ok" "third-party libraries are vendored" || say "--" "third-party libraries not fetched yet (the release fetches them)"
-    last=$(git describe --tags --abbrev=0 2>/dev/null || echo "none")
-    say "--" "last tag: $last"
-    printf '\n'
+# What that recipe did do usefully was run `just third-party` first, because the vendored browser
+# libraries are not in git and a jar built without them ships an editor that silently falls back to
+# a textarea. `just package` now says so when they are missing, rather than fetching them itself --
+# a build that quietly reaches the network fails differently on a machine that cannot.

@@ -53,17 +53,18 @@ public class Server {
   /**
    * What this binary is, taken from the jar rather than from a constant somebody forgot to bump.
    *
-   * `just release` stamps the manifest, so a downloaded jar answers `--version` with the tag it was
-   * cut from. Running from a build tree there is no manifest, and it says so -- a development build
-   * claiming to be a release is how a bug report becomes unreproducible.
+   * <b>There is no version number, on purpose.</b> This is not software published to a repository
+   * and resolved by a build tool; it is one jar somebody copies to a box. A version number on that
+   * jar would be a promise nobody is making -- that 0.3.1 differs from 0.3.0 in some describable
+   * way, that upgrading between them is a decision, that somebody is tracking which is which.
+   *
+   * What is actually true is that the jar was built from main, and that is what it says. The commit
+   * is the identity when a bug report needs one, and `git log` answers that better than a number
+   * somebody remembered to bump. There used to be a `${revision}` property, a SNAPSHOT default and
+   * a release recipe that stamped a tag into the manifest; every part of that existed to serve a
+   * distribution model this project does not have.
    */
-  public static final String VERSION = versionOf();
-
-  private static String versionOf() {
-    String stamped = Server.class.getPackage() == null
-        ? null : Server.class.getPackage().getImplementationVersion();
-    return stamped == null || stamped.isBlank() ? "0.0.0-dev" : stamped;
-  }
+  public static final String VERSION = "MAIN";
 
   public static void main(String[] args) {
     Args parsed;

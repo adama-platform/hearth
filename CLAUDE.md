@@ -73,12 +73,10 @@ just coverage             # jacoco; fails below the floor (80% line, 70% branch)
 just package              # tests + ./hearth.jar
 just package-fast         # skip tests; for iterating, never for validating
 just run                  # serve the checked-in ./site root on 8080, verbose
-just reset-stores         # delete the local databases and start over
+just reset-data           # delete the local databases and start over
 just check DIR            # load a config tree and exit; never opens a socket
 just docs                 # do the documents still describe this program?
 just suite                # did every test actually run?
-just release-check        # what a release would refuse, without doing anything
-just release 0.2.0        # validate, build a stamped jar, tag, publish to GitHub
 just peek blog.example.com   # dump headers + body for one host
 just kill                 # clean up stray dev servers
 ```
@@ -128,19 +126,21 @@ assertions with an expiry date. `MISSION.md` changes rarely — it is why, not w
 commitment there stops being true in the code, that is the most important documentation bug the
 project can have, and it gets fixed in the code rather than in the document.
 
-**Releasing.** `just release <version>` is the only way a binary should leave here. It refuses a
-dirty tree, a branch other than main, a divergent origin, and a tag that exists -- **and it checks
-for a publishing credential before it changes anything**, because an SSH key can push a tag and
-cannot create a GitHub release (releases are a REST resource; that API takes a token). Finding that
-out after the tag is pushed leaves the repository claiming a release that is not there.
+**Shipping.** `just package` produces `hearth.jar`; copy it to the box. There is no release recipe
+and no version number, and both are decisions rather than gaps.
 
-The version lives in one place: `${revision}` in the pom, stamped into the jar's manifest, read back
-by `Server.VERSION`. A jar built by hand says `0.0.1-SNAPSHOT` and never a release number, and the
-recipe runs `--version` on what it just built and refuses if the answer disagrees -- a binary that
-cannot say what it is turns every bug report into archaeology.
+`Server.VERSION` is the literal string `MAIN`. Nobody resolves this jar from a repository, so a
+version number on it would promise a thing nobody is tracking -- that 0.3.1 differs from 0.3.0 in
+some describable way, that upgrading between them is a decision. What is true is that the jar was
+built from main, and that is what it says; the commit is the identity when a bug report needs one.
+There used to be a `${revision}` property, a SNAPSHOT default, a `--version` self-check and a
+release recipe that tagged and published to GitHub -- every part of it serving a distribution model
+this project does not have. Those recipes are gone; do not write them as commands here, because a
+backticked recipe name in these documents is checked against the justfile.
 
-It also runs `just third-party` first, because those files are not in git and a release built
-without them ships an editor that silently falls back to a textarea.
+`just package` warns when `src/main/resources/3rd` is missing, because those files are not in git
+and a jar built without them ships an editor that silently falls back to a textarea. It warns rather
+than fetching: a build that quietly reaches the network fails differently on a machine that cannot.
 
 ## Layout
 
@@ -970,8 +970,6 @@ is not "does it compile" but "what is no longer being checked".
 
 Different from a defect: nobody has proved these wrong, and nobody has proved them right either.
 
-- **The release path has never published anything.** Every refusal, the stamped build and the
-  `--version` self-check are exercised; the tag push and the publish are not.
 - **SPF, DKIM and DMARC have never seen real mail.** Tested hard against the RFCs with a fake
   resolver. `enforce-dmarc` is off by default because of this.
 - **The organizational-domain rule is a guess.** Relaxed alignment strictly needs the Public Suffix
@@ -987,9 +985,9 @@ Different from a defect: nobody has proved these wrong, and nobody has proved th
 - **The suite has flaky timeouts under load.** A handful of HTTP tests occasionally hit the client's
   ten-second ceiling; the set moves between runs and every one of them passes when its class is run
   alone. It has not been chased down, and it means a red suite needs reading rather than trusting.
-- **The vendored browser libraries are not in git** (`src/main/resources/3rd/`). `just release` runs
-  `just third-party` first; a fresh clone that runs `just package` gets a jar whose rich editor
-  falls back to a textarea. Their **licences are in git**.
+- **The vendored browser libraries are not in git** (`src/main/resources/3rd/`). A fresh clone that
+  runs `just package` gets a warning and a jar whose rich editor falls back to a textarea; `just
+  third-party` fetches them. Their **licences are in git**.
 
 ## What's next, and what's undecided
 

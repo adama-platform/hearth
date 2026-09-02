@@ -118,6 +118,19 @@ for doc in "${DOCS[@]}"; do
     }
     # backticked only: "just the friction list" is prose, `just validate` is an instruction
   done < <(grep -ohE '`just [a-z][a-z0-9-]*' "$doc" | awk '{print $2}' | sort -u)
+  # And the recipe lists inside fenced blocks, which is where the drift actually happens.
+  #
+  # Only backticked mentions were checked, and CLAUDE.md's own list of every recipe -- the first
+  # thing anybody reads and the most copy-pasted lines in the repo -- is a fenced block with no
+  # backticks in it. It carried `just reset-stores` for as long as the recipe had been called
+  # reset-data. A line beginning with `just <word>` inside a fence is an instruction to type it.
+  while IFS= read -r recipe; do
+    [ -z "$recipe" ] && continue
+    grep -qx -- "$recipe" <<<"$RECIPES" || {
+      bad "$doc shows 'just $recipe' in a code block, which is not in the justfile"
+      badrecipe=1
+    }
+  done < <(awk '/^```/{f=!f; next} f' "$doc"            | grep -oE '^just [a-z][a-z0-9-]*' | awk '{print $2}' | sort -u)
 done
 [ $badrecipe -eq 0 ] && ok "every 'just <recipe>' the docs mention exists"
 
