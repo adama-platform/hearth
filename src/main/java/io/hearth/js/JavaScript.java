@@ -11,6 +11,7 @@ import com.caoccao.javet.interop.callback.IJavetDirectCallable;
 import com.caoccao.javet.interop.callback.JavetCallbackContext;
 import com.caoccao.javet.interop.callback.JavetCallbackType;
 import com.caoccao.javet.values.V8Value;
+import com.caoccao.javet.values.reference.V8ValueFunction;
 import com.caoccao.javet.values.reference.V8ValueObject;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -192,7 +193,16 @@ public final class JavaScript {
   private Run execute(String source, Page page) {
     long started = System.nanoTime();
     try (V8Runtime runtime = V8Host.getV8Instance().createV8Runtime()) {
-      bindData(runtime, page);
+      // The callback context is removed by hand before the runtime closes, and that is not
+      // housekeeping -- it is the difference between this feature being usable and not.
+      //
+      // A context stays registered on the runtime until V8 collects the function that refers to it,
+      // and a runtime closed while it still holds one never gives the memory back. Measured: 600
+      // executions grew RSS by 81MB and kept it, against 9MB for the same 600 with nothing bound.
+      // On a server answering dynamic pages that is a gigabyte every six thousand requests, which
+      // is a leak nobody would find until the box fell over on a busy evening. Removing the handle
+      // explicitly brings the growth to zero.
+      JavetCallbackContext context = bindData(runtime, page);
       try (V8Guard guard = runtime.getGuard(TIMEOUT_MS)) {
         guard.setDebugModeEnabled(false);
         // still exactly one line before the author's first: page.prologue() is checked for
@@ -201,6 +211,10 @@ public final class JavaScript {
         String json = runtime.getExecutor(PROLOGUE + page.prologue() + "\n" + source + EPILOGUE)
             .executeString();
         return parse(json, System.nanoTime() - started);
+      } finally {
+        // in a finally, because a page that threw or overran leaks exactly as much as one that
+        // worked -- and those are the pages somebody reloads
+        runtime.removeCallbackContext(context.getHandle());
       }
     } catch (JavetTerminatedException ex) {
       return failed("The page took longer than " + TIMEOUT_MS + "ms and was stopped.",
@@ -232,22 +246,26 @@ public final class JavaScript {
    * asks for something it may not have gets a JavaScript error on the line that asked, rather than
    * a null it will trip over three lines later.
    */
-  private static void bindData(V8Runtime runtime, Page page) throws JavetException {
-    try (V8ValueObject global = runtime.getGlobalObject()) {
-      global.bindFunction(new JavetCallbackContext("__data",
-          JavetCallbackType.DirectCallNoThisAndResult,
-          (IJavetDirectCallable.NoThisAndResult<Exception>) (V8Value... args) -> {
-            String request = args.length > 0 && args[0] != null ? args[0].toString() : "";
-            String answer;
-            try {
-              answer = page.host().data(request);
-            } catch (RuntimeException ex) {
-              LOG.error("javascript-host-failed", ex);
-              answer = "{\"__error\":\"that could not be answered\"}";
-            }
-            return runtime.createV8ValueString(answer == null ? "null" : answer);
-          }));
+  private static JavetCallbackContext bindData(V8Runtime runtime, Page page)
+      throws JavetException {
+    JavetCallbackContext context = new JavetCallbackContext("__data",
+        JavetCallbackType.DirectCallNoThisAndResult,
+        (IJavetDirectCallable.NoThisAndResult<Exception>) (V8Value... args) -> {
+          String request = args.length > 0 && args[0] != null ? args[0].toString() : "";
+          String answer;
+          try {
+            answer = page.host().data(request);
+          } catch (RuntimeException ex) {
+            LOG.error("javascript-host-failed", ex);
+            answer = "{\"__error\":\"that could not be answered\"}";
+          }
+          return runtime.createV8ValueString(answer == null ? "null" : answer);
+        });
+    try (V8ValueObject global = runtime.getGlobalObject();
+         V8ValueFunction function = runtime.createV8ValueFunction(context)) {
+      global.set("__data", function);
     }
+    return context;
   }
 
   private static Run fromScriptingError(

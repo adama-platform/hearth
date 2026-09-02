@@ -274,7 +274,7 @@ public class AiSurface {
     //
     // The one thing an agent must not be able to do is widen its own reach, which is why there is
     // no tool for making a table -- only for writing a page that reads the ones a person declared.
-    // Same shape as invariant 103: the safety is that the tool does not exist.
+    // Same shape as invariant 105: the safety is that the tool does not exist.
     String template = changes.containsKey("template")
         ? str(changes, "template")
         : (existing == null ? null : existing.templateName());

@@ -153,7 +153,7 @@ public class SettingsTests {
    * A tool that refused would still be a tool: it would appear in a listing, a model would spend
    * turns hunting for a phrasing that worked, and the next person to add a parameter would be one
    * mistake away from making it real. There is simply nothing here for an agent to call -- which is
-   * the same argument invariant 103 makes about the content bundle. What a community *is* -- its
+   * the same argument invariant 105 makes about the content bundle. What a community *is* -- its
    * name, its clock, which parts of the product exist --
    * is a decision the people in it make, and it is exactly the kind of decision that would be
    * cheapest for a model to get wrong at scale.

@@ -314,6 +314,62 @@ public class DynamicPageTests {
     assertTrue(refusal, refusal.contains("human only"));
   }
 
+  /**
+   * A run leaves nothing registered on the runtime it just closed.
+   *
+   * <b>The bug this exists for cost 135KB a request and nothing else showed it.</b> Binding the
+   * host function registers a callback context on the V8 runtime, and a runtime closed while it
+   * still holds one never gives that memory back: 600 executions grew a standalone JVM by 81MB and
+   * kept it, against 9MB for the same 600 with nothing bound. On a server answering dynamic pages
+   * that is a gigabyte every six thousand requests, arriving as a box that falls over one evening
+   * for no visible reason.
+   *
+   * <b>Asserted on the warning rather than on memory, because memory is not a signal here.</b> The
+   * obvious test -- run it a lot and watch RSS -- passes identically with the fix and without it
+   * under surefire, whose smaller heap makes V8 collect often enough to hide the whole thing. An
+   * assertion that cannot tell the two apart is worse than none. V8 emits this warning at close
+   * for every context still registered, so it is exact, fast, and true wherever the test runs.
+   */
+  @Test
+  public void aRunLeavesNothingRegisteredOnTheRuntime() throws Exception {
+    // the root logger, because Javet names its own loggers after whatever created them and the
+    // class in the printed line is the source, not the name -- attaching by name caught nothing
+    java.util.logging.Logger javet = java.util.logging.LogManager.getLogManager().getLogger("");
+    java.util.List<String> complaints = java.util.Collections.synchronizedList(
+        new java.util.ArrayList<>());
+    java.util.logging.Handler listener = new java.util.logging.Handler() {
+      @Override
+      public void publish(java.util.logging.LogRecord record) {
+        if (record.getMessage() != null && record.getMessage().contains("not recycled")) {
+          complaints.add(record.getMessage());
+        }
+      }
+
+      @Override
+      public void flush() {
+      }
+
+      @Override
+      public void close() {
+      }
+    };
+    javet.addHandler(listener);
+    try {
+      io.hearth.js.JavaScript engine = io.hearth.js.JavaScript.shared();
+      io.hearth.js.JavaScript.Page page = new io.hearth.js.JavaScript.Page(
+          "function ask(){return __call('x','get',[1]);}", request -> "null");
+      for (int k = 0; k < 20; k++) {
+        assertFalse(engine.run("meta('a','b'); render('x');", page).failed());
+      }
+      // and a page that threw leaks exactly as much as one that worked
+      engine.run("nope();", page);
+      assertEquals("every run has to leave the runtime empty: " + complaints,
+          0, complaints.size());
+    } finally {
+      javet.removeHandler(listener);
+    }
+  }
+
   @Test
   public void aPageNothingHasAskedForHasNoTiming() throws Exception {
     saveProgram("/never", "render('x');");
