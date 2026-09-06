@@ -224,7 +224,8 @@ public class SelfRoutes {
     } else if (action.equals("availability")) {
       try {
         accounts.availability.save(me.id(), form.text("weekly"), form.text("notes"),
-            form.get("ics_url"));
+            form.get("ics_url"), form.get("hosts") != null,
+            io.hearth.vote.Availability.Flexibility.of(form.get("flexibility")));
       } catch (io.hearth.vote.Votes.Refused refused) {
         show(config, accounts, ctx, req, me, Tab.keys, refused.getMessage(), recorder);
         return;
@@ -371,6 +372,18 @@ public class SelfRoutes {
     model.put("icsUrl", free.icsUrl());
     model.put("availKind", free.kind().name());
     model.put("availAdvice", free.advice());
+    model.put("hosts", free.hosts());
+    ArrayList<Map<String, Object>> flex = new ArrayList<>();
+    for (io.hearth.vote.Availability.Flexibility one
+        : io.hearth.vote.Availability.Flexibility.values()) {
+      LinkedHashMap<String, Object> row = new LinkedHashMap<>();
+      row.put("value", one.name());
+      row.put("label", one.name().replace('_', ' '));
+      row.put("advice", one.advice);
+      row.put("selected", one == free.flexibility());
+      flex.add(row);
+    }
+    model.put("flexibilities", flex);
     model.put("exportUrl", config.urls.self + "?tab=data&download=export");
     model.put("privacyUrl", "/legal/privacy-policy");
     model.put("isConfigAdmin", accounts.access.isBootstrapAdmin(me.email()));

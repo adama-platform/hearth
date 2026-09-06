@@ -383,6 +383,23 @@ public class AiSurface {
       standing.add(row);
     }
     out.put("standing", standing);
+    // The weighing, which is what a group actually argues about.
+    //
+    // Beside the standing rather than instead of it: the standing is the arithmetic of the ballots
+    // and this is what each evening would cost, with every number that went into it beside it. A
+    // ranking somebody cannot interrogate gets exactly one wrong answer before nobody trusts it.
+    ArrayList<Map<String, Object>> weighed = new ArrayList<>();
+    for (io.hearth.vote.Weighing.Weighed each
+        : io.hearth.vote.Weighing.weigh(vote, accounts, zone)) {
+      weighed.add(io.hearth.vote.Weighing.asMap(each));
+    }
+    out.put("weighed", weighed);
+    out.put("how_to_read_weighed", "There is always an imperfect night; this says what each one"
+        + " costs and who it costs it to. `would_have_to_move_something` is a repeating commitment"
+        + " -- a real thing, and the kind people often shift for something that matters, so it is"
+        + " not a refusal. A ballot always beats a calendar: if somebody voted, that is what they"
+        + " mean, whatever their calendar shows. Read the verdict to a person rather than the"
+        + " score.");
     out.put("options", JSON_NODES.convertValue(vote.optionsJson(), List.class));
     out.put("history", JSON_NODES.convertValue(vote.historyJson(), List.class));
     return out;
@@ -525,15 +542,33 @@ public class AiSurface {
     return out;
   }
 
-  public Map<String, Object> proposeOption(String slug, String label, String detail)
+  public Map<String, Object> proposeOption(String slug, String label, String detail,
+                                           String startsAt, String endsAt)
       throws SQLException, Refused {
     assertWritable();
+    long starts = instantOf(startsAt);
+    long ends = instantOf(endsAt);
+    if (startsAt != null && !startsAt.isBlank() && starts <= 0) {
+      throw new Refused("starts_at has to be an ISO instant like 2026-10-09T19:00:00Z, or left"
+          + " out entirely if this option has no particular time");
+    }
     try {
-      accounts.votes.propose(slug, label, detail, gymActor(), actorName());
+      accounts.votes.propose(slug, label, detail, label, starts, ends, gymActor(), actorName());
     } catch (io.hearth.vote.Votes.Refused refused) {
       throw new Refused(refused.getMessage());
     }
     return getVote(slug);
+  }
+
+  private static long instantOf(String raw) {
+    if (raw == null || raw.isBlank()) {
+      return 0;
+    }
+    try {
+      return java.time.Instant.parse(raw.trim()).toEpochMilli();
+    } catch (Exception ex) {
+      return -1;
+    }
   }
 
   public Map<String, Object> castBallot(String slug, String option, String ballot, String because)
@@ -585,7 +620,7 @@ public class AiSurface {
         continue;
       }
       io.hearth.vote.Availability.Record found = accounts.availability.of(person.id());
-      if (found.kind() == io.hearth.vote.Availability.Kind.unknown) {
+      if (found.kind() == io.hearth.vote.Availability.Kind.unknown && !found.hosts()) {
         // somebody who has said nothing is absent rather than listed as unknown: a row saying
         // "we do not know" invites an agent to fill the gap with a guess
         continue;
@@ -594,6 +629,10 @@ public class AiSurface {
       row.put("who", accounts.people.profileOf(person.id()).nameOr("member " + person.id()));
       row.put("kind", found.kind().name());
       row.put("what_to_do_with_it", found.advice());
+      // The seed. Free/busy cannot say either of these, and both decide what to propose first.
+      row.put("can_host", found.hosts());
+      row.put("flexibility", found.flexibility().name());
+      row.put("how_movable_they_are", found.flexibility().advice);
       if (found.hasWeekly()) {
         row.put("weekly", JSON_NODES.convertValue(found.weeklyJson(), Map.class));
       }
@@ -602,6 +641,27 @@ public class AiSurface {
       }
       if (found.hasCalendar()) {
         row.put("ics_url", found.icsUrl());
+        io.hearth.vote.Calendars.Cached cached =
+            accounts.calendars.of(person.id(), found.icsUrl(), zone);
+        // Repeating commitments are counted separately, because they are the movable ones and an
+        // agent that treats them as walls proposes nothing for a group of five.
+        int firm = 0;
+        int maybe = 0;
+        for (io.hearth.vote.Ics.Busy window : cached.busy()) {
+          if (window.firm()) {
+            firm++;
+          } else {
+            maybe++;
+          }
+        }
+        row.put("fixed_commitments", firm);
+        row.put("repeating_commitments", maybe);
+        row.put("about_repeating", "Counted but not treated as walls: a standing commitment is"
+            + " real and is also the kind of thing people move. vote_get weighs each option and"
+            + " says who would have to move what.");
+        if (cached.hasTrouble()) {
+          row.put("calendar_trouble", cached.trouble());
+        }
       }
       rows.add(row);
     }
@@ -1009,7 +1069,7 @@ public class AiSurface {
     //
     // The one thing an agent must not be able to do is widen its own reach, which is why there is
     // no tool for making a table -- only for writing a page that reads the ones a person declared.
-    // Same shape as invariant 128: the safety is that the tool does not exist.
+    // Same shape as invariant 133: the safety is that the tool does not exist.
     String template = changes.containsKey("template")
         ? str(changes, "template")
         : (existing == null ? null : existing.templateName());

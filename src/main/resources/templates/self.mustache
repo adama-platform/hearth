@@ -233,11 +233,24 @@ the community sees afterwards.</p>
            placeholder="no drives over an hour on a school night">
   </div>
   <div class="field">
+    <label class="check"><input type="checkbox" name="hosts"{{#hosts}} checked{{/hosts}}> I can have people round</label>
+    <p class="hint">A vote can name a host, and the host's &ldquo;I cannot&rdquo; is final &mdash; a
+      majority cannot vote somebody into having twelve people in their kitchen.</p>
+  </div>
+  <div class="field">
+    <label for="flex">how movable your week is</label>
+    <select id="flex" name="flexibility">{{#flexibilities}}<option value="{{value}}"{{#selected}} selected{{/selected}}>{{label}} &mdash; {{advice}}</option>{{/flexibilities}}</select>
+    <p class="hint">This is what agents are seeded with, and a free/busy grid cannot say it. Somebody
+      free most evenings and somebody with a full week want different first proposals even when
+      their calendars look the same that Thursday.</p>
+  </div>
+  <div class="field">
     <label for="ics">calendar link <span class="dim">&mdash; optional, https only</span></label>
     <input id="ics" type="url" name="ics_url" value="{{icsUrl}}" placeholder="https://...ics">
-    <p class="hint">If you share one, agents fetch it themselves and read your real engagements.
-      This server never fetches or stores a copy of your calendar &mdash; it hands over the link and
-      nothing else. Leave it empty and only the shape above is given out.</p>
+    <p class="hint">Fetched and kept for an hour. <strong>Only the busy windows are stored, never
+      what anything was</strong> &mdash; no titles, no people, no places. Repeating events are
+      treated as <em>maybes</em> rather than walls, because a standing Tuesday thing is real and is
+      also the sort of thing people move for a birthday.</p>
   </div>
   <div class="doing"><button type="submit">Save</button></div>
 </form>

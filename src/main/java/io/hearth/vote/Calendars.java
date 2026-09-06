@@ -28,7 +28,7 @@ import java.util.List;
  * Calendars this server fetches, keeps for an hour, and reduces to busy windows.
  *
  * <b>Fetching somebody's calendar is a serious thing to do and every guard here is about that.</b>
- * The url is member-supplied, which is invariant 145 exactly: https only, resolved and refused if it
+ * The url is member-supplied, which is invariant 150 exactly: https only, resolved and refused if it
  * points anywhere private, no redirects, a timeout and a ceiling on the body. Relaxing any one of
  * those turns "paste your calendar link" into a way to make this server fetch things on the internal
  * network on somebody else's behalf.
@@ -113,7 +113,7 @@ public class Calendars {
   }
 
   /**
-   * One fetch, with every guard invariant 145 asks for.
+   * One fetch, with every guard invariant 150 asks for.
    *
    * The address is resolved and refused if it is private *after* resolution, because a name that
    * resolves to 10.x is the whole trick -- checking the string would catch nothing.
@@ -176,7 +176,10 @@ public class Calendars {
         try {
           JsonNode node = JSON.readTree(found.getString("busy"));
           for (JsonNode one : node) {
-            busy.add(new Ics.Busy(one.path("s").asLong(), one.path("e").asLong()));
+            // `f` defaults to true for a row written before firmness existed, which is the
+            // conservative reading of an old cache and self-corrects within the hour
+            busy.add(new Ics.Busy(one.path("s").asLong(), one.path("e").asLong(),
+                one.path("f").asBoolean(true)));
           }
         } catch (Exception ex) {
           LOG.warn("calendar-cache-unreadable user={}", userId);
@@ -194,6 +197,10 @@ public class Calendars {
       ObjectNode one = node.addObject();
       one.put("s", window.start());
       one.put("e", window.end());
+      // Firmness has to survive the cache, and it did not: without this every maybe came back as a
+      // certainty on the next read, which is precisely the failure the whole design forbids -- a
+      // standing Tuesday call silently deleting Tuesday, an hour after it was fetched.
+      one.put("f", window.firm());
     }
     try (Connection connection = store.connection();
          PreparedStatement statement = connection.prepareStatement(

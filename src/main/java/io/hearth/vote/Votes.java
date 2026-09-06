@@ -287,6 +287,19 @@ public class Votes {
    */
   public synchronized Record propose(String slug, String label, String detail, long actor,
                                      String actorName) throws SQLException, Refused {
+    return propose(slug, label, detail, null, 0, 0, actor, actorName);
+  }
+
+  /**
+   * Offer an option with a real time on it, so a calendar can be asked about it.
+   *
+   * <b>The time is optional and that is deliberate.</b> "Sometime in October" is a legitimate
+   * option and is weighed on its ballots alone -- inventing a timestamp so it could be checked
+   * would be worse than admitting there is nothing to check.
+   */
+  public synchronized Record propose(String slug, String label, String detail, String when,
+                                     long startsAt, long endsAt, long actor, String actorName)
+      throws SQLException, Refused {
     Record vote = require(slug);
     if (!vote.state().acceptsBallots()) {
       return refuse("'" + slug + "' is " + vote.state() + "; it is not taking options any more");
@@ -300,6 +313,13 @@ public class Votes {
     ObjectNode added = addOption(options, seen, label, actor, actorName, history);
     if (detail != null && !detail.isBlank()) {
       added.put("detail", detail.trim());
+    }
+    if (when != null && !when.isBlank()) {
+      added.put("when", when.trim());
+    }
+    if (startsAt > 0) {
+      added.put("starts_at", startsAt);
+      added.put("ends_at", endsAt > startsAt ? endsAt : startsAt + 3L * 60 * 60 * 1000);
     }
     save(vote, options, history, vote.state(), vote.outcome(), actor);
     return bySlug(slug);

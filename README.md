@@ -104,9 +104,35 @@ propose a night you have had booked for a month.
 
 A shared ICS is fetched, parsed and cached for an hour. **Only the busy windows are kept, never the
 summaries** — what a scheduler needs is when you are not free, and what an ICS carries is who you
-were meeting. There is no recurrence expansion, so a repeating event is seen once; that fails in the
-safe direction, since a missed window proposes a time somebody then blocks, and a wrongly-busy one
-would silently delete a good evening.
+were meeting.
+
+**A repeating event is a maybe, not a wall.** A standing Tuesday call is real and is also exactly
+the kind of thing somebody moves for a friend's fortieth. Treating repeats as walls answers "no
+evening works" for any group of five — right, and useless. The rule the whole calendar path follows
+is that *an uncertain conflict is never reported as a certain one*.
+
+**You also say how movable you are**, which free/busy cannot: `can_host`, and one of `mostly_free` /
+`it_depends` / `tightly_booked`. That is what an agent is seeded with. One friend hosts and has a
+full calendar; another is free most evenings and immovable on three — the same first proposal is
+right for one and wrong for the other.
+
+### Weighed, not filtered
+
+**There is always an imperfect night.** So `vote_get` doesn't hand back a list of evenings nobody
+objects to — it hands back every option with what it *costs* and who it costs it to:
+
+```
+Thursday 9th — 4 can come, 1 would have to move something they could probably move.
+  Ana   can_come                     their calendar is clear
+  Zed   would_have_to_move_something a repeating commitment — often movable
+  Bo    cannot_come                  a one-off in their calendar
+```
+
+Every number that made the ranking comes back beside it, because a ranking nobody can interrogate
+gets one wrong answer before it's never trusted again. **A ballot always beats a calendar** — in
+both directions. Someone saying yes on an evening their calendar objects to has already moved it;
+someone blocking a clear-looking evening knows something the file doesn't. And **silence counts for
+nothing rather than against**.
 
 ## What else is in the jar
 

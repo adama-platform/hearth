@@ -29,7 +29,7 @@ import java.util.List;
  */
 public class Schema {
   /** bumped whenever the tables below change; recorded in schema_meta for the boot audit */
-  public static final int VERSION = 46;
+  public static final int VERSION = 47;
 
   public static final String EMAILS = "emails";
   public static final String SESSIONS = "sessions";
@@ -297,6 +297,15 @@ public class Schema {
       .column(Column.of("weekly", "VARCHAR(65536)").notNull().withDefault("'{}'"))
       // anything an agent should know that a grid cannot say
       .column(Column.of("notes", "VARCHAR(4096)").notNull().withDefault("''"))
+      // Can this person have people round, and how movable is their week?
+      //
+      // These two are what an agent is *seeded* with, and they are the difference between a useful
+      // first proposal and a round of guessing. One person hosts and has a calendar full of things
+      // that could shift; another is free most evenings and immovable on three. Neither fact is in
+      // a grid of free/busy and both decide what to propose first.
+      .column(Column.of("hosts", "BOOLEAN").notNull().withDefault("FALSE"))
+      // mostly_free | it_depends | tightly_booked
+      .column(Column.of("flexibility", "VARCHAR(16)").notNull().withDefault("'it_depends'"))
       // an ICS url, if they are willing to share one
       .column(Column.of("ics_url", "VARCHAR(1024)").notNull().withDefault("''"))
       .column(Column.of("updated_at", "TIMESTAMP").notNull().withDefault("CURRENT_TIMESTAMP"))

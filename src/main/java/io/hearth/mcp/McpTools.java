@@ -269,11 +269,20 @@ public class McpTools {
             + " a group ends up meeting twice.",
         schema(prop("open_only", "boolean", "true for votes still taking ballots"))));
 
-    tools.add(new Tool("vote_get", "One vote, and how it got here",
-        "Everything about one vote: the options, where each stands, and the full history of who"
-            + " proposed and voted what and why. READ THIS BEFORE VOTING. The history is the point"
-            + " -- somebody may already have explained why Thursday is impossible, and a ballot"
-            + " that ignores what was said is how a vote goes round in circles.",
+    tools.add(new Tool("vote_get", "One vote, weighed, and how it got here",
+        "Everything about one vote: the options, where each stands, what each one would COST, and"
+            + " the full history of who proposed and voted what and why. READ THIS BEFORE VOTING."
+            + " The history is the point -- somebody may already have explained why Thursday is"
+            + " impossible, and a ballot that ignores what was said is how a vote goes round in"
+            + " circles.\n"
+            + "`weighed` is the part to reason with. THERE IS ALWAYS AN IMPERFECT NIGHT: the job is"
+            + " not to find one nobody objects to, it is to find the one that costs least and say"
+            + " what it costs. Each option carries how many can come, how many would have to move"
+            + " something, how many cannot, and a per-person breakdown saying WHY -- a vote, a"
+            + " one-off in a calendar, or a repeating commitment.\n"
+            + "A repeating commitment is NOT a refusal. It is a real thing and it is the kind of"
+            + " thing people move for something that matters. Say so when you propose: \"Ana has"
+            + " her usual Tuesday thing, but it is her sister's birthday so she may shift it.\"",
         required(schema(prop("vote", "string", "the vote's name, from vote_list")), "vote")));
 
     tools.add(new Tool("vote_open", "Start a vote",
@@ -329,7 +338,13 @@ public class McpTools {
             + " rather than arguing for a blocked option.",
         required(schema(prop("vote", "string", "the vote's name"),
                 prop("option", "string", "a short label, e.g. 'Thursday 9 October, 7pm'"),
-                prop("detail", "string", "anything that will not fit in the label")),
+                prop("detail", "string", "anything that will not fit in the label"),
+                prop("starts_at", "string",
+                    "GIVE THIS WHENEVER THE OPTION IS A REAL TIME. An ISO instant like"
+                        + " 2026-10-09T19:00:00Z. It is what lets vote_get check the option"
+                        + " against everybody's calendar and tell you who would have to move"
+                        + " something; without it the option is weighed on ballots alone."),
+                prop("ends_at", "string", "ISO instant; three hours is assumed if you leave it")),
             "vote", "option")));
 
     tools.add(new Tool("vote_cast", "Vote",
@@ -368,8 +383,20 @@ public class McpTools {
             "vote", "option")));
 
     tools.add(new Tool("when_free", "When people are free",
-        "What everybody here has said about their availability. Each person comes back with a"
-            + " `kind` and a sentence saying what to do with it, and you must read that:\n"
+        "What everybody here has said about their availability, AND how movable they each are."
+            + " Start here before proposing anything -- this is what stops the first round being"
+            + " guesswork.\n"
+            + "`can_host` says whether they will have people round. `flexibility` is the seed that"
+            + " a free/busy grid cannot give you: `mostly_free` means propose freely and let the"
+            + " calendar show the exceptions; `tightly_booked` means assume a conflict and expect"
+            + " something may have to move; `it_depends` is in between. One person may host and"
+            + " have a full calendar while another is free most evenings and immovable on three --"
+            + " the same proposal is right for one and wrong for the other.\n"
+            + "`repeating_commitments` is counted separately from `fixed_commitments` on purpose."
+            + " Repeating ones are movable; treating them as walls means proposing nothing at all"
+            + " for a group of five, because everybody has a standing something.\n"
+            + "Each person also comes back with a `kind` and a sentence saying what to do with it,"
+            + " and you must read that:\n"
             + "  calendar -- an ICS url they share. Fetch it YOURSELF and read real engagements;"
             + " this server does not hold a copy.\n"
             + "  weekly   -- a rough shape they typed. It is NOT a calendar. It says what they"
@@ -679,7 +706,8 @@ public class McpTools {
       case "vote_propose" -> {
         String slug = optString(args, "vote");
         String option = optString(args, "option");
-        return new Result(surface.proposeOption(slug, option, optString(args, "detail")),
+        return new Result(surface.proposeOption(slug, option, optString(args, "detail"),
+            optString(args, "starts_at"), optString(args, "ends_at")),
             slug, "proposed '" + option + "' in " + slug);
       }
       case "vote_cast" -> {
@@ -927,7 +955,7 @@ public class McpTools {
     // string -- so every nested object a tool declared arrived as "". place_save has advertised a
     // `fields` object since the address book shipped and reads it with an `instanceof Map` that
     // could never be true, which meant a model filling in a kind's own fields was told it had
-    // worked and nothing was written. That is the precise failure invariant 127 refuses for an
+    // worked and nothing was written. That is the precise failure invariant 132 refuses for an
     // *undeclared* field, arriving through the plumbing instead: silent success for a write that
     // did not happen. Objects are now objects, and ToolArgumentTests holds both halves down.
     if (node.isObject()) {
