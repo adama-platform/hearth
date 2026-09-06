@@ -212,6 +212,8 @@ src/main/java/io/hearth/
   events/EventListener.java   what a cache implements to hear about a write
   events/LocalEventBus.java   the in-process ring buffer, notified inline on the writing thread
   events/MutationEvent.java   domain + table + key + kind; flat so it can leave the JVM later
+  hevy/Hevy.java                  Hevy's API on somebody's behalf; one host, hard-coded
+  hevy/UserKeys.java              keys held for a service somewhere else; one row per person per service
   js/JavaScript.java              V8: a fresh isolate per run, on its own threads, with a second to finish
   legal/LegalDoc.java             the two documents, and the text they ship with
   legal/LegalDocs.java            what a community said instead, if anything

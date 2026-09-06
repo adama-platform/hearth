@@ -29,7 +29,7 @@ import java.util.List;
  */
 public class Schema {
   /** bumped whenever the tables below change; recorded in schema_meta for the boot audit */
-  public static final int VERSION = 42;
+  public static final int VERSION = 43;
 
   public static final String EMAILS = "emails";
   public static final String SESSIONS = "sessions";
@@ -37,6 +37,7 @@ public class Schema {
   public static final String CONTENT = "content";
   public static final String TEMPLATES = "templates";
   public static final String MUTATIONS = "mutations";
+  public static final String USER_KEYS = "user_keys";
   public static final String PROFILES = "profiles";
   public static final String BANS = "bans";
   public static final String OAUTH_CLIENTS = "oauth_clients";
@@ -205,6 +206,32 @@ public class Schema {
       .column(Column.of("updated_at", "TIMESTAMP").notNull().withDefault("CURRENT_TIMESTAMP"))
       .column(Column.of("updated_by", "BIGINT"))
       .index("idx_mutations_uri", "uri")
+      .build();
+
+  /**
+   * Credentials one person handed this server for a service somewhere else.
+   *
+   * <b>A table of its own, not a column on `profiles`.</b> A profile is what other members read;
+   * this is a secret, and the two should not be one SELECT away from each other. Every read of it
+   * is deliberate.
+   *
+   * <b>Stored as given, and there is no honest alternative.</b> A session token can be a hash
+   * because it is only ever compared; this has to be *presented* to Hevy on every call, so it is a
+   * password this server holds on somebody's behalf. That is a real thing to be uncomfortable
+   * about, which is why it is one row per person per service, cleared with one button, and never
+   * printed on any screen -- `set` or `not set` is the half worth knowing, the same rule the
+   * settings report follows.
+   */
+  public static final Table USER_KEYS_TABLE = Table.named(USER_KEYS)
+      .column(Column.id("id"))
+      .column(Column.of("user_id", "BIGINT").notNull())
+      // which service, from a closed list in code; a free-form name here would be a table of
+      // arbitrary credentials with nothing checking what any of them are for
+      .column(Column.of("service", "VARCHAR(32)").notNull())
+      .column(Column.of("secret", "VARCHAR(512)").notNull().withDefault("''"))
+      .column(Column.of("created_at", "TIMESTAMP").notNull().withDefault("CURRENT_TIMESTAMP"))
+      .column(Column.of("updated_at", "TIMESTAMP").notNull().withDefault("CURRENT_TIMESTAMP"))
+      .unique("uq_user_keys", "user_id", "service")
       .build();
 
   public static final Table TEMPLATES_TABLE = Table.named(TEMPLATES)
@@ -592,7 +619,7 @@ public class Schema {
           ROLE_DEFS_TABLE, PUSH_SUBS_TABLE,
           THEMES_TABLE, LEGAL_TABLE, SYSTEM_TEMPLATES_TABLE,
           ATTACHMENTS_TABLE,
-          CONFIG_TABLE, MUTATIONS_TABLE);
+          CONFIG_TABLE, MUTATIONS_TABLE, USER_KEYS_TABLE);
 
   private Schema() {
   }

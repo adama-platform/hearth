@@ -312,7 +312,8 @@ public class SchemaUpgraderTests {
       "mutations.uri", "oauth_clients.client_id", "profiles.user_id", "push_subs.endpoint",
       "push_subs.session_id", "push_subs.user_id", "role_defs.name", "roles.role_name",
       "roles.user_id", "schema_meta.meta_key", "schema_meta.meta_value", "sessions.token_hash",
-      "sessions.user_id", "system_templates.slug", "templates.name", "themes.scope");
+      "sessions.user_id", "system_templates.slug", "templates.name", "themes.scope",
+      "user_keys.service", "user_keys.user_id");
 
   @Test
   public void aVersionOneDatabaseUpgradesToVersionTwoInPlace() throws Exception {

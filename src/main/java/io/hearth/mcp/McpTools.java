@@ -58,7 +58,14 @@ public class McpTools {
           java.util.Map.entry("template_save", io.hearth.auth.Permission.templates_write),
           java.util.Map.entry("template_delete", io.hearth.auth.Permission.templates_write),
           java.util.Map.entry("navigation_get", io.hearth.auth.Permission.content_read),
-          java.util.Map.entry("site_spec", io.hearth.auth.Permission.content_read));
+          java.util.Map.entry("site_spec", io.hearth.auth.Permission.content_read)
+          // The gym is the person's own, always.
+          //
+          // No permission gates it, and that is deliberate rather than an omission: the key belongs
+          // to whoever connected the agent, every call uses their id, and there is no argument
+          // anywhere for whose. Somebody with no Hevy key gets a refusal that tells them where to
+          // get one, which is the right answer and not a permission problem.
+          );
 
   /** what a tool needs, for the listing and for the screen that explains a connection */
   public static io.hearth.auth.Permission needs(String tool) {
@@ -143,6 +150,106 @@ public class McpTools {
     //
     // Two dead section headers stood here, for the polls and the training log, describing rules a
     // model would need for features that were removed a while ago.
+
+    // ---- the gym -------------------------------------------------------------------------------
+    //
+    // These descriptions carry more than the others because a model has no screen and Hevy's
+    // vocabulary is not guessable: that an exercise is a *template* with an id, that a routine is
+    // a list of those with sets attached, and above all that when the exercise it wants does not
+    // exist it can make one. That last is the whole reason this surface exists -- the mobility
+    // work worth programming is not in anybody's standard list.
+
+    tools.add(new Tool("gym_workouts", "Recent workouts",
+        "Workouts already performed, newest first, with every exercise and set. This is the record"
+            + " of what was actually done -- read it before writing a routine so the weights and"
+            + " volumes you choose follow from what the person has been lifting.",
+        schema(prop("page", "integer", "1 is the most recent page"),
+            prop("page_size", "integer", "up to 10"))));
+
+    tools.add(new Tool("gym_workout", "One workout",
+        "A single workout in full, by its id, which gym_workouts gives you.",
+        required(schema(prop("workout_id", "string", "the workout's id")), "workout_id")));
+
+    tools.add(new Tool("gym_exercises", "Exercise templates",
+        "Every exercise available to this account -- Hevy's built-in list plus any custom ones."
+            + " Each has an `id` (Hevy calls it exercise_template_id), a title, a type, an"
+            + " equipment category and a muscle group. A routine refers to exercises by that id, so"
+            + " search here first. The list is long: page through it, or ask for a large page_size."
+            + " If what you want is not here, make it with gym_exercise_create rather than"
+            + " substituting something close.",
+        schema(prop("page", "integer", "1 is the first page"),
+            prop("page_size", "integer", "up to 100"))));
+
+    tools.add(new Tool("gym_exercise_history", "History of one exercise",
+        "Every set ever performed of one exercise, by template id. Use it to pick a working weight"
+            + " rather than guessing.",
+        required(schema(prop("exercise_template_id", "string", "from gym_exercises")),
+            "exercise_template_id")));
+
+    tools.add(new Tool("gym_exercise_create", "Invent an exercise",
+        "Create a custom exercise on this Hevy account, and then use its id in a routine."
+            + " THIS IS THE IMPORTANT ONE. Hevy's built-in list covers barbells and machines and"
+            + " almost none of the mobility, rehab and positional work worth programming -- 90/90"
+            + " hip switches, couch stretch holds, loaded carries with an odd implement. Do not"
+            + " approximate with a lift that happens to be listed: make the exercise, name it what"
+            + " it is, and use it. Custom exercises are permanent and appear in the app.\n"
+            + "exercise_type decides what the app asks for on each set, so choose it from the"
+            + " movement rather than from habit: `duration` for a held stretch, `reps_only` for"
+            + " unloaded mobility, `weight_reps` for a normal lift, `distance_duration` for a"
+            + " carry or a walk, `bodyweight_reps` for push-ups and pull-ups.",
+        required(schema(
+                prop("title", "string", "what it is called, e.g. '90/90 Hip Switch'"),
+                prop("exercise_type", "string",
+                    "one of: " + String.join(", ", io.hearth.hevy.Hevy.EXERCISE_TYPES)),
+                prop("equipment_category", "string",
+                    "one of: " + String.join(", ", io.hearth.hevy.Hevy.EQUIPMENT)
+                        + " -- use `none` for bodyweight and floor work"),
+                prop("muscle_group", "string",
+                    "the main one; one of: "
+                        + String.join(", ", io.hearth.hevy.Hevy.MUSCLE_GROUPS)),
+                stringArrayProp("other_muscles", "anything else it works, from the same list")),
+            "title", "exercise_type", "equipment_category", "muscle_group")));
+
+    tools.add(new Tool("gym_routines", "Routines",
+        "The routines saved on this account, with the exercises and sets in each.",
+        schema(prop("page", "integer", "1 is the first page"),
+            prop("page_size", "integer", "up to 10"))));
+
+    tools.add(new Tool("gym_routine_create", "Build a routine",
+        "Create a routine from a list of exercises, each with its sets. Every exercise needs an"
+            + " exercise_template_id from gym_exercises (or one you just made with"
+            + " gym_exercise_create), and at least one set -- an exercise with no sets is one Hevy"
+            + " accepts and nobody can perform.\n"
+            + "A set is {type, and whichever of weight_kg / reps / duration_seconds /"
+            + " distance_meters the exercise's type calls for}. type is one of "
+            + String.join(", ", io.hearth.hevy.Hevy.SET_TYPES) + "; use `warmup` for the ramp-up"
+            + " sets so the app counts volume properly. rest_seconds and notes go on the exercise,"
+            + " not the set.",
+        required(schema(
+                prop("title", "string", "what the routine is called"),
+                prop("notes", "string", "anything the person should read before starting"),
+                prop("folder_id", "integer", "a folder from gym_folders; omit for My Routines"),
+                objectArrayProp("exercises",
+                    "in order: {exercise_template_id, rest_seconds, notes, sets: [...]}")),
+            "title", "exercises")));
+
+    tools.add(new Tool("gym_routine_update", "Replace a routine",
+        "Overwrite an existing routine with a new set of exercises. The whole routine is replaced,"
+            + " so send everything you want it to end up with -- read it back with gym_routines"
+            + " first if you are changing part of it.",
+        required(schema(prop("routine_id", "string", "from gym_routines"),
+                prop("title", "string", "what the routine is called"),
+                prop("notes", "string", "anything the person should read before starting"),
+                objectArrayProp("exercises", "the complete new list, as in gym_routine_create")),
+            "routine_id", "title", "exercises")));
+
+    tools.add(new Tool("gym_folders", "Routine folders",
+        "The folders routines can be filed in, with their ids.",
+        schema(prop("page", "integer", "1 is the first page"))));
+
+    tools.add(new Tool("gym_folder_create", "Make a routine folder",
+        "Create a folder to file routines in, e.g. one per training block.",
+        required(schema(prop("title", "string", "what the folder is called")), "title")));
 
     tools.add(new Tool("site_spec", "How to build a site here",
         "Everything you need to write pages that work: every kind of page, the address rule for"
@@ -262,6 +369,49 @@ public class McpTools {
   public Result call(String name, JsonNode arguments) throws SQLException, AiSurface.Refused {
     Map<String, Object> args = asMap(arguments);
     switch (name) {
+      case "gym_workouts" -> {
+        Map<String, Object> answer = surface.hevyWorkouts(
+            optInt(args, "page", 1), optInt(args, "page_size", 10));
+        return new Result(answer, null, "read recent workouts");
+      }
+      case "gym_workout" -> {
+        String id = optString(args, "workout_id");
+        return new Result(surface.hevyWorkout(id), id, "read workout " + id);
+      }
+      case "gym_exercises" -> {
+        Map<String, Object> answer = surface.hevyExercises(
+            optInt(args, "page", 1), optInt(args, "page_size", 100));
+        return new Result(answer, null, "listed exercise templates");
+      }
+      case "gym_exercise_history" -> {
+        String id = optString(args, "exercise_template_id");
+        return new Result(surface.hevyExerciseHistory(id), id, "read the history of " + id);
+      }
+      case "gym_exercise_create" -> {
+        String title = optString(args, "title");
+        return new Result(surface.hevyCreateExercise(args), title, "created the exercise " + title);
+      }
+      case "gym_routines" -> {
+        Map<String, Object> answer = surface.hevyRoutines(
+            optInt(args, "page", 1), optInt(args, "page_size", 10));
+        return new Result(answer, null, "listed routines");
+      }
+      case "gym_routine_create" -> {
+        String title = optString(args, "title");
+        return new Result(surface.hevyCreateRoutine(args), title, "built the routine " + title);
+      }
+      case "gym_routine_update" -> {
+        String id = optString(args, "routine_id");
+        return new Result(surface.hevyUpdateRoutine(id, args), id, "replaced routine " + id);
+      }
+      case "gym_folders" -> {
+        Map<String, Object> answer = surface.hevyFolders(optInt(args, "page", 1), 10);
+        return new Result(answer, null, "listed routine folders");
+      }
+      case "gym_folder_create" -> {
+        String title = optString(args, "title");
+        return new Result(surface.hevyCreateFolder(title), title, "made the folder " + title);
+      }
       case "content_list" -> {
         List<Map<String, Object>> pages = surface.listContent(
             optString(args, "folder"), optBoolean(args, "published"));
@@ -382,6 +532,16 @@ public class McpTools {
     node.put("type", "array");
     node.put("description", description);
     node.putObject("items").put("type", "object");
+    return node;
+  }
+
+  /** an array of plain strings, e.g. the other muscle groups an exercise works */
+  private static ObjectNode stringArrayProp(String name, String description) {
+    ObjectNode node = JSON.createObjectNode();
+    node.put("__name", name);
+    node.put("type", "array");
+    node.put("description", description);
+    node.putObject("items").put("type", "string");
     return node;
   }
 

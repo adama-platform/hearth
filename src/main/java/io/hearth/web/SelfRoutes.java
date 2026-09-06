@@ -44,6 +44,7 @@ public class SelfRoutes {
   /** the tabs, in order */
   public enum Tab {
     profile("Profile"),
+    keys("Connections"),
     data("Your data");
 
     public final String label;
@@ -170,6 +171,26 @@ public class SelfRoutes {
       tab = Tab.profile;
       done = "Profile saved.";
       verbose.detail("self: " + me.email() + " updated their profile");
+    } else if (action.equals("hevy_key")) {
+      // The key is never read back onto this screen -- only whether there is one, and its last four
+      // characters. Printing a credential on a page is how it ends up in a screenshot, and there is
+      // no question this screen answers that needs the whole thing.
+      String key = form.get("api_key");
+      if (key == null || key.isBlank()) {
+        accounts.userKeys.clear(me.id(), io.hearth.hevy.UserKeys.Service.hevy);
+        tab = Tab.keys;
+        done = "Your Hevy key is removed. Nothing here can reach Hevy on your behalf any more.";
+      } else if (key.length() < 8 || key.length() > 200) {
+        show(config, accounts, ctx, req, me, Tab.keys,
+            "That does not look like a Hevy key. Nothing was saved.", recorder);
+        return;
+      } else {
+        accounts.userKeys.save(me.id(), io.hearth.hevy.UserKeys.Service.hevy, key);
+        tab = Tab.keys;
+        done = "Your Hevy key is saved. An agent connected to this account can now read your"
+            + " workouts and build routines as you.";
+      }
+      verbose.detail("self: " + me.email() + " changed their Hevy key");
     } else if (action.equals("disconnect")) {
       // whoever connected it can take it away. The id is checked against their own agents rather
       // than trusted, because a session id in a form is a number somebody can change.
@@ -284,7 +305,15 @@ public class SelfRoutes {
     model.put("nav", Navigation.forRequest(config, accounts, req));
     model.put("tabs", tabs(config, active));
     model.put("onProfile", active == Tab.profile);
+    model.put("onKeys", active == Tab.keys);
     model.put("onData", active == Tab.data);
+    // whether a key is set and its last four characters -- never the key itself. On this model
+    // rather than the one an admin reads about somebody else: `reviewOf` is another person's
+    // profile, and whether they have handed over a credential is not an approver's business.
+    model.put("hevySet", accounts.userKeys.has(me.id(), io.hearth.hevy.UserKeys.Service.hevy));
+    model.put("hevyHint", accounts.userKeys.hint(me.id(), io.hearth.hevy.UserKeys.Service.hevy));
+    model.put("hevyDisclaimer", io.hearth.hevy.Hevy.DISCLAIMER);
+    model.put("hevyKeyPage", io.hearth.hevy.Hevy.KEY_PAGE);
     model.put("exportUrl", config.urls.self + "?tab=data&download=export");
     model.put("privacyUrl", "/legal/privacy-policy");
     model.put("isConfigAdmin", accounts.access.isBootstrapAdmin(me.email()));

@@ -31,7 +31,9 @@ import java.sql.Timestamp;
  * account, it is easy to email to the wrong person, and nothing invalidates it.
  *
  * What it does not carry: the session token (only a hash of it exists at all), the push keypair
- * (secret material, and useless to a person), or anything about anybody else. Somebody else's reply
+ * (secret material, and useless to a person), a key held for a service somewhere else (the same --
+ * the export says one is set, not what it is, because a file that carries a live credential is a
+ * file that must never be mislaid), or anything about anybody else. Somebody else's reply
  * in a thread is their words, not this person's data -- what is here is what they wrote, with the
  * address of the conversation so they can go and look.
  */
@@ -76,6 +78,9 @@ public final class DataExport {
     account.put("disabled", person.disabled());
     account.put("has_password", person.hasPassword());
 
+    ObjectNode connections = root.putObject("connections");
+    connections.put("hevy_key_set", accounts.userKeys.has(person.id(),
+        io.hearth.hevy.UserKeys.Service.hevy));
     ProfileRecord profile = accounts.people.profileOf(person.id());
     ObjectNode written = root.putObject("profile");
     written.put("display_name", profile.displayName());

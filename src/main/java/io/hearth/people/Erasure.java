@@ -77,6 +77,10 @@ public final class Erasure {
 
     // everything that is only about them, deleted outright
     accounts.people.forget(id);
+    // a key for a service somewhere else goes too. It is a credential this server was holding on
+    // their behalf, and holding it after they have gone is the plainest possible breach of what
+    // the privacy policy promises.
+    accounts.userKeys.forget(id);
     counts.put("push subscription(s)", accounts.pushSubs.forgetUser(id));
     // what they uploaded stays and their name comes off it, which is the rule the board already
     // follows: a photograph of last summer is part of what everybody remembers, and cutting one

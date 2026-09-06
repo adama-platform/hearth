@@ -110,6 +110,243 @@ public class AiSurface {
     }
   }
 
+  // ---- the gym ---------------------------------------------------------------------------------
+
+  /**
+   * Hevy, as the person who connected this agent.
+   *
+   * <b>The key belongs to the actor and there is no argument for whose.</b> Every method here uses
+   * {@code actorId} and nothing else, so there is no phrasing of any request that reads somebody
+   * else's workouts. That is the same rule the rest of this surface follows and it matters more
+   * here: this is a credential for a service outside this server, and a "user" parameter would be
+   * one prompt away from spending it on the wrong person.
+   *
+   * <b>Read only is honoured.</b> Creating an exercise or a routine writes to Hevy, not to this
+   * server, and a connection marked read-only must not do it -- "read only" that lets an agent
+   * change something somewhere else is a promise with a hole in it.
+   *
+   * <b>Hevy's answers are passed through as JSON.</b> Their API is explicitly unstable by their own
+   * description, so mapping it onto records here would be a second thing to fix every time they
+   * move. A model reads JSON perfectly well.
+   */
+  private long gymActor() throws Refused {
+    if (actorId == null) {
+      throw new Refused("this connection is not acting for anybody");
+    }
+    return actorId;
+  }
+
+  public Map<String, Object> hevyWorkouts(int page, int pageSize)
+      throws SQLException, Refused {
+    return call(() -> accounts.hevy.workouts(gymActor(), page, pageSize));
+  }
+
+  /**
+   * One Hevy call, with their refusals turned into ours.
+   *
+   * A {@code Hevy.Refused} already says the useful thing -- no key, key rejected, host unreachable
+   * -- and rethrowing it as the surface's own refusal is what puts it in front of the model as a
+   * tool error rather than as a stack trace. Nothing is added: the message was written to be read
+   * by whoever has to act on it.
+   */
+  private Map<String, Object> call(HevyCall body) throws SQLException, Refused {
+    try {
+      return wrap(body.run());
+    } catch (io.hearth.hevy.Hevy.Refused refused) {
+      throw new Refused(refused.getMessage());
+    }
+  }
+
+  private interface HevyCall {
+    com.fasterxml.jackson.databind.JsonNode run()
+        throws io.hearth.hevy.Hevy.Refused, SQLException, Refused;
+  }
+
+  public Map<String, Object> hevyWorkout(String workoutId) throws SQLException, Refused {
+    return call(() -> accounts.hevy.workout(gymActor(), workoutId));
+  }
+
+  public Map<String, Object> hevyRoutines(int page, int pageSize) throws SQLException, Refused {
+    return call(() -> accounts.hevy.routines(gymActor(), page, pageSize));
+  }
+
+  public Map<String, Object> hevyExercises(int page, int pageSize) throws SQLException, Refused {
+    return call(() -> accounts.hevy.exerciseTemplates(gymActor(), page, pageSize));
+  }
+
+  public Map<String, Object> hevyExerciseHistory(String templateId)
+      throws SQLException, Refused {
+    return call(() -> accounts.hevy.exerciseHistory(gymActor(), templateId));
+  }
+
+  public Map<String, Object> hevyFolders(int page, int pageSize) throws SQLException, Refused {
+    return call(() -> accounts.hevy.routineFolders(gymActor(), page, pageSize));
+  }
+
+  /**
+   * Invent an exercise.
+   *
+   * <b>This is the point of the whole gym surface.</b> Hevy's built-in list is fine for barbells
+   * and useless for the mobility work that actually needs doing -- a 90/90 hip switch, a
+   * loaded-carry variation nobody has named. A routine you cannot express is a routine you do not
+   * do, so the ability to create the exercise has to be as reachable as the ability to use one.
+   *
+   * Every enum is checked here rather than sent onward and refused by Hevy, because a refusal that
+   * names the field and lists what is allowed costs a model one turn and a 400 costs it several.
+   */
+  public Map<String, Object> hevyCreateExercise(Map<String, Object> changes)
+      throws SQLException, Refused {
+    assertWritable();
+    long actor = gymActor();
+    String title = str(changes, "title");
+    if (title == null || title.isBlank()) {
+      throw new Refused("an exercise needs a title");
+    }
+    String type = lower(changes, "exercise_type");
+    String equipment = lower(changes, "equipment_category");
+    String muscle = lower(changes, "muscle_group");
+    checkOneOf("exercise_type", type, io.hearth.hevy.Hevy.EXERCISE_TYPES);
+    checkOneOf("equipment_category", equipment, io.hearth.hevy.Hevy.EQUIPMENT);
+    checkOneOf("muscle_group", muscle, io.hearth.hevy.Hevy.MUSCLE_GROUPS);
+    ArrayList<String> others = new ArrayList<>();
+    Object raw = changes.get("other_muscles");
+    if (raw instanceof java.util.List<?> list) {
+      for (Object one : list) {
+        String value = String.valueOf(one).trim().toLowerCase(java.util.Locale.ROOT);
+        checkOneOf("other_muscles", value, io.hearth.hevy.Hevy.MUSCLE_GROUPS);
+        others.add(value);
+      }
+    }
+    LinkedHashMap<String, Object> exercise = new LinkedHashMap<>();
+    exercise.put("title", title.trim());
+    exercise.put("exercise_type", type);
+    exercise.put("equipment_category", equipment);
+    exercise.put("muscle_group", muscle);
+    exercise.put("other_muscles", others);
+    return call(() -> accounts.hevy.createExercise(actor, Map.of("exercise", exercise)));
+  }
+
+  /**
+   * Build a routine.
+   *
+   * The body is handed on close to Hevy's own shape rather than remodelled, because their schema is
+   * the thing a model has been told about by `gym_spec` and translating between two vocabularies is
+   * a place for the two to disagree. What is checked is what a model gets wrong: an exercise with
+   * no template id, and a set type that is not one of the four.
+   */
+  public Map<String, Object> hevyCreateRoutine(Map<String, Object> changes)
+      throws SQLException, Refused {
+    assertWritable();
+    long actor = gymActor();
+    return call(() -> accounts.hevy.createRoutine(actor, Map.of("routine", routineBody(changes))));
+  }
+
+  public Map<String, Object> hevyUpdateRoutine(String routineId, Map<String, Object> changes)
+      throws SQLException, Refused {
+    assertWritable();
+    long actor = gymActor();
+    return call(() -> accounts.hevy.updateRoutine(actor, routineId,
+        Map.of("routine", routineBody(changes))));
+  }
+
+  public Map<String, Object> hevyCreateFolder(String title) throws SQLException, Refused {
+    assertWritable();
+    long actor = gymActor();
+    if (title == null || title.isBlank()) {
+      throw new Refused("a folder needs a title");
+    }
+    return call(() -> accounts.hevy.createRoutineFolder(actor,
+        Map.of("routine_folder", Map.of("title", title.trim()))));
+  }
+
+  private Map<String, Object> routineBody(Map<String, Object> changes) throws Refused {
+    String title = str(changes, "title");
+    if (title == null || title.isBlank()) {
+      throw new Refused("a routine needs a title");
+    }
+    LinkedHashMap<String, Object> routine = new LinkedHashMap<>();
+    routine.put("title", title.trim());
+    if (changes.get("notes") != null) {
+      routine.put("notes", String.valueOf(changes.get("notes")));
+    }
+    if (changes.get("folder_id") != null) {
+      routine.put("folder_id", changes.get("folder_id"));
+    }
+    ArrayList<Object> exercises = new ArrayList<>();
+    Object raw = changes.get("exercises");
+    if (!(raw instanceof java.util.List<?> list) || list.isEmpty()) {
+      throw new Refused("a routine needs at least one exercise, each with an"
+          + " exercise_template_id from gym_exercises");
+    }
+    for (Object one : list) {
+      if (!(one instanceof Map<?, ?> map)) {
+        throw new Refused("each exercise has to be an object");
+      }
+      Object templateId = map.get("exercise_template_id");
+      if (templateId == null || String.valueOf(templateId).isBlank()) {
+        throw new Refused("every exercise needs an exercise_template_id -- find one with"
+            + " gym_exercises, or make one with gym_exercise_create");
+      }
+      LinkedHashMap<String, Object> exercise = new LinkedHashMap<>();
+      exercise.put("exercise_template_id", String.valueOf(templateId));
+      exercise.put("superset_id", map.get("superset_id"));
+      exercise.put("rest_seconds", map.get("rest_seconds"));
+      exercise.put("notes", map.get("notes"));
+      ArrayList<Object> sets = new ArrayList<>();
+      Object rawSets = map.get("sets");
+      if (rawSets instanceof java.util.List<?> setList) {
+        for (Object each : setList) {
+          if (!(each instanceof Map<?, ?> set)) {
+            throw new Refused("each set has to be an object");
+          }
+          String type = set.get("type") == null ? "normal"
+              : String.valueOf(set.get("type")).trim().toLowerCase(java.util.Locale.ROOT);
+          checkOneOf("set type", type, io.hearth.hevy.Hevy.SET_TYPES);
+          LinkedHashMap<String, Object> clean = new LinkedHashMap<>();
+          clean.put("type", type);
+          for (String field : new String[]{"weight_kg", "reps", "distance_meters",
+              "duration_seconds", "custom_metric", "rep_range"}) {
+            if (set.get(field) != null) {
+              clean.put(field, set.get(field));
+            }
+          }
+          sets.add(clean);
+        }
+      }
+      if (sets.isEmpty()) {
+        throw new Refused("'" + templateId + "' has no sets; a routine with an exercise and no"
+            + " sets is one Hevy will accept and nobody can perform");
+      }
+      exercise.put("sets", sets);
+      exercises.add(exercise);
+    }
+    routine.put("exercises", exercises);
+    return routine;
+  }
+
+  private static void checkOneOf(String field, String value, java.util.List<String> allowed)
+      throws Refused {
+    if (!io.hearth.hevy.Hevy.isOneOf(allowed, value)) {
+      throw new Refused("'" + field + "' has to be one of: " + String.join(", ", allowed)
+          + " (got '" + value + "')");
+    }
+  }
+
+  private static String lower(Map<String, Object> changes, String key) {
+    String value = str(changes, key);
+    return value == null ? "" : value.trim().toLowerCase(java.util.Locale.ROOT);
+  }
+
+  /** Hevy's JSON, handed on as-is; see the class note about their API being explicitly unstable */
+  private static Map<String, Object> wrap(com.fasterxml.jackson.databind.JsonNode node)
+      throws Refused {
+    try {
+      return JSON_NODES.convertValue(node, LinkedHashMap.class);
+    } catch (Exception ex) {
+      throw new Refused("Hevy's answer could not be read back");
+    }
+  }
+
   // ---- content ---------------------------------------------------------------------------------
 
   /**

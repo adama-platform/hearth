@@ -198,6 +198,11 @@ public class McpClient {
         // shape no real client sends -- which is how a tool advertising an object parameter went
         // years being silently unusable without a single test noticing.
         arguments.set(key, json);
+      } else if (value instanceof java.util.List<?> || value instanceof java.util.Map<?, ?>) {
+        // The same rule, for the shapes a test naturally reaches for. A List handed to
+        // String.valueOf becomes "[{a=b}]", which is not JSON and not something any client sends,
+        // so a test written that way would be exercising a parser nobody uses.
+        arguments.set(key, JSON.valueToTree(value));
       } else {
         arguments.put(key, String.valueOf(value));
       }

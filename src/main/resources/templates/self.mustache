@@ -122,93 +122,39 @@ the community sees afterwards.</p>
 {{/anyRoles}}
 {{/onProfile}}
 
-{{#onInbox}}
-{{^anyNotes}}<p class="hint">Nothing here. When somebody replies in a conversation you are part of,
-  it turns up here.</p>{{/anyNotes}}
-{{#anyNotes}}
-<ul class="inbox">
-  {{#notes}}
-  <li class="{{#unread}}unread{{/unread}}">
-    {{#url}}<a href="{{.}}">{{/url}}{{text}}{{#url}}</a>{{/url}}
-  </li>
-  {{/notes}}
-</ul>
-<p class="hint">Notifications age out with the conversations they are about.</p>
-{{/anyNotes}}
-{{/onInbox}}
 
-{{#onInvite}}
-{{^mayInvite}}<p class="hint">Inviting is not open here. An admin can send invitations from the
-  admin section.</p>{{/mayInvite}}
-{{#mayInvite}}
-<p class="hint">Bring somebody. They get a message with your name on it and a link that only works
-  once &mdash; and if they do not answer, we send a friendly reminder and then one last note, and
-  that is the end of it.</p>
-{{#inviteLimited}}<p class="hint">You have written {{invitedToday}} of {{inviteLimit}} today.</p>{{/inviteLimited}}
+
+
+
+{{#onKeys}}
+<h2>Hevy</h2>
+<p class="hint">A key here lets this server read your workouts and write routines to your Hevy
+  account &mdash; and lets an AI agent you have connected do the same, as you. Nobody else's agent
+  can reach it: every call uses the key of whoever is connected, and there is no way to ask for
+  somebody else's.</p>
+
+<p class="problem">{{hevyDisclaimer}} Get a key at <a href="{{hevyKeyPage}}" rel="noreferrer noopener" target="_blank">{{hevyKeyPage}}</a>.</p>
+
 <form method="post" action="{{action}}">
   <input type="hidden" name="csrf" value="{{csrf}}">
-  <input type="hidden" name="action" value="invite">
-  <div class="field"><label for="i-email">their email</label>
-    <input id="i-email" type="email" name="email" maxlength="320" required></div>
-  <button type="submit">Send the invitation</button>
+  <input type="hidden" name="action" value="hevy_key">
+  <div class="field">
+    <label for="hevy">your Hevy API key</label>
+    <input id="hevy" type="password" name="api_key" autocomplete="off"
+           placeholder="{{#hevySet}}saved &mdash; type a new one to replace it{{/hevySet}}{{^hevySet}}paste it here{{/hevySet}}">
+    <p class="hint">{{#hevySet}}A key is saved, ending {{hevyHint}}. It is never shown again on this
+      page &mdash; a credential printed on a screen is a credential in a screenshot. Save an empty
+      box to remove it.{{/hevySet}}{{^hevySet}}No key is set, so nothing here can reach
+      Hevy.{{/hevySet}}</p>
+  </div>
+  <div class="doing"><button type="submit">{{#hevySet}}Replace it{{/hevySet}}{{^hevySet}}Save it{{/hevySet}}</button></div>
 </form>
-{{/mayInvite}}
-{{#anyMyInvites}}
-<h2>People you invited</h2>
-<ul class="inbox">
-  {{#myInvites}}<li>{{email}} &mdash; <span class="dim">{{stage}}{{#joined}}, and they are here
-    now{{/joined}}</span></li>{{/myInvites}}
-</ul>
-{{/anyMyInvites}}
-{{/onInvite}}
 
-{{#onNotifications}}
-{{^boardEnabled}}<p class="hint">This community does not have a discussion board, so there is
-  nothing to be notified about yet.</p>{{/boardEnabled}}
-<form method="post" action="{{action}}">
-  <input type="hidden" name="csrf" value="{{csrf}}">
-  <input type="hidden" name="action" value="notifications">
-
-  <div class="question">
-    <p class="prompt">When somebody replies to you</p>
-    <p class="hint">A reply aimed at you is usually a conversation waiting on an answer.</p>
-    <div class="scale">
-      {{#responseModes}}
-      <label><input type="radio" name="response_mode" value="{{value}}" {{#checked}}checked{{/checked}}><span>{{label}}</span></label>
-      {{/responseModes}}
-    </div>
-  </div>
-
-  <div class="question">
-    <p class="prompt">When there is activity in a conversation you are watching</p>
-    <p class="hint">You join a conversation by posting or replying in it. You can stop watching any
-      thread from the thread itself.</p>
-    <div class="scale">
-      {{#replyModes}}
-      <label><input type="radio" name="reply_mode" value="{{value}}" {{#checked}}checked{{/checked}}><span>{{label}}</span></label>
-      {{/replyModes}}
-    </div>
-  </div>
-
-  <div class="question">
-    <p class="prompt">How to reach you</p>
-    <label><input type="checkbox" name="email" value="1" {{#notifyEmail}}checked{{/notifyEmail}}><span>Email</span></label>
-    {{#smsAvailable}}
-    <label><input type="checkbox" name="sms" value="1" {{#notifySms}}checked{{/notifySms}}><span>Text message</span></label>
-    <input type="text" name="phone" value="{{phone}}" maxlength="32" placeholder="Mobile number">
-    {{/smsAvailable}}
-    {{^smsAvailable}}
-    <p class="hint">Text messages are not available on this server ({{smsWhy}}). Nothing here will
-      send you one, so there is no point in asking you for a number.</p>
-    {{/smsAvailable}}
-  </div>
-
-  <button type="submit">Save</button>
-</form>
-<p class="hint">Whatever you choose, everything still arrives in your inbox on this page. These
-  settings only decide what is worth an email as well.</p>
-{{/onNotifications}}
-
+<p class="hint">This server holds the key as you gave it, because it has to present it to Hevy on
+  every call &mdash; it is a password kept on your behalf rather than something that can be hashed.
+  It is stored in one row, shown to nobody, and removed for good when you clear it or delete your
+  account.</p>
+{{/onKeys}}
 
 {{#onData}}
 <h2>What this community holds about you</h2>

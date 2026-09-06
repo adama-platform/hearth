@@ -38,6 +38,12 @@ public class Accounts {
   /** the static pages this database serves, and the caches in front of them */
   public final Site site;
 
+  /** keys somebody handed this server for a service somewhere else */
+  public final io.hearth.hevy.UserKeys userKeys;
+
+  /** Hevy's API, on somebody's behalf */
+  public final io.hearth.hevy.Hevy hevy;
+
   /** addresses that accept a POST and run a program; see {@link io.hearth.content.Mutations} */
   public final io.hearth.content.Mutations mutations;
 
@@ -120,6 +126,8 @@ public class Accounts {
     this.oauthClients = new io.hearth.mcp.OauthClients(store);
     this.site = new Site(databaseDomain, store, caches, events, verbose);
     this.mutations = new io.hearth.content.Mutations(store);
+    this.userKeys = new io.hearth.hevy.UserKeys(store);
+    this.hevy = new io.hearth.hevy.Hevy(this.userKeys);
     io.hearth.tables.UserTables opened = null;
     if (storesRoot != null) {
       try {
