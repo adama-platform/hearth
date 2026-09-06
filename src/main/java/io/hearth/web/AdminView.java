@@ -57,6 +57,14 @@ public final class AdminView {
     appearance("appearance", "Appearance", "star", look, Permission.config_write),
     legal("legal", "Legal", "content", look, Permission.config_write),
     messages("messages", "Messages", "content", look, Permission.config_write),
+    // Mail is top level and not under System, because it is not a system screen: it is where
+    // somebody says where their post goes. It also takes its own permission -- see
+    // Permission.mail_route -- so being trusted with the website is not being trusted with the
+    // post.
+    mail("mail", "Mail", "content", null, Permission.mail_route),
+    mailboxes("mail/addresses", "Addresses", "people", mail, Permission.mail_route),
+    maillog("mail/log", "Mail log", "logs", mail, Permission.mail_route),
+    mailsetup("mail/setup", "DNS & Workspace", "star", mail, Permission.mail_route),
     system("system", "System", "analytics", null, Permission.system_read),
     machine("system/machine", "Machine", "analytics", system, Permission.system_read),
     settings("system/settings", "Settings", "star", system, Permission.system_read),
@@ -153,7 +161,8 @@ public final class AdminView {
       Map.entry(Section.ai, "actions"),
       Map.entry(Section.events, "stream"),
       Map.entry(Section.caching, "stats"),
-      Map.entry(Section.logs, "results"));
+      Map.entry(Section.logs, "results"),
+      Map.entry(Section.maillog, "list"));
 
   private AdminView() {
   }

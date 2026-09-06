@@ -31,6 +31,47 @@ public interface SmtpDns {
   /** mail exchangers, hostnames only, most-preferred first */
   String[] mx(String name);
 
+  /**
+   * "10 mail.example.org." into "mail.example.org", sorted by preference.
+   *
+   * On the interface rather than in the JDK implementation because it is part of the *contract*:
+   * `mx` promises hostnames in preference order, and an implementation that returns raw records
+   * satisfies the signature and breaks every caller. The test resolver was exactly that, which
+   * meant no test could have caught the real one not sorting either -- the fake agreed with
+   * whatever the code did, which is the one thing a fake must never do.
+   */
+  static String[] hostsFrom(String[] records) {
+    java.util.ArrayList<long[]> order = new java.util.ArrayList<>();
+    java.util.ArrayList<String> hosts = new java.util.ArrayList<>();
+    for (String record : records) {
+      String[] parts = record.trim().split("\\s+");
+      String host = parts.length > 1 ? parts[parts.length - 1] : parts[0];
+      if (host.endsWith(".")) {
+        host = host.substring(0, host.length() - 1);
+      }
+      if (host.isEmpty()) {
+        continue;
+      }
+      long preference = Long.MAX_VALUE;
+      if (parts.length > 1) {
+        try {
+          preference = Long.parseLong(parts[0].trim());
+        } catch (NumberFormatException ex) {
+          // a record whose preference will not parse goes last rather than first
+        }
+      }
+      order.add(new long[]{preference, hosts.size()});
+      hosts.add(host);
+    }
+    order.sort((left, right) -> left[0] == right[0]
+        ? Long.compare(left[1], right[1]) : Long.compare(left[0], right[0]));
+    String[] sorted = new String[order.size()];
+    for (int k = 0; k < order.size(); k++) {
+      sorted[k] = hosts.get((int) order.get(k)[1]);
+    }
+    return sorted;
+  }
+
   /** A and AAAA */
   List<InetAddress> addresses(String name);
 
@@ -60,22 +101,11 @@ public interface SmtpDns {
 
     @Override
     public String[] mx(String name) {
-      return mxCache.computeIfAbsent(key(name), key -> {
-        String[] raw = lookup(key, "MX");
-        ArrayList<String> hosts = new ArrayList<>();
-        // "10 mail.example.org." -- the preference, a space, the host, usually with a trailing dot
-        for (String record : raw) {
-          String[] parts = record.trim().split("\\s+");
-          String host = parts.length > 1 ? parts[parts.length - 1] : parts[0];
-          if (host.endsWith(".")) {
-            host = host.substring(0, host.length() - 1);
-          }
-          if (!host.isEmpty()) {
-            hosts.add(host);
-          }
-        }
-        return hosts.toArray(new String[0]);
-      });
+      // Sorted by preference, which SPF does not care about and delivery entirely does. This
+      // promised "most-preferred first" and returned whatever order the resolver used, which was
+      // harmless while the only caller treated the set as a set -- and would have sent every
+      // forwarded message to Google's *last* listed exchanger, the one meant to take the overflow.
+      return mxCache.computeIfAbsent(key(name), key -> hostsFrom(lookup(key, "MX")));
     }
 
     @Override

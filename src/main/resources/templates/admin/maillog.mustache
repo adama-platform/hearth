@@ -1,0 +1,12 @@
+{{<shell}}{{$content}}
+<p class="crumb"><a href="{{rulesUrl}}">&larr; Mail</a></p>
+<h1>Mail log</h1>
+<p class="hint">Every message that arrived, what was decided about it, and what the far end said
+  back. The last {{kept}} per domain. This is metadata and a short preview &mdash; a forwarder that
+  kept copies would be a mail store nobody agreed to run.</p>
+<form class="tools" method="get" action="{{action}}" data-filters>
+  <label class="check"><input type="checkbox" name="trouble" value="1"{{#troublesOnly}} checked{{/troublesOnly}}> only what went wrong</label>
+  <noscript><button type="submit" class="quiet">Filter</button></noscript>
+</form>
+<div class="scroll panel" data-panel="{{panelUrl}}">{{{panel}}}</div>
+{{/content}}{{/shell}}

@@ -51,7 +51,9 @@ public class FakeDns implements SmtpDns {
   @Override
   public String[] mx(String name) {
     asked.add("MX " + key(name));
-    return mx.getOrDefault(key(name), List.of()).toArray(new String[0]);
+    // through the same parsing the real resolver uses, so a test can publish "10 mx.example." the
+    // way a zone file does and get what a caller would really be handed
+    return SmtpDns.hostsFrom(mx.getOrDefault(key(name), List.of()).toArray(new String[0]));
   }
 
   @Override

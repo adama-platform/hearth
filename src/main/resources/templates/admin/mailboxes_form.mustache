@@ -1,0 +1,52 @@
+{{<shell}}{{$content}}
+<p class="crumb"><a href="{{backUrl}}">&larr; Addresses</a></p>
+<h1>{{heading}}</h1>
+
+<form class="editor" method="post" action="{{backUrl}}">
+  <input type="hidden" name="csrf" value="{{csrf}}">
+  <input type="hidden" name="action" value="save">
+  {{#editing}}<input type="hidden" name="id" value="{{form_id}}">{{/editing}}
+
+  <div class="field">
+    <label for="b-local">name</label>
+    <input id="b-local" type="text" name="localPart" value="{{form_localPart}}" placeholder="jeff" required>
+    <p class="hint">The part before the <code>@</code>. It becomes
+      <code>{{form_localPart}}@{{domain}}</code>. Letters, numbers, and <code>. - _ +</code>.</p>
+  </div>
+
+  <div class="field">
+    <label for="b-label">what it is for</label>
+    <input id="b-label" type="text" name="label" value="{{form_label}}" placeholder="receipts and statements">
+    <p class="hint">A note to yourself; it appears in the address list and nowhere a sender can
+      see.</p>
+  </div>
+
+  <div class="field">
+    <label for="b-owner">whose it is</label>
+    <select id="b-owner" name="owner">
+      <option value="">nobody in particular</option>
+      {{#people}}<option value="{{id}}"{{#chosen}} selected{{/chosen}}>{{email}}</option>{{/people}}
+    </select>
+    <p class="hint">Optional, and it grants nothing &mdash; where the mail goes is a rule&rsquo;s
+      decision, not this. It is here so that erasing somebody takes their name off the addresses
+      that were theirs while leaving the addresses, which belong to the domain.</p>
+  </div>
+
+  <div class="field">
+    <label class="check"><input type="checkbox" name="enabled"{{#form_enabled}} checked{{/form_enabled}}> this address accepts mail</label>
+    <p class="hint">Turning it off refuses mail for it at the door, which is reversible. Deleting it
+      does the same and loses the note.</p>
+  </div>
+
+  <div class="doing"><button type="submit">Save</button></div>
+</form>
+
+{{#editing}}
+<form method="post" action="{{backUrl}}" class="danger">
+  <input type="hidden" name="csrf" value="{{csrf}}">
+  <input type="hidden" name="action" value="delete">
+  <input type="hidden" name="id" value="{{form_id}}">
+  <button type="submit">Delete this address</button>
+</form>
+{{/editing}}
+{{/content}}{{/shell}}

@@ -90,6 +90,15 @@ public final class Erasure {
     // a separate decision, and one an administrator makes deliberately.
     counts.put("upload(s) unnamed", accounts.attachments.forget(id));
     accounts.roles.revokeAll(id);
+    // Their address comes out of the mail log entirely rather than being blanked.
+    //
+    // Every other row here keeps its words and loses its author, because the words are somebody
+    // else's conversation. A mail log row is nothing but who wrote to whom, so an anonymised one
+    // would still say that somebody at this address had mail on a Tuesday -- there is no residue
+    // worth keeping. The address they were given stays and stops being theirs: `receipts@` is the
+    // domain owner's, not the member's.
+    counts.put("mail log entr(ies)", accounts.mailLog.forget(person.email()));
+    counts.put("mailbox(es) unnamed", accounts.mailboxes.forgetOwner(id));
     // deleted rather than revoked: a revoked row lingers for a day, and this is the request that
     // means "there should be nothing left"
     counts.put("session(s)", accounts.sessions.deleteAllFor(id));

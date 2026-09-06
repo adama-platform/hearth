@@ -65,7 +65,11 @@ public class Templates {
       "admin/settings", "admin/cleanup",
       "admin/tables", "admin/tables_form",
       "admin/rows", "admin/rows_panel", "admin/rows_form",
-      "admin/mutations", "admin/mutations_form");
+      "admin/mutations", "admin/mutations_form",
+      "admin/mail", "admin/mail_form",
+      "admin/mailboxes", "admin/mailboxes_form",
+      "admin/maillog", "admin/maillog_panel", "admin/maillog_review",
+      "admin/mailsetup");
 
   /**
    * Templates whose output is not HTML.

@@ -50,6 +50,8 @@ public class SmtpConfig {
   public final boolean enforceDmarc;
   /** how long to wait on one DNS answer */
   public final int dnsTimeoutMillis;
+  /** whether this server acts on what it receives, and the credentials it acts with */
+  public final ForwardConfig forwarding;
 
   public static SmtpConfig off() {
     return new SmtpConfig();
@@ -66,6 +68,7 @@ public class SmtpConfig {
     this.checkSenders = true;
     this.enforceDmarc = true;
     this.dnsTimeoutMillis = 3000;
+    this.forwarding = ForwardConfig.off();
   }
 
   public SmtpConfig(ConfigObject config) throws ConfigException {
@@ -79,6 +82,7 @@ public class SmtpConfig {
     this.checkSenders = config.boolOf("check-senders", true);
     this.enforceDmarc = config.boolOf("enforce-dmarc", false);
     this.dnsTimeoutMillis = atLeast(config, "dns-timeout-millis", 3000, 250);
+    this.forwarding = new ForwardConfig(config.child("forwarding"));
     config.assertKnownKeys();
     if (port < 1 || port > 65535) {
       throw new ConfigException("smtp.port must be a real port");
@@ -101,7 +105,8 @@ public class SmtpConfig {
         + maxRecipients + " recipient(s); "
         + (checkSenders
             ? "spf, dkim and dmarc checked" + (enforceDmarc ? ", p=reject honoured" : ", nothing refused")
-            : "no sender checks");
+            : "no sender checks")
+        + (forwarding.enabled ? "; forwarding " + forwarding.describe() : "");
   }
 
   private static int atLeast(ConfigObject config, String key, int fallback, int floor)

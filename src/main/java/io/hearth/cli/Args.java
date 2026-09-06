@@ -37,6 +37,14 @@ public class Args {
   public final String setupEmail;
   /** walk through the geocoding service for the address book */
   public final boolean setupGps;
+  /**
+   * Turn on receiving and forwarding, and print the DNS to publish.
+   *
+   * Takes the machine's own hostname rather than a domain, because that is what it is about: one
+   * listener, one signing key and one set of records for every domain this root serves. Empty when
+   * the flag was given with no value, which means "ask me".
+   */
+  public final String setupMail;
   /** turn a directory into a systemd service: where, or null */
   public final String install;
   /** send one test message: which domain, or null */
@@ -47,8 +55,9 @@ public class Args {
   public final boolean version;
 
   private Args(File root, boolean verbose, boolean check, boolean setup, String domainSetup,
-               boolean setupCerts, String setupEmail, boolean setupGps, String testEmailDomain,
-               String testEmailTo, String install, boolean help, boolean version) {
+               boolean setupCerts, String setupEmail, boolean setupGps, String setupMail,
+               String testEmailDomain, String testEmailTo, String install, boolean help,
+               boolean version) {
     this.install = install;
     this.root = root;
     this.verbose = verbose;
@@ -58,6 +67,7 @@ public class Args {
     this.setupCerts = setupCerts;
     this.setupEmail = setupEmail;
     this.setupGps = setupGps;
+    this.setupMail = setupMail;
     this.testEmailDomain = testEmailDomain;
     this.testEmailTo = testEmailTo;
     this.help = help;
@@ -67,7 +77,7 @@ public class Args {
   /** does this run do one thing and exit, rather than serve? */
   public boolean isOneShot() {
     return check || setup || domainSetup != null || setupCerts || setupEmail != null || setupGps
-        || testEmailDomain != null;
+        || setupMail != null || testEmailDomain != null;
   }
 
   public static Args parse(String[] args) throws ArgsException {
@@ -79,6 +89,7 @@ public class Args {
     boolean setupCerts = false;
     boolean setupGps = false;
     String setupEmail = null;
+    String setupMail = null;
     String testEmailDomain = null;
     String testEmailTo = null;
     String install = null;
@@ -96,6 +107,11 @@ public class Args {
         case "--setup-certs" -> setupCerts = true;
         case "--setup-email" -> setupEmail = value(args, k++, "--setup-email");
         case "--setup-gps" -> setupGps = true;
+        // the value is optional: `--setup-mail` on its own asks for the hostname, and
+        // `--setup-mail mail.example.org` answers that question up front
+        case "--setup-mail" -> {
+          setupMail = k + 1 < args.length && !args[k + 1].startsWith("--") ? args[++k] : "";
+        }
         case "--test-email" -> {
           testEmailDomain = value(args, k++, "--test-email");
           testEmailTo = value(args, k++, "--test-email");
@@ -121,7 +137,8 @@ public class Args {
       throw new ArgsException("--root is required; it names the directory everything lives under");
     }
     int steps = (setup ? 1 : 0) + (domainSetup != null ? 1 : 0) + (setupCerts ? 1 : 0)
-        + (setupEmail != null ? 1 : 0) + (testEmailDomain != null ? 1 : 0);
+        + (setupEmail != null ? 1 : 0) + (setupMail != null ? 1 : 0)
+        + (testEmailDomain != null ? 1 : 0);
     if (steps > 1) {
       throw new ArgsException("run one setup step at a time");
     }
@@ -129,7 +146,7 @@ public class Args {
       throw new ArgsException("--install writes files and stops; run a setup step afterwards");
     }
     return new Args(root, verbose, check, setup, domainSetup, setupCerts, setupEmail, setupGps,
-        testEmailDomain, testEmailTo, install, help, version);
+        setupMail, testEmailDomain, testEmailTo, install, help, version);
   }
 
   private static String value(String[] args, int at, String flag) throws ArgsException {
@@ -169,6 +186,7 @@ public class Args {
           --setup-certs               register with a certificate authority
           --setup-gps                 choose a geocoding service for the address book
           --setup-email <domain>      send real email through Amazon SES
+          --setup-mail [hostname]     receive and forward mail; prints the DNS to publish
           --test-email <domain> <to>  send one message and report what happened
 
         everything lives under the root:
@@ -176,6 +194,7 @@ public class Args {
           /var/hearth/
             config.cfg      ports, TLS, limits; every setting has a working default
             domains/        one .cfg per virtual host, named for its domain
+            mail/           the key outgoing mail is signed with
             dbs/            one database per domain
             certs/          the certificate authority account, and a key and chain per domain
 

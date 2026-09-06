@@ -1,0 +1,34 @@
+{{<shell}}{{$content}}
+<p class="crumb"><a href="{{rulesUrl}}">&larr; Mail</a></p>
+<h1>Addresses</h1>
+<p class="hint">The names that exist at <strong>{{domain}}</strong>. Naming one makes it a place:
+  mail to it is accepted, and anything not named here and not matched by a rule is refused at the
+  door with &ldquo;no such address&rdquo;, before the message is sent. That is what stops a mistyped
+  address vanishing silently, and what keeps this server from taking mail it has nowhere to put.</p>
+
+<div class="doing">
+  <a class="btn" href="{{newUrl}}">New address</a>
+  <a href="{{rulesUrl}}">Rules</a>
+</div>
+
+{{^any}}<p class="hint">None named. While that is true, every address at {{domain}} is accepted, so
+  that turning this on is a decision rather than an outage.</p>{{/any}}
+{{#any}}
+<p class="count">{{count}}</p>
+<table>
+  <thead><tr><th>address</th><th>what it is</th><th>whose</th><th>where its mail goes</th><th></th></tr></thead>
+  <tbody>{{#addresses}}<tr>
+    <td class="mono"><a href="{{editUrl}}">{{address}}</a>
+      {{^enabled}} <span class="pill dim">off</span>{{/enabled}}</td>
+    <td>{{label}}</td>
+    <td class="dim mono">{{owner}}</td>
+    <td>{{#routed}}<span class="dim">{{route}}</span>{{/routed}}{{^routed}}<span class="pill warn">{{route}}</span>{{/routed}}</td>
+    <td class="actions"><a href="{{editUrl}}">edit</a></td>
+  </tr>{{/addresses}}</tbody>
+</table>
+{{/any}}
+
+<p class="hint">An address with no rule is accepted and discarded, which is almost never what
+  somebody meant when they named it. The <a href="{{rulesUrl}}">rules</a> are what send it
+  somewhere.</p>
+{{/content}}{{/shell}}

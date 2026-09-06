@@ -1,0 +1,15 @@
+{{^any}}<p class="hint">Nothing yet.</p>{{/any}}
+{{#any}}
+<p class="count">{{count}}</p>
+<table>
+  <thead><tr><th>when</th><th>from</th><th>to</th><th>subject</th><th>checks</th><th>what happened</th></tr></thead>
+  <tbody>{{#messages}}<tr>
+    <td class="dim mono">{{when}}</td>
+    <td class="mono">{{from}}</td>
+    <td class="mono">{{to}}</td>
+    <td><a href="{{openUrl}}">{{subject}}</a></td>
+    <td>{{#authenticated}}<span class="pill good">vouched for</span>{{/authenticated}}{{^authenticated}}<span class="pill dim">{{checks}}</span>{{/authenticated}}</td>
+    <td>{{#forwarded}}<span class="pill good">{{outcome}}</span> <span class="dim mono">{{destination}}</span>{{/forwarded}}{{^forwarded}}{{#troubled}}<span class="pill bad">{{outcome}}</span>{{/troubled}}{{^troubled}}<span class="pill dim">{{outcome}}</span>{{/troubled}} <span class="dim">{{detail}}</span>{{/forwarded}}</td>
+  </tr>{{/messages}}</tbody>
+</table>
+{{/any}}

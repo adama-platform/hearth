@@ -98,6 +98,21 @@ public enum Permission {
    */
   agent_connect("System", "Connect an assistant that acts as you"),
 
+  /**
+   * Say where mail for this domain goes, and read the record of where it went.
+   *
+   * <b>Its own permission, and it is the sharpest one on the list.</b> Everything else here changes
+   * the website; this redirects somebody's email, silently, to an address they never see -- and the
+   * screen it lives on shows who has been writing to whom. Folding it into `config_write` would
+   * mean that being trusted with the community's colours is being trusted with its post, which is
+   * not the same decision and would never be made on purpose.
+   *
+   * There is deliberately no split between reading the log and writing the rules. Somebody who can
+   * see every sender and subject can already answer every question the rules would answer, so a
+   * read-only half would be a checkbox that suggests a boundary it does not create.
+   */
+  mail_route("System", "Route mail for this domain, and read the mail log"),
+
   /** the system screens, including the log of what every agent has done */
   system_read("System", "See the machine, the event bus, analytics, caches, logs and the AI log"),
 

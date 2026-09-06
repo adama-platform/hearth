@@ -134,6 +134,50 @@ both directions. Someone saying yes on an evening their calendar objects to has 
 someone blocking a clear-looking evening knows something the file doesn't. And **silence counts for
 nothing rather than against**.
 
+## Your mail, through this machine
+
+**The problem this solves is a household, not an inbox.** Moving your own email to something you
+built on a Sunday is a decision you get to make; moving your wife's is not. So: point MX at this
+machine, name the addresses that exist, and write a rule that sends hers straight on to the Google
+Workspace she has no intention of leaving. She sees no difference. You get everything in front of it.
+
+**Two actions, and the rules are consulted in order with the first match winning.** `forward` sends a
+message on to another domain's own mail exchangers; `drop` accepts it and lets it go. An address
+nothing claims is refused at RCPT, before the message body arrives — so a mistyped address comes back
+to whoever typed it instead of vanishing, and a directory harvester costs one line per guess.
+
+**Nothing is bounced, and that is the design rather than a gap.** The message is delivered onward
+*before* this server answers the sending machine, and the far end's verdict is what comes back: a 451
+becomes a 451, a 550 becomes a 550. That removes the queue, the spool and the bounce generator in one
+stroke — the sender's own server writes the failure report, to the address it really sent from. A
+message is either delivered or never accepted; there is no third state where this box is the only
+thing holding it.
+
+### Why forwarded mail usually lands in spam, and what is done about it
+
+Forwarding breaks the two things a receiver uses to decide whether a message is real, and every piece
+below is one repair:
+
+| | |
+| --- | --- |
+| **The message is not touched** | No footer, no subject tag, no re-encoding. The sender's DKIM signature covers the body; one changed byte destroys it, and a receiver cannot tell a helpful forwarder from somebody rewriting the message. Headers are prepended and nothing else happens. |
+| **SRS** | SPF asks whether *this* machine may send for the domain in the return path, and the answer for a forwarded message is always no. So the return path — which nobody reads — is rewritten to an address here, keyed with a MAC so nothing but a real bounce reverses. The `From:` header a person reads is untouched. |
+| **ARC** | A sealed record of what SPF, DKIM and DMARC said *on arrival here*, which is what Gmail honours from a forwarder. A chain is only ever started, never extended: adding `cv=pass` to somebody else's would be vouching for arithmetic nobody did. |
+| **DKIM** | This server signs as the domain the message arrived for, with one key published on each domain. |
+| **TLS** | STARTTLS with the certificate verified against the exchanger's name, required by default. The log records `verified` or `encrypted` rather than recording "TLS" for both. |
+| **Loops** | A message that has already been through thirty relays is stopped permanently, not retried for four days. |
+
+**`/admin/mail/setup` writes the rest of it down for you** — the four DNS records with your actual
+key in them, the one Google Workspace setting that matters (the inbound gateway) and the two obvious
+ones that are traps, and the `dig` commands for everything this server cannot see from where it is
+standing. It is generated from what is running rather than written down, so it cannot go stale.
+`--setup-mail` prints the same thing at a terminal and generates the two secrets, because a default
+SRS secret is a MAC anybody can compute and a default DKIM key is a private key in a git repository.
+
+**The mail log is the answer to "I never got your email."** Every message, the three verdicts as they
+were on arrival, which rule matched, where it went and the far end's reply word for word. Metadata
+and a short preview — a forwarder that kept copies would be a mail store nobody agreed to run.
+
 ## What else is in the jar
 
 | | |
@@ -144,6 +188,7 @@ nothing rather than against**.
 | **Tables** | Declare fields and indexes; a page gets read-only functions for them. Mutations are how anything writes. |
 | **A model endpoint** | MCP with OAuth. Everything above is reachable by an agent acting as the person who connected it. |
 | **Files, mail, push, TLS** | Uploads, SES out and SMTP in with SPF/DKIM/DMARC, an installable app, and certificates it renews itself. |
+| **Mail routing** | Addresses, ordered rules, SRS, ARC and a signed relay — see above. |
 
 Nothing on disk but the databases, the certificates and what you upload. No third-party request of
 any kind.
@@ -191,7 +236,8 @@ wrote:
 java -jar hearth.jar --root /var/hearth --setup                       # ports and TLS
 java -jar hearth.jar --root /var/hearth --domain-setup example.org    # a domain
 java -jar hearth.jar --root /var/hearth --setup-certs                 # certificates
-java -jar hearth.jar --root /var/hearth --setup-email example.org     # real email
+java -jar hearth.jar --root /var/hearth --setup-email example.org     # real email out
+java -jar hearth.jar --root /var/hearth --setup-mail mail.example.org # mail in, and forwarding
 ```
 
 Then `--install <dir>` writes a systemd unit and a start script into a directory you already own,
@@ -208,6 +254,10 @@ for **Import & export**), **Settings** (with **Setup**), **Customization** (look
 **Appearance**, **Legal** and **Messages**, and **System** — **Machine**, **Settings**, **Events**,
 **Analytics**, **Caching**, **AI**, **Logs**, **Clean up**.
 
+**Mail** is its own top-level section — the rules, plus **Addresses**, the **Mail log**, and **DNS &
+Workspace**. It takes its own permission: being trusted with the website is not being trusted with
+the post, and that screen can redirect somebody's mail and shows who has been writing to whom.
+
 Your own page at `/self` has **Today** (the sheet), **Profile**, **Connections** (your Hevy key and
 your availability) and **Your data**.
 
@@ -216,12 +266,13 @@ confirms what is behind the door.
 
 ## Where it is today
 
-**1150-odd tests**, mostly not unit tests: the testkit boots the whole server on an ephemeral port
+**1275-odd tests**, mostly not unit tests: the testkit boots the whole server on an ephemeral port
 with real databases and drives it over HTTP. `just validate` is the gate — it builds clean, runs
 everything, packages the jar, then makes real HTTP requests against that jar running as a server.
 
 **What has never been verified** is written down as such in [CLAUDE.md](CLAUDE.md#not-verified) —
-including that nothing here has ever talked to Hevy's real API.
+including that nothing here has ever talked to Hevy's real API, and that no forwarded message has
+ever reached a real Google Workspace.
 
 ## The documents
 

@@ -62,6 +62,12 @@ public class Accounts {
   /** addresses that accept a POST and run a program; see {@link io.hearth.content.Mutations} */
   public final io.hearth.content.Mutations mutations;
 
+  /** the addresses that exist at this domain, and the rules that say where their mail goes */
+  public final io.hearth.smtp.Mailboxes mailboxes;
+
+  /** what arrived, what was decided about it, and what the far end said */
+  public final io.hearth.smtp.MailLog mailLog;
+
   /**
    * The tables this community invented, in a database file of their own.
    *
@@ -141,6 +147,8 @@ public class Accounts {
     this.oauthClients = new io.hearth.mcp.OauthClients(store);
     this.site = new Site(databaseDomain, store, caches, events, verbose);
     this.mutations = new io.hearth.content.Mutations(store);
+    this.mailboxes = new io.hearth.smtp.Mailboxes(store);
+    this.mailLog = new io.hearth.smtp.MailLog(store);
     this.tasks = new io.hearth.tasks.Tasks(store, zone);
     this.processes = new io.hearth.tasks.Processes(store);
     this.votes = new io.hearth.vote.Votes(store);

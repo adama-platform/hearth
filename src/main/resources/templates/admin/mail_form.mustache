@@ -1,0 +1,95 @@
+{{<shell}}{{$content}}
+<p class="crumb"><a href="{{backUrl}}">&larr; Mail</a></p>
+<h1>{{heading}}</h1>
+
+<form class="editor" method="post" action="{{backUrl}}">
+  <input type="hidden" name="csrf" value="{{csrf}}">
+  <input type="hidden" name="action" value="save">
+  {{#editing}}<input type="hidden" name="id" value="{{form_id}}">{{/editing}}
+
+  <div class="field">
+    <label for="r-name">what this rule is for</label>
+    <input id="r-name" type="text" name="name" value="{{form_name}}" placeholder="my wife&rsquo;s mail">
+    <p class="hint">A note to yourself. It is what the mail log shows beside every message this
+      rule decided.</p>
+  </div>
+
+  <div class="field">
+    <label for="r-to">address it matches</label>
+    <input id="r-to" type="text" name="to" value="{{form_to}}" placeholder="{{everyone}}" required>
+    <p class="hint">The name before the <code>@</code>, or <code>{{everyone}}</code> for every
+      address at {{domain}}. A catch-all matches everything below it too, so give it a high
+      position number.</p>
+    {{#anyAddresses}}<p class="hint">Named here:
+      {{#addresses}}<code>{{localPart}}</code> {{/addresses}}</p>{{/anyAddresses}}
+  </div>
+
+  <div class="field">
+    <label for="r-from">only when the sender contains</label>
+    <input id="r-from" type="text" name="from" value="{{form_from}}" placeholder="(anything)">
+    <p class="hint">Optional. Matched against the envelope sender, which is what the connection
+      said rather than what the message claims about itself.</p>
+  </div>
+
+  <div class="field">
+    <label for="r-subject">only when the subject contains</label>
+    <input id="r-subject" type="text" name="subject" value="{{form_subject}}" placeholder="(anything)">
+    <p class="hint">Optional. A subject is chosen by whoever sent the message, so this is a
+      convenience and never a control.</p>
+  </div>
+
+  <div class="field">
+    <label for="r-what">then</label>
+    <select id="r-what" name="what">
+      <option value="forward"{{#isForward}} selected{{/isForward}}>send it on</option>
+      <option value="drop"{{^isForward}} selected{{/isForward}}>accept it and let it go</option>
+    </select>
+    <p class="hint">Dropping accepts the message and tells the sender it arrived, which is the
+      honest answer for mail somebody simply does not want &mdash; refusing would tell them their
+      address is wrong when it is right.</p>
+  </div>
+
+  <div class="field">
+    <label for="r-forward">send it to</label>
+    <input id="r-forward" type="email" name="forwardTo" value="{{form_forwardTo}}" placeholder="her@gmail.com">
+    <p class="hint">Delivered to that domain&rsquo;s own mail exchangers, over TLS, with the message
+      untouched below the headers this server adds. It cannot be an address at {{domain}}, which
+      would send the message back through this same rule.</p>
+  </div>
+
+  <div class="field">
+    <label for="r-position">position</label>
+    <input id="r-position" type="number" name="position" value="{{form_position}}" min="1" max="9999">
+    <p class="hint">Lower is consulted first. Leave the specific rules low and the catch-all
+      high.</p>
+  </div>
+
+  <div class="field">
+    <label class="check"><input type="checkbox" name="enabled"{{#form_enabled}} checked{{/form_enabled}}> this rule is on</label>
+  </div>
+
+  <div class="doing"><button type="submit">Save</button></div>
+</form>
+
+{{#editing}}
+<form method="post" action="{{backUrl}}" class="danger">
+  <input type="hidden" name="csrf" value="{{csrf}}">
+  <input type="hidden" name="action" value="delete">
+  <input type="hidden" name="id" value="{{form_id}}">
+  <button type="submit">Delete this rule</button>
+</form>
+{{/editing}}
+
+<div class="card">
+  <p class="meta"><span class="dim">what happens to a message this rule forwards</span></p>
+  <p class="hint">Nothing below the headers is changed &mdash; no footer, no subject tag, no
+    re-encoding &mdash; because the sender&rsquo;s own DKIM signature covers the body and breaks if
+    one byte moves.</p>
+  <p class="hint">A <code>Received</code> line, an ARC seal and a signature of this domain&rsquo;s
+    are added on the front. The return path is rewritten to an address here so it passes SPF at the
+    far end; bounces come back to it and are unwrapped and sent on to whoever wrote the message.</p>
+  <p class="hint">Whatever the destination says is passed straight back to the sending server. A
+    &ldquo;try later&rdquo; becomes a try later, a refusal becomes a refusal &mdash; so there is no
+    queue here and nothing to lose in a restart.</p>
+</div>
+{{/content}}{{/shell}}

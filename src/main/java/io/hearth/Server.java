@@ -153,7 +153,7 @@ public class Server {
 
     // the walkthroughs need the root and nothing else, so they run before anything is opened
     if (args.setup || args.domainSetup != null || args.setupEmail != null || args.setupGps
-        || args.testEmailDomain != null) {
+        || args.setupMail != null || args.testEmailDomain != null) {
       Setup setup = new Setup(root, new Ask());
       boolean done;
       try {
@@ -163,6 +163,8 @@ public class Server {
           done = setup.domain(args.domainSetup);
         } else if (args.setupEmail != null) {
           done = setup.email(args.setupEmail);
+        } else if (args.setupMail != null) {
+          done = setup.mail(args.setupMail);
         } else {
           done = setup.testEmail(args.testEmailDomain, args.testEmailTo);
         }
@@ -270,15 +272,45 @@ public class Server {
       Boot.warn("some domains have no provider; their codes print to this terminal");
     }
     Boot.section("mail in");
-    // whatever arrives, printed. There is nothing here that turns a message into a row any more:
-    // the calendar went, and with it the one thing inbound mail was ever asked to act on.
+    // Whatever arrives is printed, unless a rule says where it goes.
+    //
+    // The terminal receiver is still the floor: a domain with no mailboxes and no rules behaves
+    // exactly as it did before forwarding existed, which is what makes turning this on a decision
+    // per domain rather than per box.
     io.hearth.smtp.MailReceiver receiver = new io.hearth.smtp.TerminalMailReceiver();
+    io.hearth.smtp.MailKeys mailKeys = null;
+    if (settings.smtp.enabled && settings.smtp.forwarding.enabled) {
+      java.io.File keyFile = new java.io.File(root.dir(), settings.smtp.forwarding.dkimKeyFile);
+      try {
+        mailKeys = io.hearth.smtp.MailKeys.open(keyFile, settings.smtp.forwarding.dkimSelector);
+      } catch (java.io.IOException ex) {
+        // Loud, and not fatal. A key that cannot be opened means mail forwards unsigned, which is
+        // worse mail; refusing to start would mean no mail at all, and invariant 155 already
+        // settled that argument for certificates.
+        Boot.warn("no signing key (" + ex.getMessage() + "); mail will forward unsigned");
+      }
+      String helo = settings.smtp.forwarding.authserv();
+      io.hearth.smtp.Relay relay = new io.hearth.smtp.Relay(
+          new io.hearth.smtp.SmtpDns.Jdk(settings.smtp.dnsTimeoutMillis), helo,
+          settings.smtp.forwarding.requireTls, verbose);
+      receiver = new io.hearth.smtp.Forwarding(auth, settings.smtp.forwarding, mailKeys, relay,
+          receiver, verbose);
+    }
     io.hearth.smtp.SmtpServer smtp = new io.hearth.smtp.SmtpServer(settings.smtp, scan.tree,
         receiver, firstDomainOf(scan.tree), verbose);
     Boot.info("smtp", settings.smtp.describe());
     if (settings.smtp.enabled) {
       Boot.info("routing", "only domains with a config file; this server never relays");
-      Boot.info("handling", "everything that arrives is printed here");
+      Boot.info("forwarding", settings.smtp.forwarding.describe());
+      if (settings.smtp.forwarding.enabled) {
+        Boot.info("handling", "rules at /admin/mail decide; anything unrouted is printed here");
+        if (mailKeys != null) {
+          Boot.info("signing", mailKeys.selector() + "._domainkey (publish it on every domain;"
+              + " /admin/mail/setup has the record)");
+        }
+      } else {
+        Boot.info("handling", "everything that arrives is printed here");
+      }
     }
 
     Boot.section("http");
@@ -288,6 +320,7 @@ public class Server {
     io.hearth.mcp.AiLog aiLog = new io.hearth.mcp.AiLog();
     AdminRoutes adminRoutes =
         new AdminRoutes(templates, events, accessLog, aiLog, mailer, settings, verbose);
+    adminRoutes.knowsAbout(mailKeys);
     SelfRoutes selfRoutes = new SelfRoutes(templates, accessLog, verbose);
     io.hearth.mcp.McpRoutes mcpRoutes =
         new io.hearth.mcp.McpRoutes(templates, aiLog, verbose).sending(mailer);

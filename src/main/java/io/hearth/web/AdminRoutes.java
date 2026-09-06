@@ -133,6 +133,19 @@ public class AdminRoutes {
     this.attachments = files;
   }
 
+  /**
+   * The signing key, so the setup screen can print the record that publishes it.
+   *
+   * Handed over rather than opened here: it is a file under the root and this class has never known
+   * where the root is. Null when forwarding is off or the key would not open, which the screen says
+   * out loud instead of printing a record for a key that does not exist.
+   */
+  public void knowsAbout(io.hearth.smtp.MailKeys keys) {
+    this.mailKeys = keys;
+  }
+
+  private io.hearth.smtp.MailKeys mailKeys;
+
   // ---- dispatch --------------------------------------------------------------------------------
 
   public void handle(DomainConfig config, Accounts accounts, ChannelHandlerContext ctx,
@@ -225,6 +238,8 @@ public class AdminRoutes {
         case cleanup -> actOnCleanup(accounts, form, me);
         case tables -> actOnTable(config, accounts, form, me);
         case mutations -> actOnMutation(config, accounts, form, me);
+        case mail -> actOnMailRule(config, accounts, form, me);
+        case mailboxes -> actOnMailbox(config, accounts, form, me);
         default -> Outcome.refused("That is not something this page can do.");
       };
     }
@@ -668,8 +683,20 @@ public class AdminRoutes {
         formModel(section, config, accounts, me, model, target.id());
       }
       case review -> {
-        template = "admin/people_review";
-        reviewModel(config, accounts, model, target.id());
+        // One kind, one template per section. It was hardcoded to the people screen because that
+        // was the only thing anybody reviewed; a second reviewable thing made the hardcoding a bug
+        // waiting for whoever added the third.
+        template = "admin/" + section.name() + "_review";
+        if (section == AdminView.Section.maillog) {
+          if (!mailMessage(model, config, accounts, target.id())) {
+            recorder.status(404);
+            Responses.sendHtml(ctx, req, HttpResponseStatus.NOT_FOUND,
+                notFoundPage(config, accounts, req));
+            return;
+          }
+        } else {
+          reviewModel(config, accounts, model, target.id());
+        }
       }
       case export -> {
         // a subject access request, answered by a download rather than by an afternoon with a SQL
@@ -798,6 +825,7 @@ public class AdminRoutes {
       case attachments -> attachmentsPanel(model, accounts, config, req);
       case caching -> cachingPanel(model, accounts);
       case logs -> logsPanel(model, config, req);
+      case maillog -> model.putAll(mailLogPanelModel(accounts, config, req));
       default -> {
       }
     }
@@ -941,6 +969,10 @@ public class AdminRoutes {
       case cleanup -> cleanup(model, accounts);
       case tables -> tablesSection(model, accounts, config, req);
       case mutations -> mutationsSection(model, accounts, config);
+      case mail -> mailRulesSection(model, accounts, config);
+      case mailboxes -> mailAddressesSection(model, accounts, config);
+      case maillog -> mailLogSection(model, accounts, config, req);
+      case mailsetup -> mailSetupSection(model, accounts, config);
       case logs -> {
         model.put("q", orEmpty(Forms.query(req.uri(), "q")));
         model.put("errorsOnly", "1".equals(Forms.query(req.uri(), "errors")));
@@ -1804,6 +1836,374 @@ public class AdminRoutes {
     verbose.detail("admin: " + me.email() + " saved mutation " + uri);
     return Outcome.done(uri + " saved.",
         site -> AdminView.Section.mutations.path(site) + "/edit/" + saved);
+  }
+
+  // ---- mail ------------------------------------------------------------------------------------
+
+  /**
+   * The rules, in the order they are consulted.
+   *
+   * The order is the screen's whole job. A rule set displayed alphabetically, or by when it was
+   * edited, is one where "why did that go to the wrong place" is unanswerable -- so this is the
+   * evaluation order and the position is shown rather than hidden behind it.
+   */
+  private void mailRulesSection(Map<String, Object> model, Accounts accounts, DomainConfig config)
+      throws SQLException {
+    String prefix = AdminView.Section.mail.path(config);
+    model.put("newUrl", prefix + "/new");
+    model.put("addressesUrl", AdminView.Section.mailboxes.path(config));
+    model.put("logUrl", AdminView.Section.maillog.path(config));
+    model.put("setupUrl", AdminView.Section.mailsetup.path(config));
+    model.put("forwardingOn", settings.smtp.enabled && settings.smtp.forwarding.enabled);
+    model.put("smtpOff", !settings.smtp.enabled);
+
+    ArrayList<Map<String, Object>> rows = new ArrayList<>();
+    int order = 0;
+    for (io.hearth.smtp.Mailboxes.Rule rule : accounts.mailboxes.rules(config.domain)) {
+      LinkedHashMap<String, Object> row = new LinkedHashMap<>();
+      row.put("id", rule.id());
+      row.put("order", ++order);
+      row.put("position", rule.position());
+      row.put("name", rule.name().isBlank() ? rule.describe() : rule.name());
+      row.put("matches", rule.describe());
+      row.put("catchAll", io.hearth.smtp.Mailboxes.EVERYONE.equals(rule.matchTo()));
+      row.put("forwards", rule.action() == io.hearth.smtp.Mailboxes.Action.forward);
+      row.put("forwardTo", rule.forwardTo());
+      row.put("enabled", rule.enabled());
+      row.put("editUrl", prefix + "/edit/" + rule.id());
+      rows.add(row);
+    }
+    model.put("rules", rows);
+    model.put("any", !rows.isEmpty());
+    model.put("count", rows.size());
+    model.put("full", rows.size() >= io.hearth.smtp.Mailboxes.MAX_RULES);
+  }
+
+  /** the editor for one rule, or a blank one */
+  private void mailRuleForm(Map<String, Object> model, Accounts accounts, DomainConfig config,
+                            String id) throws SQLException {
+    io.hearth.smtp.Mailboxes.Rule rule = id == null ? null
+        : accounts.mailboxes.ruleById(longOr(id));
+    model.put("editing", rule != null);
+    model.put("heading", rule == null ? "A new rule" : rule.describe());
+    model.put("domain", config.domain);
+    model.put("form_id", rule == null ? "" : String.valueOf(rule.id()));
+    model.put("form_name", rule == null ? "" : rule.name());
+    model.put("form_position", rule == null ? 100 : rule.position());
+    model.put("form_to", rule == null ? io.hearth.smtp.Mailboxes.EVERYONE : rule.matchTo());
+    model.put("form_from", rule == null ? "" : rule.matchFrom());
+    model.put("form_subject", rule == null ? "" : rule.matchSubject());
+    model.put("form_forwardTo", rule == null ? "" : rule.forwardTo());
+    model.put("form_enabled", rule == null || rule.enabled());
+    model.put("isForward", rule == null || rule.action() == io.hearth.smtp.Mailboxes.Action.forward);
+    ArrayList<Map<String, Object>> known = new ArrayList<>();
+    for (io.hearth.smtp.Mailboxes.Box box : accounts.mailboxes.boxes(config.domain)) {
+      known.add(Map.of("localPart", box.localPart(), "label", box.label()));
+    }
+    model.put("addresses", known);
+    model.put("anyAddresses", !known.isEmpty());
+    model.put("everyone", io.hearth.smtp.Mailboxes.EVERYONE);
+  }
+
+  /** the addresses that exist at this domain */
+  private void mailAddressesSection(Map<String, Object> model, Accounts accounts,
+                                    DomainConfig config) throws SQLException {
+    String prefix = AdminView.Section.mailboxes.path(config);
+    model.put("newUrl", prefix + "/new");
+    model.put("rulesUrl", AdminView.Section.mail.path(config));
+    model.put("domain", config.domain);
+    ArrayList<Map<String, Object>> rows = new ArrayList<>();
+    List<io.hearth.smtp.Mailboxes.Rule> rules = accounts.mailboxes.rules(config.domain);
+    for (io.hearth.smtp.Mailboxes.Box box : accounts.mailboxes.boxes(config.domain)) {
+      LinkedHashMap<String, Object> row = new LinkedHashMap<>();
+      row.put("id", box.id());
+      row.put("address", box.address());
+      row.put("localPart", box.localPart());
+      row.put("label", box.label());
+      row.put("enabled", box.enabled());
+      row.put("editUrl", prefix + "/edit/" + box.id());
+      UserRecord owner = box.userId() == null ? null : accounts.users.byId(box.userId());
+      row.put("owner", owner == null ? "" : owner.email());
+      // What actually happens to this address, worked out the same way a message is.
+      //
+      // An address with no matching rule is accepted and discarded, which is a surprising thing for
+      // a screen to be silent about -- somebody names an address, sees it in a list, and reasonably
+      // assumes mail to it goes somewhere.
+      io.hearth.smtp.Mailboxes.Rule hit = null;
+      for (io.hearth.smtp.Mailboxes.Rule rule : rules) {
+        if (rule.matches(box.localPart(), "", "")) {
+          hit = rule;
+          break;
+        }
+      }
+      row.put("routed", hit != null);
+      row.put("route", hit == null ? "nothing matches it, so mail is accepted and let go"
+          : hit.describe());
+      rows.add(row);
+    }
+    model.put("addresses", rows);
+    model.put("any", !rows.isEmpty());
+    model.put("count", rows.size());
+  }
+
+  /** the editor for one address */
+  private void mailboxForm(Map<String, Object> model, Accounts accounts, DomainConfig config,
+                           String id) throws SQLException {
+    io.hearth.smtp.Mailboxes.Box box = id == null ? null : accounts.mailboxes.boxById(longOr(id));
+    model.put("editing", box != null);
+    model.put("heading", box == null ? "A new address" : box.address());
+    model.put("domain", config.domain);
+    model.put("form_id", box == null ? "" : String.valueOf(box.id()));
+    model.put("form_localPart", box == null ? "" : box.localPart());
+    model.put("form_label", box == null ? "" : box.label());
+    model.put("form_enabled", box == null || box.enabled());
+    ArrayList<Map<String, Object>> people = new ArrayList<>();
+    for (UserRecord person : accounts.users.recent(200)) {
+      if (!person.isApproved()) {
+        continue;
+      }
+      people.add(Map.of("id", person.id(), "email", person.email(),
+          "chosen", box != null && box.userId() != null && box.userId() == person.id()));
+    }
+    model.put("people", people);
+  }
+
+  /** the log page; the listing itself is a panel so the filter refreshes in place */
+  private void mailLogSection(Map<String, Object> model, Accounts accounts, DomainConfig config,
+                              FullHttpRequest req) {
+    // the listing itself is the panel, embedded by `show` from the same code the panel URL runs;
+    // only the chrome around it belongs here
+    model.put("rulesUrl", AdminView.Section.mail.path(config));
+    model.put("troublesOnly", "1".equals(Forms.query(req.uri(), "trouble")));
+    model.put("kept", io.hearth.smtp.MailLog.KEPT);
+  }
+
+  private Map<String, Object> mailLogPanelModel(Accounts accounts, DomainConfig config,
+                                                FullHttpRequest req) throws SQLException {
+    LinkedHashMap<String, Object> model = new LinkedHashMap<>();
+    boolean troublesOnly = "1".equals(Forms.query(req.uri(), "trouble"));
+    List<io.hearth.smtp.MailLog.Entry> entries = troublesOnly
+        ? accounts.mailLog.troubles(config.domain, 200)
+        : accounts.mailLog.recent(config.domain, 200);
+    ArrayList<Map<String, Object>> rows = new ArrayList<>();
+    for (io.hearth.smtp.MailLog.Entry entry : entries) {
+      LinkedHashMap<String, Object> row = new LinkedHashMap<>();
+      row.put("id", entry.id());
+      row.put("when", stamp(entry.receivedAt()));
+      row.put("from", entry.envelopeFrom().isBlank() ? "(a bounce)" : entry.envelopeFrom());
+      row.put("to", entry.recipient());
+      row.put("subject", entry.subject());
+      row.put("outcome", entry.outcome());
+      row.put("troubled", entry.troubled());
+      row.put("forwarded", "forwarded".equals(entry.outcome()));
+      row.put("authenticated", entry.authenticated());
+      row.put("checks", "spf=" + entry.spf() + " dkim=" + entry.dkim()
+          + " dmarc=" + entry.dmarc());
+      row.put("destination", entry.destination());
+      row.put("detail", entry.detail());
+      row.put("openUrl", AdminView.Section.maillog.path(config) + "/review/" + entry.id());
+      rows.add(row);
+    }
+    model.put("messages", rows);
+    model.put("any", !rows.isEmpty());
+    model.put("count", rows.size());
+    model.put("troublesOnly", troublesOnly);
+    model.put("kept", io.hearth.smtp.MailLog.KEPT);
+    model.put("panelUrl", AdminView.Section.maillog.path(config) + "/list");
+    return model;
+  }
+
+  /**
+   * One message, inspected.
+   *
+   * Returns false when there is no such row, so the caller answers 404 rather than rendering an
+   * empty page -- a screen full of blanks reads as a message with nothing in it.
+   */
+  private boolean mailMessage(Map<String, Object> model, DomainConfig config, Accounts accounts,
+                              String id) throws SQLException {
+    io.hearth.smtp.MailLog.Entry entry = accounts.mailLog.byId(longOr(id));
+    // Checked against the domain being viewed, not just the id.
+    //
+    // One database can serve several domains, and the log is keyed by the domain the message
+    // arrived for. Without this, an administrator of one domain could read another's mail log by
+    // guessing a row number.
+    if (entry == null || !entry.domain().equalsIgnoreCase(config.domain)) {
+      return false;
+    }
+    model.put("heading", entry.subject().isBlank() ? "(no subject)" : entry.subject());
+    model.put("backUrl", AdminView.Section.maillog.path(config));
+    model.put("when", stamp(entry.receivedAt()));
+    model.put("envelopeFrom", entry.envelopeFrom().isBlank() ? "(empty: this is a bounce)"
+        : entry.envelopeFrom());
+    model.put("headerFrom", entry.headerFrom());
+    model.put("disagree", !entry.headerFrom().isBlank() && !entry.envelopeFrom().isBlank()
+        && !entry.headerFrom().toLowerCase().contains(entry.envelopeFrom().toLowerCase()));
+    model.put("recipient", entry.recipient());
+    model.put("messageId", entry.messageId());
+    model.put("size", entry.sizeBytes());
+    model.put("remoteIp", entry.remoteIp());
+    model.put("spf", entry.spf());
+    model.put("dkim", entry.dkim());
+    model.put("dmarc", entry.dmarc());
+    model.put("authenticated", entry.authenticated());
+    model.put("arc", entry.arc().isBlank() ? "none" : entry.arc());
+    model.put("ruleName", entry.ruleName());
+    model.put("hasRule", entry.ruleId() != null);
+    model.put("ruleUrl", entry.ruleId() == null ? null
+        : AdminView.Section.mail.path(config) + "/edit/" + entry.ruleId());
+    model.put("action", entry.action());
+    model.put("destination", entry.destination());
+    model.put("relayHost", entry.relayHost());
+    model.put("tls", entry.tls().isBlank() ? "not recorded" : entry.tls());
+    model.put("outcome", entry.outcome());
+    model.put("troubled", entry.troubled());
+    model.put("detail", entry.detail());
+    model.put("preview", entry.preview());
+    model.put("hasPreview", !entry.preview().isBlank());
+    return true;
+  }
+
+  /**
+   * The setup screen: what is on here, and what has to be true elsewhere.
+   *
+   * Everything on it is generated from the running configuration rather than written down, for the
+   * reason {@link io.hearth.smtp.Workspace} gives: instructions in a document are wrong the first
+   * time somebody changes a selector.
+   */
+  private void mailSetupSection(Map<String, Object> model, Accounts accounts, DomainConfig config)
+      throws SQLException {
+    String hostname = settings.smtp.hostnameOr("mail." + config.domain);
+    model.put("domain", config.domain);
+    model.put("hostname", hostname);
+    model.put("readiness", io.hearth.smtp.Workspace.readiness(settings.smtp, mailKeys,
+        accounts.mailboxes.countRules(config.domain),
+        accounts.mailboxes.boxes(config.domain).size()));
+    ArrayList<Map<String, Object>> groups = new ArrayList<>();
+    for (io.hearth.smtp.Workspace.Group group
+        : io.hearth.smtp.Workspace.all(config.domain, hostname, mailKeys)) {
+      ArrayList<Map<String, Object>> steps = new ArrayList<>();
+      for (io.hearth.smtp.Workspace.Step step : group.steps()) {
+        LinkedHashMap<String, Object> row = new LinkedHashMap<>();
+        row.put("name", step.name());
+        row.put("kind", step.kind());
+        row.put("value", step.value());
+        row.put("hasValue", !step.value().isBlank());
+        row.put("why", step.why());
+        row.put("copyable", step.copyable());
+        steps.add(row);
+      }
+      groups.add(Map.of("title", group.title(), "intro", group.intro(), "steps", steps));
+    }
+    model.put("groups", groups);
+    model.put("rulesUrl", AdminView.Section.mail.path(config));
+  }
+
+  private Outcome actOnMailRule(DomainConfig config, Accounts accounts, Forms form, UserRecord me)
+      throws SQLException {
+    String action = String.valueOf(form.get("action"));
+    long id = longOr(form.get("id"));
+    Function<DomainConfig, String> toList = site -> AdminView.Section.mail.path(site);
+    if (action.equals("delete")) {
+      if (id <= 0 || notThisDomain(accounts.mailboxes.ruleById(id), config)) {
+        return Outcome.refused("That is not a rule for this domain.");
+      }
+      accounts.mailboxes.deleteRule(id, me.id());
+      verbose.detail("admin: " + me.email() + " deleted mail rule " + id);
+      return Outcome.done("That rule is gone.", toList);
+    }
+    if (!action.equals("save")) {
+      return Outcome.refused("That is not something this page can do.");
+    }
+    Outcome oversized = oversized(form);
+    if (oversized != null) {
+      return oversized;
+    }
+    if (id > 0 && notThisDomain(accounts.mailboxes.ruleById(id), config)) {
+      return Outcome.refused("That is not a rule for this domain.");
+    }
+    if (id <= 0 && accounts.mailboxes.countRules(config.domain)
+        >= io.hearth.smtp.Mailboxes.MAX_RULES) {
+      return Outcome.refused("There are already "
+          + io.hearth.smtp.Mailboxes.MAX_RULES + " rules here, which is as many as one domain gets.");
+    }
+    io.hearth.smtp.Mailboxes.Action what =
+        io.hearth.smtp.Mailboxes.Action.of(String.valueOf(form.get("what")));
+    String matchTo = orEmpty(form.get("to"));
+    String forwardTo = orEmpty(form.get("forwardTo"));
+    String bad = io.hearth.smtp.Mailboxes.checkRule(matchTo, what, forwardTo);
+    if (bad != null) {
+      return Outcome.refused(capitalize(bad) + ".");
+    }
+    // Forwarding to an address at this same domain is a loop with extra steps.
+    //
+    // It would be accepted here, matched by the same rule set, and forwarded again -- until the
+    // hop counter stopped it thirty messages later, by which point the far end has seen thirty
+    // copies and formed a view about this machine.
+    if (what == io.hearth.smtp.Mailboxes.Action.forward
+        && config.domain.equalsIgnoreCase(io.hearth.smtp.SmtpRouting.domainOf(forwardTo))) {
+      return Outcome.refused("Forwarding to an address at " + config.domain
+          + " sends mail back through this same rule, which is a loop.");
+    }
+    long saved = accounts.mailboxes.saveRule(id, config.domain,
+        (int) Math.max(1, Math.min(9999, longOr(form.get("position")))),
+        orEmpty(form.get("name")), matchTo, orEmpty(form.get("from")),
+        orEmpty(form.get("subject")), what, forwardTo, form.get("enabled") != null, me.id());
+    verbose.detail("admin: " + me.email() + " saved mail rule " + saved);
+    return Outcome.done("That rule is saved.",
+        site -> AdminView.Section.mail.path(site) + "/edit/" + saved);
+  }
+
+  private Outcome actOnMailbox(DomainConfig config, Accounts accounts, Forms form, UserRecord me)
+      throws SQLException {
+    String action = String.valueOf(form.get("action"));
+    long id = longOr(form.get("id"));
+    Function<DomainConfig, String> toList = site -> AdminView.Section.mailboxes.path(site);
+    if (action.equals("delete")) {
+      io.hearth.smtp.Mailboxes.Box box = id <= 0 ? null : accounts.mailboxes.boxById(id);
+      if (box == null || !box.domain().equalsIgnoreCase(config.domain)) {
+        return Outcome.refused("That is not an address at this domain.");
+      }
+      accounts.mailboxes.deleteBox(id, me.id());
+      verbose.detail("admin: " + me.email() + " deleted address " + box.address());
+      return Outcome.done(box.address() + " is gone. Mail for it is refused from now on.", toList);
+    }
+    if (!action.equals("save")) {
+      return Outcome.refused("That is not something this page can do.");
+    }
+    Outcome oversized = oversized(form);
+    if (oversized != null) {
+      return oversized;
+    }
+    String localPart = orEmpty(form.get("localPart"));
+    String bad = io.hearth.smtp.Mailboxes.checkLocalPart(localPart);
+    if (bad != null) {
+      return Outcome.refused(capitalize(bad) + ".");
+    }
+    io.hearth.smtp.Mailboxes.Box existing = id <= 0 ? null : accounts.mailboxes.boxById(id);
+    if (id > 0 && (existing == null || !existing.domain().equalsIgnoreCase(config.domain))) {
+      return Outcome.refused("That is not an address at this domain.");
+    }
+    io.hearth.smtp.Mailboxes.Box clash = accounts.mailboxes.box(config.domain, localPart);
+    if (clash != null && clash.id() != id) {
+      return Outcome.refused(localPart + "@" + config.domain + " already exists.");
+    }
+    long owner = longOr(form.get("owner"));
+    long saved = accounts.mailboxes.saveBox(id, config.domain, localPart,
+        orEmpty(form.get("label")), owner > 0 ? owner : null, form.get("enabled") != null,
+        me.id());
+    verbose.detail("admin: " + me.email() + " saved address " + localPart + "@" + config.domain);
+    return Outcome.done(localPart + "@" + config.domain + " saved.",
+        site -> AdminView.Section.mailboxes.path(site) + "/edit/" + saved);
+  }
+
+  /** a rule row that belongs to another domain is treated as one that does not exist */
+  private static boolean notThisDomain(io.hearth.smtp.Mailboxes.Rule rule, DomainConfig config) {
+    return rule == null || !rule.domain().equalsIgnoreCase(config.domain);
+  }
+
+  private static String capitalize(String text) {
+    return text == null || text.isEmpty() ? "" : Character.toUpperCase(text.charAt(0))
+        + text.substring(1);
   }
 
   /**
@@ -2797,6 +3197,8 @@ public class AdminRoutes {
       case tables -> tableForm(model, accounts,
           accounts.tables == null ? null : accounts.tables.byName(id));
       case mutations -> mutationForm(model, accounts, id);
+      case mail -> mailRuleForm(model, accounts, config, id);
+      case mailboxes -> mailboxForm(model, accounts, config, id);
       case legal -> {
         LegalDoc doc = LegalDoc.bySlug(id);
         if (doc == null) {

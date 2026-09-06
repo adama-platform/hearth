@@ -1,0 +1,52 @@
+{{<shell}}{{$content}}
+<p class="crumb"><a href="{{backUrl}}">&larr; Mail log</a></p>
+<h1>{{heading}}</h1>
+<p class="dim mono">{{when}} &middot; {{size}} bytes &middot; from {{remoteIp}}</p>
+
+<div class="card">
+  <p class="meta"><span class="dim">the envelope, and what the message says about itself</span></p>
+  <table><tbody>
+    <tr><td>envelope sender</td><td class="mono">{{envelopeFrom}}</td></tr>
+    <tr><td>From header</td><td class="mono">{{headerFrom}}</td></tr>
+    <tr><td>to</td><td class="mono">{{recipient}}</td></tr>
+    <tr><td>Message-ID</td><td class="mono dim">{{messageId}}</td></tr>
+  </tbody></table>
+  {{#disagree}}<p class="hint">The envelope and the From header name different people. That is
+    normal for a mailing list and for anything sent on somebody&rsquo;s behalf, and it is also what
+    a forgery looks like &mdash; the checks below are what tell them apart.</p>{{/disagree}}
+</div>
+
+<div class="card">
+  <p class="meta"><span class="dim">what was known when it arrived</span></p>
+  <table><tbody>
+    <tr><td>SPF</td><td class="mono">{{spf}}</td></tr>
+    <tr><td>DKIM</td><td class="mono">{{dkim}}</td></tr>
+    <tr><td>DMARC</td><td class="mono">{{dmarc}}</td></tr>
+    <tr><td>ARC sealed on the way out</td><td class="mono">{{arc}}</td></tr>
+  </tbody></table>
+  {{#authenticated}}<p class="hint">The domain in the From header vouched for this message.</p>{{/authenticated}}
+  {{^authenticated}}<p class="hint">Nothing vouched for it. That is the common case for mail from a
+    list or a forwarder and is not by itself evidence of anything &mdash; only a domain publishing
+    <code>p=reject</code> is making a claim strong enough to act on.</p>{{/authenticated}}
+</div>
+
+<div class="card">
+  <p class="meta"><span class="dim">what was decided, and what happened</span></p>
+  <table><tbody>
+    <tr><td>rule</td><td>{{#hasRule}}<a href="{{ruleUrl}}">{{ruleName}}</a>{{/hasRule}}{{^hasRule}}<span class="dim">nothing matched</span>{{/hasRule}}</td></tr>
+    <tr><td>action</td><td class="mono">{{action}}</td></tr>
+    <tr><td>sent to</td><td class="mono">{{destination}}</td></tr>
+    <tr><td>via</td><td class="mono">{{relayHost}}</td></tr>
+    <tr><td>connection</td><td class="mono">{{tls}}</td></tr>
+    <tr><td>outcome</td><td>{{#troubled}}<span class="pill bad">{{outcome}}</span>{{/troubled}}{{^troubled}}<span class="pill good">{{outcome}}</span>{{/troubled}}</td></tr>
+  </tbody></table>
+  {{#detail}}<p class="hint">The far end said, word for word: <code>{{detail}}</code></p>{{/detail}}
+</div>
+
+{{#hasPreview}}
+<div class="card">
+  <p class="meta"><span class="dim">the first part of the message</span></p>
+  <pre class="scroll">{{preview}}</pre>
+</div>
+{{/hasPreview}}
+{{/content}}{{/shell}}

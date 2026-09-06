@@ -304,6 +304,21 @@ public class SmtpSession extends SimpleChannelInboundHandler<String> {
       strike(ctx);
       return;
     }
+    // Does anything here want this address?
+    //
+    // Asked before DATA on purpose. A 550 at RCPT is what makes a mistyped address come back to
+    // whoever typed it, and it means this server never accepts a message it has nowhere to put --
+    // which is what removes the need to ever generate a bounce. The wording is deliberately the
+    // same for an address that does not exist and one whose rules were removed: which of those it
+    // is happens to be a fact about somebody's mail setup, and answering differently would let
+    // anybody enumerate it one guess at a time.
+    if (!receiver.accepts(route.domain, address)) {
+      counters.refused.incrementAndGet();
+      verbose.detail(() -> "smtp: nothing here for " + address);
+      say(ctx, "550 No such address here");
+      strike(ctx);
+      return;
+    }
     if (domain != null && !domain.domain.equals(route.domain)) {
       // one message, one community. Two domains in one transaction is two deliveries, and pretending
       // otherwise means a handler cannot say which community it is acting for.
@@ -390,7 +405,7 @@ public class SmtpSession extends SimpleChannelInboundHandler<String> {
         // able to see what was known when it arrived rather than re-deriving it later
         Envelope envelope = new Envelope(envelopeFrom, to,
             SenderCheck.stamp(message, result, banner), peer, sayHelo, forDomain,
-            System.currentTimeMillis());
+            System.currentTimeMillis(), result);
         outcome = receiver.receive(envelope);
       } catch (Exception ex) {
         // A handler that throws is our problem, not the sender's, so it gets a 4xx and the message

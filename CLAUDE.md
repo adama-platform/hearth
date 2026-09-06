@@ -196,7 +196,8 @@ src/main/java/io/hearth/
   cli/Ask.java                    terminal prompts, shared by every walkthrough
   cli/Install.java                --install: a systemd unit, a start script that swaps in a staged jar,
   cli/Root.java                   the one --root directory: config.cfg, domains/, dbs/, certs/, attachments/
-  cli/Setup.java                  --setup, --domain-setup, --setup-email, --test-email
+  cli/Setup.java                  --setup, --domain-setup, --setup-email, --setup-mail,
+                                  --test-email
   common/Boot.java                ANSI boot output (respects NO_COLOR, non-tty)
   common/ConfigException.java a config problem, which is always fatal at boot
   common/ConfigObject.java    strict typed reader over Jackson; unknown keys are fatal
@@ -258,12 +259,20 @@ src/main/java/io/hearth/
   settings/Setting.java           one thing a community may decide, and how a form asks for it
   settings/SettingStore.java      the config table; a row exists only where somebody decided something
   settings/Settings.java          the closed catalogue: what moved to the database, and what it means
+  smtp/Arc.java                   RFC 8617; a chain is started, never extended on faith
   smtp/AuthResult.java            what each said, and the Authentication-Results header
   smtp/Dkim.java                  RFC 6376; canonicalization is the whole difficulty
+  smtp/DkimSigner.java            the same canonicalization run backwards, so both halves agree
   smtp/Dmarc.java                 RFC 7489; alignment is what makes the other two mean anything
   smtp/Envelope.java              one message as it arrived; envelope kept apart from headers
+  smtp/ForwardConfig.java         the smtp.forwarding block: the two secrets and the TLS floor
+  smtp/Forwarding.java            forwards before it answers, so there is no queue and no bounce
+  smtp/MailKeys.java              one signing key, and the DNS record that publishes it
+  smtp/MailLog.java               what arrived, what was decided, and what the far end said
   smtp/MailReceiver.java          what happens to it once it has; the seam
+  smtp/Mailboxes.java             the addresses that exist, and the ordered rules over them
   smtp/MimeParts.java             enough MIME to find the calendar part of a real reply, and no more
+  smtp/Relay.java                 one message out to somebody else's exchanger, over TLS
   smtp/SenderCheck.java           all three checks, and the one thing that gets refused
   smtp/SmtpConfig.java            the smtp block in config.cfg
   smtp/SmtpDns.java               the resolver seam, so every check is testable without a network
@@ -271,7 +280,9 @@ src/main/java/io/hearth/
   smtp/SmtpServer.java            inbound mail; its own event loop, off unless asked for
   smtp/SmtpSession.java           the RFC 5321 state machine, minus what nothing needs yet
   smtp/Spf.java                   RFC 7208; the ten-lookup cap is the security property
+  smtp/Srs.java                   the return-path rewriting that keeps a forward passing SPF
   smtp/TerminalMailReceiver.java  prints it, the inbound twin of DevBoxMailer
+  smtp/Workspace.java             what has to be true in DNS and at Google, generated from here
   store/Column.java           one column, its type, and the name it was renamed from
   store/Database.java             the swap point for MySQL/PostgreSQL; Dialect holds the differences
   store/Dialect.java          the differences between databases, in one place
@@ -345,6 +356,7 @@ src/test/java/io/hearth/
   testkit/Configs.java     throwaway configs directories
   testkit/CapturingMailer.java  reads codes back the way a person reads the terminal
   testkit/McpClient.java   a connector: registers, walks consent, redeems with PKCE
+  smtp/StubExchanger.java  a mail exchanger on a real socket that keeps what it was sent
 site/                      checked-in example root, used by tests and by hand
 justfile                   the primary interface; `just validate` is the gate
 ```
@@ -862,61 +874,111 @@ justfile                   the primary interface; `just validate` is the gate
      preview, because a template naming something that does not exist renders as a hole and nobody
      notices until it has gone out.
 
+### Forwarding
+
+171. **A forwarded message is not modified.** Not a footer, not a subject tag, not a re-encode, not
+     a reordered header. The sender's DKIM signature covers the body and most of the headers, and it
+     is the strongest thing a forwarded message carries; one changed byte destroys it and leaves a
+     message failing both SPF and DKIM at the far end, which a receiver cannot tell apart from
+     tampering. Headers are prepended and nothing else happens.
+172. **The return path is rewritten and the visible sender is not.** SPF asks about the envelope, a
+     person reads the header. Rewriting the one nobody reads is what makes a forward pass at the far
+     end; rewriting the other would be lying about who wrote the message.
+173. **An SRS address this server did not write reverses to nothing.** The MAC is the only thing
+     standing between a rewritten return path and an open relay, and it is checked in constant time
+     -- "it is only four characters" is exactly the case where guessing is cheapest. A stamp older
+     than three weeks stops reversing, because a return path that works forever is a forwarding
+     address somebody harvests once and uses for years.
+174. **A chain is started, never extended on faith.** Adding `cv=pass` to somebody else's ARC chain
+     means asserting a verdict on arithmetic this server did not do, and `cv=fail` means reporting a
+     failure nobody observed. Mail arriving straight from a sender has no chain, so the common case
+     is sealed and the uncommon one is left honest and logged. This is invariant 96 in another
+     costume.
+175. **Nothing is bounced, because nothing is accepted that cannot be delivered.** The message goes
+     out before the 250 goes back, and the far end's verdict is handed straight to the sending
+     server -- a 451 becomes a 451 and a 550 becomes a 550. That removes the queue, the spool and
+     the bounce generator together: the *sender's* server writes the failure report, to the address
+     it really sent from, rather than this one mailing a report to a return path a spammer chose.
+176. **An address nothing claims is refused at RCPT**, before the message arrives, so a mistyped
+     address comes back to whoever typed it and a directory harvester costs one line per guess. A
+     domain with no addresses and no rules accepts everything, so turning this on is a decision
+     rather than an outage.
+177. **Rules are ordered and the first match wins.** It is the only evaluation order a person can
+     hold in their head, and "every matching rule applies" means two forwards deliver two copies to
+     somewhere awkward. An action the database holds that this software does not understand drops
+     the message rather than forwarding it -- a rule whose meaning was lost must not send mail
+     somewhere nobody chose.
+178. **Dropping accepts; only the door refuses.** A 550 for a message somebody simply does not want
+     tells the sender their address is wrong when it is right.
+179. **A forwarder must not pass on what failed the sender's own policy.** It would be delivering,
+     in this machine's name, a message the domain owner asked the world to refuse -- and it is this
+     machine's address the receiver records. `enforce-dmarc` is off by default everywhere and on for
+     a forwarder.
+180. **The mail log is metadata and a short preview, never the message.** A forwarder that keeps
+     copies is a mail store nobody agreed to run. An erasure deletes those rows outright rather than
+     blanking them: every other row here keeps its words and loses its author because the words are
+     somebody else's conversation, and a log row is nothing but who wrote to whom.
+181. **The instructions are generated from what is running.** A selector, a key and a hostname
+     written into a document are wrong the first time somebody changes one. What this server cannot
+     see from the inside -- MX, reverse DNS, a setting in somebody else's admin console -- it prints
+     the command for rather than showing a tick it would be guessing at.
+
+
 ### Appearance and the law
 
-171. **A palette is six hex strings or it is the default.** It is interpolated raw into a `<style>`
+182. **A palette is six hex strings or it is the default.** It is interpolated raw into a `<style>`
      block, so every value goes through `Theme.isColour` and a slot that fails keeps what it had.
-172. **Red means refused and green means it worked, and nobody may change that.**
-173. **Light unless somebody says otherwise, and it is their choice rather than their laptop's.**
+183. **Red means refused and green means it worked, and nobody may change that.**
+184. **Light unless somebody says otherwise, and it is their choice rather than their laptop's.**
      `/~theme.js` sets the attribute before first paint — a file rather than an inline script
      because inline needs a nonce, and not deferred because deferred is a white flash.
-174. **The two legal documents ship in the jar and are published from the first day.** A row exists
+185. **The two legal documents ship in the jar and are published from the first day.** A row exists
      only when a community has overridden one, so upgrading the software improves them.
-175. **`/legal` is open to everybody.** Every email links to the terms and most go to somebody with
+186. **`/legal` is open to everybody.** Every email links to the terms and most go to somebody with
      no account yet.
-176. **The cookie notice is a line in the footer, not a banner.** Two cookies, both strictly
+187. **The cookie notice is a line in the footer, not a banner.** Two cookies, both strictly
      necessary, which is the category that needs no consent.
-177. **The privacy policy this software ships is a specification.** Every promise in it is a thing
+188. **The privacy policy this software ships is a specification.** Every promise in it is a thing
      the code does: `DataExport` and `Erasure`, reachable by the member and by an administrator.
      Changing the policy is changing a requirement.
-178. **An erasure is checked by looking, not by remembering.** `RightsTests` walks *every column of
+189. **An erasure is checked by looking, not by remembering.** `RightsTests` walks *every column of
      every table* afterwards looking for the address, which is the only form of that test worth
      writing.
 
 ### Storage
 
-179. **The schema is code.** Add a column where it belongs, bump `VERSION`, restart. A column added
+190. **The schema is code.** Add a column where it belongs, bump `VERSION`, restart. A column added
      later must be nullable or carry a default — there is no correct value for existing rows.
-180. **A column whose name has stopped being true gets renamed.** `Column.renamedFrom` declares it
+191. **A column whose name has stopped being true gets renamed.** `Column.renamedFrom` declares it
      and the upgrader performs it, before it looks for anything missing.
-181. **The upgrader adds, never drops or retypes.** A column the code no longer declares is reported
+192. **The upgrader adds, never drops or retypes.** A column the code no longer declares is reported
      and left alone, which is what makes the reduction safe for an existing database.
-182. **A test that writes "hello" proves that "hello" fits.** Anything that stores what a person
+193. **A test that writes "hello" proves that "hello" fits.** Anything that stores what a person
      typed gets a test with a realistic amount of it in.
-183. **Boot never drops anything; a person does.** The other half of invariant 181. Leftover tables
+194. **Boot never drops anything; a person does.** The other half of invariant 192. Leftover tables
      are listed at `/admin/system/cleanup` with their row counts and dropped one at a time, by
      somebody holding `everything`. An operator who upgrades, hits a regression and rolls the jar
      back must still have their data, so the upgrader can never be the thing that deletes it.
-184. **The table name on that screen is untrusted.** `Leftovers.drop` re-derives the leftover list
+195. **The table name on that screen is untrusted.** `Leftovers.drop` re-derives the leftover list
      and refuses anything not on it, using the database's own spelling rather than the form's.
      Without that the most powerful button in the admin section is an arbitrary `DROP TABLE` with a
      text field in front of it.
-185. **A column nothing reads is not free.** It is a sentence in the privacy policy that has to stay
+196. **A column nothing reads is not free.** It is a sentence in the privacy policy that has to stay
      true and a column every erasure test keeps walking. The ten address and geo columns outlived
      their feature by a whole reduction, with a dead `SELECT` list in `PeopleStore` naming them.
 
 ### Installing
 
-186. **A walkthrough writes a file you could have written by hand, and says what it wrote.** They
+197. **A walkthrough writes a file you could have written by hand, and says what it wrote.** They
      refuse without a terminal, because each exists to make somebody think and a pipe cannot think.
-187. **A walkthrough run twice must not undo the first run.** Every question pre-fills from the file
+198. **A walkthrough run twice must not undo the first run.** Every question pre-fills from the file
      it is about to rewrite.
-188. **`--install` needs no root and starts nothing.** The half that needs root is written out as
+199. **`--install` needs no root and starts nothing.** The half that needs root is written out as
      `install.sh` to be read first.
-189. **A second `--install` stages a jar; it never overwrites the running one.** Overwriting leaves
+200. **A second `--install` stages a jar; it never overwrites the running one.** Overwriting leaves
      the file on disk and the software in memory disagreeing.
-190. **The unit asks for `CAP_NET_BIND_SERVICE` and bounds the set to it.**
-191. **16px on every field, 44px on everything you can press, a visible focus ring on everything.**
+201. **The unit asks for `CAP_NET_BIND_SERVICE` and bounds the set to it.**
+202. **16px on every field, 44px on everything you can press, a visible focus ring on everything.**
 ## The virtual hosting rules
 
 **Flat on disk, tree in memory.** `<root>/domains` is a flat directory of `<domain>.cfg` JSON files;
@@ -1036,8 +1098,33 @@ closed and silently.
 found by scanners within the hour. `SmtpRouting` accepts only for a domain with a config file,
 matched exactly — never by wildcard, which would be an open relay built by accident. Every message
 is checked with SPF, DKIM and DMARC and stamped with `Authentication-Results` whatever the outcome.
-**Nothing acts on a message today**: `TerminalMailReceiver` prints it. The routing and the checks are
-kept because they are the expensive part to get right and the part a future consumer would need.
+**Forwarding** is `smtp.forwarding`, off separately: receiving is one decision and acting on what you
+receive by connecting to other people's servers in your name is another. When it is on, `Mailboxes`
+holds the addresses that exist at a domain and the ordered rules over them -- two actions, `forward`
+and `drop`, first match winning -- and `Forwarding` is the receiver that reads them. A domain with no
+addresses and no rules still lands in `TerminalMailReceiver`, so turning this on is per domain rather
+than per box.
+
+The scenario it was built for is moving one person's mail to this machine while somebody else in the
+house stays on Google Workspace: MX points here, a rule forwards her address on, and neither of them
+notices. That works only if the forwarded message still looks real at the far end, which is what most
+of the code is about. **`Srs`** rewrites the return path to this domain so SPF passes, and reverses a
+bounce coming home. **`DkimSigner`** and **`Arc`** sign the message and seal what the three checks
+said on arrival, which is the record Gmail honours from a forwarder. **`Relay`** delivers over
+verified TLS and hands the far end's verdict straight back, so there is no queue and nothing ever
+bounces. **`MailLog`** keeps what happened, and **`Workspace`** generates the DNS and the Google
+settings that have to be true elsewhere -- printed by `--setup-mail` and shown at
+`/admin/mail/setup`.
+
+The one signing key lives at `<root>/mail/dkim.key`, 0600 and refused if anybody else can read it. It
+signs as whichever domain the message arrived for, so the same public record goes into DNS on each of
+them.
+
+**Mail is its own top-level admin section** and takes its own permission, `mail_route`: the screens
+below can silently redirect somebody's post and show who has been writing to whom, which is not the
+same decision as being trusted with the community's colours. Four sections -- `mail` (the rules),
+`mailboxes` (`/admin/mail/addresses`), `maillog` (`/admin/mail/log`, with a panel and a per-message
+view) and `mailsetup` (`/admin/mail/setup`, the generated DNS and Workspace guidance).
 
 ## Testing
 
@@ -1093,7 +1180,21 @@ Different from a defect: nobody has proved these wrong, and nobody has proved th
 - **Nothing has been run against a real dataset.** Every query is written for a few hundred rows.
 - **Push has no producer.** Subscribing, the keypair, the worker and the self-test work; nothing in
   the server generates a notification, because the board and the calendar were what did.
-- **Inbound mail is received and printed, and nothing acts on it.**
+- **No forwarded message has ever reached a real Google Workspace.** The whole outbound path -- SRS,
+  the signature, the ARC seal, the relay, the verdict pass-through -- is tested against a stub
+  exchanger on a socket that speaks SMTP and keeps what it was sent. That the message is unmodified,
+  that the signature verifies, and that a 550 comes back as a 550 are all proven; that Gmail then
+  files it in an inbox is not, and it is the kind of thing only real mail can settle.
+- **Nothing has been checked against a second DKIM implementation.** The signer is checked against
+  this repository's own verifier, which is the strongest cheap test available and is still two halves
+  of one understanding of RFC 6376. An `opendkim-testmsg` run against a real message would be worth
+  more than every test in `SigningTests`.
+- **The ARC chain has never been verified by anybody.** It is produced to the RFC and read by
+  nothing here; whether Google accepts the seal is unproven, and a chain nobody validates is
+  indistinguishable from a chain nobody produced.
+- **Port 25 outbound is blocked by default at most hosting providers**, so the forwarder may not be
+  able to connect at all until somebody asks them to open it. This is not a defect and it is the
+  first thing to check.
 - **The suite has flaky timeouts under load.** A handful of HTTP tests occasionally hit the client's
   ten-second ceiling; the set moves between runs and every one of them passes when its class is run
   alone. It has not been chased down, and it means a red suite needs reading rather than trusting.

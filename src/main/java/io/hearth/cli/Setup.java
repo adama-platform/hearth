@@ -10,6 +10,8 @@ import io.hearth.mail.SesConfig;
 import io.hearth.common.ConfigObject;
 import io.hearth.common.Verbose;
 import io.hearth.vhost.Hosts;
+import io.hearth.smtp.ForwardConfig;
+import io.hearth.smtp.MailKeys;
 import io.hearth.smtp.SmtpConfig;
 import io.hearth.web.WebConfig;
 
@@ -17,21 +19,24 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.attribute.PosixFilePermission;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 
 /**
- * The walkthroughs: `--setup`, `--domain-setup`, `--setup-email`, `--test-email`.
+ * The walkthroughs: `--setup`, `--domain-setup`, `--setup-email`, `--setup-mail`, `--test-email`.
  *
  * Each one writes a file somebody could have written by hand, and says what it wrote. That is the
  * standard they are held to -- a walkthrough that produces something you cannot then read and edit
  * has replaced understanding with a wizard, and the first time it is wrong you have nowhere to go.
  *
- * They exist because the three things that are hard to get right on a first install are hard in the
- * same way: the failure is silent and arrives later. A missing admin address means nobody can ever
- * approve anybody. An unverified SES sender means codes vanish with no bounce. A `wildcard` you did
- * not mean means a domain answers for hosts you have never heard of. Asking out loud costs a minute
- * and catches all three.
+ * They exist because the things that are hard to get right on a first install are hard in the same
+ * way: the failure is silent and arrives later. A missing admin address means nobody can ever approve
+ * anybody. An unverified SES sender means codes vanish with no bounce. A `wildcard` you did not mean
+ * means a domain answers for hosts you have never heard of. A DKIM record pasted across two lines
+ * means a signature that verifies nowhere with no error anywhere. Asking out loud costs a minute and
+ * catches all of them.
  */
 public class Setup {
   private static final ObjectMapper JSON = new ObjectMapper();
@@ -464,6 +469,156 @@ public class Setup {
     return true;
   }
 
+
+  // ---- --setup-mail ----------------------------------------------------------------------------
+
+  /**
+   * Turn on receiving and forwarding, and print the records that have to go into DNS.
+   *
+   * <b>The two secrets are generated here rather than defaulted, and that is the reason this
+   * exists.</b> A default SRS secret would be the same on every installation, which makes the MAC
+   * that keeps this from being an open relay a MAC anybody can compute; a default DKIM key would be
+   * a private key published in a git repository. Both have to be random per box, and asking
+   * somebody to invent thirty-two random characters at a prompt gets `aaaaaaaa`.
+   *
+   * It prints the DKIM record for every domain this root serves, because the signature carries the
+   * domain the message arrived for and one key signs for all of them -- so the same record goes on
+   * each, and the record nobody publishes is the domain whose mail is unsigned.
+   */
+  public boolean mail(String hostname) throws IOException {
+    ask.section("mail setup");
+    ask.say("  This makes this machine the front door for your mail: it receives, decides what each");
+    ask.say("  message is for, and sends it on. Nothing is stored here and nothing is bounced --");
+    ask.say("  a message is delivered onward or never accepted.");
+    ask.blank();
+    ask.say("  Three things have to be true outside this box, and none of them can be checked from");
+    ask.say("  inside it:");
+    ask.blank();
+    ask.say("    1. Port 25 reaches this machine, in both directions. Plenty of providers block");
+    ask.say("       outbound 25 by default and will open it if you ask.");
+    ask.say("    2. This machine has reverse DNS pointing at the name you give below.");
+    ask.say("    3. The DNS records printed at the end are published.");
+    ask.blank();
+
+    ObjectNode config = JSON.createObjectNode();
+    if (root.hasConfig()) {
+      try {
+        JsonNode existing = JSON.readTree(root.configFile());
+        if (existing.isObject()) {
+          config = (ObjectNode) existing;
+        }
+      } catch (Exception ex) {
+        ask.fail(root.configFile() + " did not parse; fix it before running this");
+        return false;
+      }
+    }
+    ObjectNode smtp = objectAt(config, "smtp");
+    ObjectNode forwarding = objectAt(smtp, "forwarding");
+
+    // pre-filled from the file it is about to rewrite, so a second run does not undo the first
+    String name = hostname != null && !hostname.isBlank() ? hostname.trim()
+        : ask.text("What is this machine called?", smtp.path("hostname").asText("mail.example.org"));
+    if (!name.contains(".") || name.contains(" ")) {
+      ask.fail("that is not a hostname");
+      return false;
+    }
+    smtp.put("enabled", true);
+    smtp.put("hostname", name);
+
+    ask.blank();
+    ask.say("  A forwarder that passes on mail failing the sender's own published policy is");
+    ask.say("  delivering, in its own name, a message the domain owner asked the world to refuse.");
+    ask.say("  It is this machine's address the receiver records as the sender. Saying no here is");
+    ask.say("  reasonable only while you are watching the mail log for a fortnight.");
+    smtp.put("enforce-dmarc",
+        ask.yes("Refuse mail that fails its own domain's p=reject?",
+            smtp.path("enforce-dmarc").asBoolean(true)));
+
+    ask.blank();
+    ask.say("  Requiring TLS means a receiver that offers none gets a temporary failure rather than");
+    ask.say("  your mail in the clear. Every large provider has supported it for a decade.");
+    forwarding.put("require-tls",
+        ask.yes("Require TLS when delivering?", forwarding.path("require-tls").asBoolean(true)));
+    forwarding.put("enabled", true);
+    forwarding.put("authserv-id", name);
+
+    String selector = forwarding.path("dkim-selector").asText(ForwardConfig.DEFAULT_SELECTOR);
+    forwarding.put("dkim-selector", selector);
+    String keyPath = forwarding.path("dkim-key-file").asText(ForwardConfig.DEFAULT_KEY_FILE);
+    forwarding.put("dkim-key-file", keyPath);
+
+    // Kept if it is already there. Rewriting it would invalidate every SRS address in flight, so
+    // every bounce for the next three weeks would stop reversing -- silently.
+    String secret = forwarding.path("srs-secret").asText("");
+    boolean generated = secret.length() < 24;
+    if (generated) {
+      byte[] random = new byte[24];
+      new java.security.SecureRandom().nextBytes(random);
+      secret = java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(random);
+      forwarding.put("srs-secret", secret);
+    }
+
+    MailKeys keys;
+    try {
+      keys = MailKeys.open(new File(root.dir(), keyPath), selector);
+    } catch (IOException ex) {
+      ask.fail(ex.getMessage());
+      return false;
+    }
+
+    write(root.configFile(), config.toPrettyString() + "\n", true);
+    ask.blank();
+    ask.ok("wrote " + root.configFile().getName() + ", readable only by this user");
+    ask.ok((generated ? "generated" : "kept") + " the SRS secret that signs return paths");
+    ask.ok("the signing key is " + new File(root.dir(), keyPath));
+    if (!generated) {
+      ask.say("  The existing secret was kept: changing it would stop every bounce still in flight");
+      ask.say("  from finding its way home.");
+    }
+
+    ask.blank();
+    ask.section("publish these");
+    List<String> domains = domainsHere();
+    if (domains.isEmpty()) {
+      ask.warn("no domains configured yet; run --domain-setup first, then this again for the records");
+    }
+    for (String domain : domains) {
+      ask.blank();
+      ask.say("  " + domain);
+      ask.say("    MX     " + domain + ".  10 " + name + ".");
+      ask.say("    TXT    " + domain + ".  \"v=spf1 a:" + name + " ~all\"");
+      ask.say("    TXT    " + keys.dnsName(domain) + ".  \"" + keys.dnsRecord() + "\"");
+      ask.say("    TXT    _dmarc." + domain + ".  \"v=DMARC1; p=none; rua=mailto:postmaster@"
+          + domain + "\"");
+    }
+    ask.blank();
+    ask.say("  The DKIM record is one string. A control panel that splits it across lines produces");
+    ask.say("  a key that verifies nowhere, with no error anywhere.");
+    ask.blank();
+    ask.say("  Then, in order: publish the three TXT records, ask your provider for reverse DNS to");
+    ask.say("  " + name + ", set the inbound gateway inside Google Workspace, write your rules at");
+    ask.say("  /admin/mail, and move MX last. Everything before MX is reversible in seconds.");
+    ask.blank();
+    ask.say("  /admin/mail/setup has all of this, generated from what is actually running, plus the");
+    ask.say("  Workspace settings and the commands that check each one from outside.");
+    return true;
+  }
+
+  /** every domain this root serves, so the records are printed for each rather than for one */
+  private List<String> domainsHere() {
+    ArrayList<String> domains = new ArrayList<>();
+    File[] files = root.domains().listFiles();
+    if (files == null) {
+      return domains;
+    }
+    for (File file : files) {
+      if (file.isFile() && file.getName().endsWith(".cfg")) {
+        domains.add(file.getName().substring(0, file.getName().length() - 4));
+      }
+    }
+    java.util.Collections.sort(domains);
+    return domains;
+  }
 
   // ---- --test-email ---------------------------------------------------------------------------
 

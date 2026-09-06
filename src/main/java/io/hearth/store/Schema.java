@@ -29,7 +29,7 @@ import java.util.List;
  */
 public class Schema {
   /** bumped whenever the tables below change; recorded in schema_meta for the boot audit */
-  public static final int VERSION = 47;
+  public static final int VERSION = 48;
 
   public static final String EMAILS = "emails";
   public static final String SESSIONS = "sessions";
@@ -55,6 +55,9 @@ public class Schema {
   public static final String SYSTEM_TEMPLATES = "system_templates";
   public static final String ATTACHMENTS = "attachments";
   public static final String CONFIG = "config";
+  public static final String MAILBOXES = "mailboxes";
+  public static final String MAIL_RULES = "mail_rules";
+  public static final String MAIL_LOG = "mail_log";
   public static final String META = "schema_meta";
 
   public static final Table EMAILS_TABLE = Table.named(EMAILS)
@@ -411,6 +414,109 @@ public class Schema {
       .column(Column.of("fetched_at", "TIMESTAMP"))
       // what went wrong last time, so a broken link is visible rather than silently empty
       .column(Column.of("trouble", "VARCHAR(512)").notNull().withDefault("''"))
+      .build();
+
+  /**
+   * The addresses that exist at a domain this server accepts mail for.
+   *
+   * <b>A mailbox is a place, not a person.</b> It carries an optional owner because
+   * `jeff@` is somebody's and `receipts@` is nobody's, and a rule can act on either. What it
+   * deliberately does not carry is a password or a delivery store: nothing here holds mail, so
+   * there is nothing to sign into.
+   *
+   * The domain is a column because one database can serve several domains -- `use_database_domain`
+   * makes one account space out of two hostnames, and `jeff@` at one of them is not `jeff@` at the
+   * other. A mailbox table without it would silently merge two people's mail.
+   */
+  public static final Table MAILBOXES_TABLE = Table.named(MAILBOXES)
+      .column(Column.id("id"))
+      .column(Column.of("domain", "VARCHAR(255)").notNull())
+      // stored lowercased; the pair below is the constraint that matters
+      .column(Column.of("local_part", "VARCHAR(64)").notNull())
+      .column(Column.of("label", "VARCHAR(160)").notNull().withDefault("''"))
+      // whose address this is, when it is anybody's; null for a role address
+      .column(Column.of("user_id", "BIGINT"))
+      .column(Column.of("enabled", "BOOLEAN").notNull().withDefault("TRUE"))
+      .column(Column.of("created_at", "TIMESTAMP").notNull().withDefault("CURRENT_TIMESTAMP"))
+      .column(Column.of("updated_at", "TIMESTAMP").notNull().withDefault("CURRENT_TIMESTAMP"))
+      .unique("uq_mailboxes_address", "domain", "local_part")
+      .index("idx_mailboxes_domain", "domain")
+      .build();
+
+  /**
+   * What happens to a message, decided in order, first match winning.
+   *
+   * <b>Two actions today and the shape is what matters.</b> `forward` and `drop` are the whole
+   * vocabulary; the ordering, the match and the audit trail are the parts that would be painful to
+   * add later. A rule that matched on nothing would match everything, so a rule with no conditions
+   * at all is refused rather than stored -- the catch-all is written as `*` on purpose, because
+   * somebody has to type it.
+   */
+  public static final Table MAIL_RULES_TABLE = Table.named(MAIL_RULES)
+      .column(Column.id("id"))
+      .column(Column.of("domain", "VARCHAR(255)").notNull())
+      // lower is earlier; ties break on id, so two rules at the same position are still ordered
+      .column(Column.of("position", "INTEGER").notNull().withDefault("100"))
+      .column(Column.of("name", "VARCHAR(160)").notNull().withDefault("''"))
+      // the local part this matches, or `*` for every address at the domain
+      .column(Column.of("match_to", "VARCHAR(64)").notNull().withDefault("'*'"))
+      // optional narrowing: a substring of the envelope sender, and of the subject
+      .column(Column.of("match_from", "VARCHAR(320)").notNull().withDefault("''"))
+      .column(Column.of("match_subject", "VARCHAR(255)").notNull().withDefault("''"))
+      .column(Column.of("action", "VARCHAR(16)").notNull().withDefault("'drop'"))
+      .column(Column.of("forward_to", "VARCHAR(320)").notNull().withDefault("''"))
+      .column(Column.of("enabled", "BOOLEAN").notNull().withDefault("TRUE"))
+      .column(Column.of("created_at", "TIMESTAMP").notNull().withDefault("CURRENT_TIMESTAMP"))
+      .column(Column.of("updated_at", "TIMESTAMP").notNull().withDefault("CURRENT_TIMESTAMP"))
+      .column(Column.of("updated_by", "BIGINT"))
+      .index("idx_mail_rules_domain", "domain")
+      .build();
+
+  /**
+   * Every message that arrived, what was decided about it, and what happened next.
+   *
+   * <b>This is the inspection surface, and it is metadata plus a short preview.</b> Not the
+   * message: a forwarder that keeps copies is a mail store nobody asked for, and the thing worth
+   * being able to answer is "did that get through, and why not" -- which needs the envelope, the
+   * authentication verdicts, the rule that matched and the far end's own words back. The preview
+   * exists because a rule that matched the wrong thing is only obvious next to the message it
+   * matched, and it is capped hard for the same reason the rest of this is metadata.
+   *
+   * Pruned to the most recent rows per domain on write. A log that grows without bound is a disk
+   * that fills on a Sunday.
+   */
+  public static final Table MAIL_LOG_TABLE = Table.named(MAIL_LOG)
+      .column(Column.id("id"))
+      .column(Column.of("received_at", "TIMESTAMP").notNull().withDefault("CURRENT_TIMESTAMP"))
+      .column(Column.of("domain", "VARCHAR(255)").notNull())
+      .column(Column.of("envelope_from", "VARCHAR(320)").notNull().withDefault("''"))
+      .column(Column.of("recipient", "VARCHAR(320)").notNull().withDefault("''"))
+      // what the message says about itself, which routinely disagrees with the envelope
+      .column(Column.of("header_from", "VARCHAR(320)").notNull().withDefault("''"))
+      .column(Column.of("subject", "VARCHAR(512)").notNull().withDefault("''"))
+      .column(Column.of("message_id", "VARCHAR(255)").notNull().withDefault("''"))
+      .column(Column.of("size_bytes", "INTEGER").notNull().withDefault("0"))
+      .column(Column.of("remote_ip", "VARCHAR(64)").notNull().withDefault("''"))
+      // the three verdicts as they were at the moment it arrived, not re-derived later
+      .column(Column.of("spf", "VARCHAR(16)").notNull().withDefault("'none'"))
+      .column(Column.of("dkim", "VARCHAR(16)").notNull().withDefault("'none'"))
+      .column(Column.of("dmarc", "VARCHAR(16)").notNull().withDefault("'none'"))
+      // what this server sealed on the way out, so a chain problem at the far end is traceable here
+      .column(Column.of("arc", "VARCHAR(32)").notNull().withDefault("''"))
+      .column(Column.of("rule_id", "BIGINT"))
+      .column(Column.of("rule_name", "VARCHAR(160)").notNull().withDefault("''"))
+      .column(Column.of("action", "VARCHAR(16)").notNull().withDefault("''"))
+      .column(Column.of("destination", "VARCHAR(320)").notNull().withDefault("''"))
+      // where it actually went and how the conversation was protected
+      .column(Column.of("relay_host", "VARCHAR(255)").notNull().withDefault("''"))
+      .column(Column.of("tls", "VARCHAR(32)").notNull().withDefault("''"))
+      .column(Column.of("outcome", "VARCHAR(24)").notNull().withDefault("''"))
+      // the far end's own sentence, kept verbatim: a paraphrase of a 550 is a lost afternoon
+      .column(Column.of("detail", "VARCHAR(1024)").notNull().withDefault("''"))
+      .column(Column.of("attempts", "INTEGER").notNull().withDefault("0"))
+      .column(Column.of("preview", "VARCHAR(2048)").notNull().withDefault("''"))
+      .index("idx_mail_log_domain", "domain")
+      .index("idx_mail_log_received", "received_at")
       .build();
 
   public static final Table TEMPLATES_TABLE = Table.named(TEMPLATES)
@@ -800,7 +906,8 @@ public class Schema {
           ATTACHMENTS_TABLE,
           CONFIG_TABLE, MUTATIONS_TABLE, USER_KEYS_TABLE,
           VOTES_TABLE, AVAILABILITY_TABLE,
-          PROCESSES_TABLE, TASKS_TABLE, HABIT_MARKS_TABLE, CALENDARS_TABLE);
+          PROCESSES_TABLE, TASKS_TABLE, HABIT_MARKS_TABLE, CALENDARS_TABLE,
+          MAILBOXES_TABLE, MAIL_RULES_TABLE, MAIL_LOG_TABLE);
 
   private Schema() {
   }

@@ -433,4 +433,110 @@ public class SetupTests {
 
 
 
+  // ---- --setup-mail -----------------------------------------------------------------------------
+
+  private File withDomain(String domain) throws Exception {
+    File domains = new File(dir, "domains");
+    domains.mkdirs();
+    Files.writeString(new File(domains, domain + ".cfg").toPath(), "{\"name\":\"Ranch\"}");
+    return new File(dir, "config.cfg");
+  }
+
+  /**
+   * The whole point of this walkthrough is the two secrets it generates.
+   *
+   * A default SRS secret would be identical on every installation, which makes the MAC that keeps
+   * this from being an open relay one anybody can compute; a default DKIM key would be a private key
+   * published in a git repository. Asking somebody to invent thirty-two random characters at a
+   * prompt gets `aaaaaaaa`.
+   */
+  @Test
+  public void mailSetupGeneratesBothSecretsAndTurnsTheListenerOn() throws Exception {
+    File config = withDomain("ranch.example.org");
+    String printed = walk(answers("y", "y"), setup -> setup.mail("mail.ranch.example.org"));
+
+    JsonNode smtp = read(config).path("smtp");
+    assertTrue("receiving has to be on for forwarding to mean anything",
+        smtp.path("enabled").asBoolean());
+    assertEquals("mail.ranch.example.org", smtp.path("hostname").asText());
+    assertTrue("a forwarder is the one case where this should be on",
+        smtp.path("enforce-dmarc").asBoolean());
+
+    JsonNode forwarding = smtp.path("forwarding");
+    assertTrue(forwarding.path("enabled").asBoolean());
+    assertTrue(forwarding.path("require-tls").asBoolean());
+    assertTrue("a secret short enough to guess is refused at boot",
+        forwarding.path("srs-secret").asText().length() >= 24);
+    assertTrue("and the key is on disk", new File(dir, "mail/dkim.key").isFile());
+    assertTrue(printed, printed.contains("generated the SRS secret"));
+  }
+
+  /**
+   * Run twice, it must not undo the first run.
+   *
+   * Rewriting the SRS secret would silently stop every bounce still in flight from finding its way
+   * home, and regenerating the key would invalidate the DNS record somebody has already published.
+   */
+  @Test
+  public void mailSetupRunTwiceKeepsTheSecretAndTheKey() throws Exception {
+    File config = withDomain("ranch.example.org");
+    walk(answers("y", "y"), setup -> setup.mail("mail.ranch.example.org"));
+    String secret = read(config).path("smtp").path("forwarding").path("srs-secret").asText();
+    String key = Files.readString(new File(dir, "mail/dkim.key").toPath());
+
+    String printed = walk(answers("y", "y"), setup -> setup.mail("mail.ranch.example.org"));
+    assertEquals("every return path in flight stops reversing otherwise",
+        secret, read(config).path("smtp").path("forwarding").path("srs-secret").asText());
+    assertEquals("the published DNS record would stop matching otherwise",
+        key, Files.readString(new File(dir, "mail/dkim.key").toPath()));
+    assertTrue(printed, printed.contains("kept the SRS secret"));
+  }
+
+  @Test
+  public void mailSetupPrintsTheRecordsForEveryDomainHere() throws Exception {
+    withDomain("ranch.example.org");
+    withDomain("junior.example.org");
+    String printed = walk(answers("y", "y"), setup -> setup.mail("mail.ranch.example.org"));
+
+    for (String domain : new String[]{"ranch.example.org", "junior.example.org"}) {
+      assertTrue(domain + " needs an MX", printed.contains("MX     " + domain + ".  10 mail.ranch.example.org."));
+      assertTrue(domain + " needs SPF, because the return path is rewritten to it",
+          printed.contains("\"v=spf1 a:mail.ranch.example.org ~all\""));
+      assertTrue("one key signs for every domain, so the record goes on each",
+          printed.contains("hearth._domainkey." + domain));
+      assertTrue(printed.contains("_dmarc." + domain));
+    }
+    assertTrue("the DKIM record is one string, said out loud",
+        printed.contains("The DKIM record is one string"));
+  }
+
+  @Test
+  public void mailSetupSaysSoWhenThereIsNoDomainToPublishFor() throws Exception {
+    String printed = walk(answers("y", "y"), setup -> setup.mail("mail.ranch.example.org"));
+    assertTrue(printed, printed.contains("no domains configured yet"));
+  }
+
+  @Test
+  public void mailSetupRefusesSomethingThatIsNotAHostname() throws Exception {
+    withDomain("ranch.example.org");
+    String printed = walk(answers("y", "y"), setup -> setup.mail("not a hostname"));
+    assertTrue(printed, printed.contains("that is not a hostname"));
+    assertFalse("nothing was written", new File(dir, "config.cfg").isFile());
+  }
+
+  /**
+   * What it writes has to be a file this server will then start with.
+   *
+   * A walkthrough that produces a config the server refuses is worse than no walkthrough: the
+   * failure lands at the next restart, with nothing pointing back at the thing that caused it.
+   */
+  @Test
+  public void whatMailSetupWritesIsAConfigThisServerAccepts() throws Exception {
+    File config = withDomain("ranch.example.org");
+    walk(answers("y", "y"), setup -> setup.mail("mail.ranch.example.org"));
+    ServerConfig settings = ServerConfig.read(config);
+    assertTrue(settings.smtp.enabled);
+    assertTrue(settings.smtp.forwarding.enabled);
+    assertEquals("mail.ranch.example.org", settings.smtp.forwarding.authserv());
+  }
 }

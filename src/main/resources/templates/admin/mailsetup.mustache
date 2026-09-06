@@ -1,0 +1,67 @@
+{{<shell}}{{$content}}
+<p class="crumb"><a href="{{rulesUrl}}">&larr; Mail</a></p>
+<h1>DNS &amp; Workspace</h1>
+<p class="hint">Forwarding breaks the two things a receiver uses to decide whether a message is
+  real: the sending machine is no longer one the original domain listed, and anything that rewrites
+  a message destroys its signature. This server does not rewrite anything and repairs the rest
+  &mdash; but the repair only works if four records exist in DNS, one setting is on inside Google
+  Workspace, and your hosting provider has given this machine a name.</p>
+<p class="hint">Everything below is generated from what this server is actually running, so the
+  selector and the key are the ones in use rather than an example.</p>
+
+<div class="card">
+  <p class="meta"><span class="dim">what is switched on here</span></p>
+  <table><tbody>
+    {{#readiness}}<tr>
+      <td>{{what}}</td>
+      <td>{{#good}}<span class="pill good">yes</span>{{/good}}{{^good}}<span class="pill warn">no</span>{{/good}}</td>
+      <td class="dim">{{detail}}</td>
+    </tr>{{/readiness}}
+  </tbody></table>
+  <p class="hint">Addresses and rules are on this screen&rsquo;s siblings; the rest is
+    <code>config.cfg</code> and needs a restart.</p>
+</div>
+
+{{#groups}}
+<div class="card">
+  <h2>{{title}}</h2>
+  <p class="hint">{{intro}}</p>
+  {{#steps}}
+  <div class="field">
+    <label>{{name}} <span class="pill dim">{{kind}}</span></label>
+    {{#hasValue}}<pre class="scroll mono">{{value}}</pre>{{/hasValue}}
+    <p class="hint">{{why}}</p>
+  </div>
+  {{/steps}}
+</div>
+{{/groups}}
+
+<div class="card">
+  <p class="meta"><span class="dim">the order to do this in</span></p>
+  <ol class="hint">
+    <li>Publish SPF, DKIM and DMARC <strong>before</strong> moving MX. They cost nothing while mail
+      still goes where it goes today.</li>
+    <li>Ask your hosting provider for reverse DNS on this machine, pointing at
+      <code>{{hostname}}</code>. It is usually a form and usually takes a day.</li>
+    <li>Set the inbound gateway inside Workspace, also before moving MX.</li>
+    <li>Name your addresses and write your rules here, and check them against the
+      <a href="{{rulesUrl}}">rules screen</a>.</li>
+    <li>Move MX last, and watch the mail log. Everything before this step is reversible in seconds;
+      this one is reversible in however long your TTL is, so set the TTL low a day beforehand.</li>
+  </ol>
+</div>
+
+<div class="card">
+  <p class="meta"><span class="dim">two things that will bite</span></p>
+  <p class="hint"><strong>Forward nothing that failed its own domain&rsquo;s policy.</strong> A
+    forwarder that passes on mail failing <code>p=reject</code> is delivering, in its own name, a
+    message the domain owner asked the world to refuse &mdash; and it is this machine&rsquo;s
+    address Gmail records as the sender. That is what
+    <code>smtp.enforce-dmarc</code> is for, and a forwarder is the one case where it should be
+    on.</p>
+  <p class="hint"><strong>Nothing here bounces, and that is deliberate.</strong> A message is
+    delivered onward or never accepted; the far end&rsquo;s verdict is handed straight back to the
+    sending server, which writes the failure report to the address it really sent from. A forwarder
+    that generates its own bounces mails them to return paths that spammers chose.</p>
+</div>
+{{/content}}{{/shell}}

@@ -16,6 +16,23 @@ public interface MailReceiver {
   Outcome receive(Envelope envelope);
 
   /**
+   * Is there anywhere here for this address, asked at RCPT before any data arrives?
+   *
+   * <b>The default is yes, and that is what keeps this a seam rather than a requirement.</b> A
+   * receiver that has no notion of individual addresses -- the terminal one, and anything written
+   * to watch mail arrive -- should not have to answer a question it has no opinion about.
+   *
+   * <b>Answering no is worth a great deal when a receiver *can*.</b> A 550 at RCPT tells a sending
+   * server the address does not exist, which is how a mistyped address comes back to the person who
+   * typed it instead of vanishing; it costs a directory harvester one line per guess instead of a
+   * whole message; and it means the server never takes responsibility for mail it has nowhere to
+   * put, which is the only way to have no bounces to generate later.
+   */
+  default boolean accepts(String domain, String recipient) {
+    return true;
+  }
+
+  /**
    * Accepted, or not, and whether it is worth trying again.
    *
    * This distinction matters more than most: a 4xx tells a sending server to hold the message and

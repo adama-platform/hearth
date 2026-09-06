@@ -19,7 +19,21 @@ import java.util.Map;
  * is handed on untouched, so whatever parses it properly later gets exactly what was sent.
  */
 public record Envelope(String from, List<String> recipients, byte[] data, String remoteAddress,
-                       String helo, String domain, long receivedAtMillis) {
+                       String helo, String domain, long receivedAtMillis, AuthResult checks) {
+
+  /**
+   * What SPF, DKIM and DMARC said, carried rather than re-derived.
+   *
+   * The verdicts are also stamped on the front of {@link #data}, and a forwarder needs them as an
+   * object to seal into an ARC chain. Parsing our own header back out would be a second
+   * implementation of a format we just wrote, and the two would eventually disagree about a message
+   * -- which is the one thing a chain must not do.
+   */
+  public Envelope(String from, List<String> recipients, byte[] data, String remoteAddress,
+                  String helo, String domain, long receivedAtMillis) {
+    this(from, recipients, data, remoteAddress, helo, domain, receivedAtMillis,
+        AuthResult.nothingChecked());
+  }
 
   /** how big this was on the wire */
   public int size() {

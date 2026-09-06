@@ -1,0 +1,44 @@
+{{<shell}}{{$content}}
+<h1>Mail</h1>
+<p class="hint">Rules decide what happens to a message, <strong>in this order, first match
+  winning</strong>. Two things one can do: send it on somewhere else, or accept it and let it go.
+  Nothing here bounces &mdash; a message is either delivered onward or never accepted, so this
+  server never writes a failure report to a return path a stranger chose.</p>
+
+{{#smtpOff}}<p class="warn">Inbound mail is off in <code>config.cfg</code>, so nothing arrives here
+  at all. These rules are saved and will not run until <code>smtp.enabled</code> is on.</p>{{/smtpOff}}
+{{^smtpOff}}{{^forwardingOn}}<p class="warn">Forwarding is off in <code>config.cfg</code>. Mail
+  still arrives and is printed to the terminal; nothing is sent on until
+  <code>smtp.forwarding.enabled</code> is on. <a href="{{setupUrl}}">DNS &amp; Workspace</a> says
+  what else has to be true.</p>{{/forwardingOn}}{{/smtpOff}}
+
+<div class="doing">
+  <a class="btn" href="{{newUrl}}">New rule</a>
+  <a href="{{addressesUrl}}">Addresses</a>
+  <a href="{{logUrl}}">Mail log</a>
+  <a href="{{setupUrl}}">DNS &amp; Workspace</a>
+</div>
+
+{{^any}}<p class="hint">No rules yet. Until there is one, every address at this domain is accepted
+  and printed to the terminal.</p>{{/any}}
+{{#any}}
+<p class="count">{{count}} rule(s), consulted top to bottom</p>
+<table>
+  <thead><tr><th>#</th><th>matches</th><th>then</th><th>state</th><th></th></tr></thead>
+  <tbody>{{#rules}}<tr>
+    <td class="dim mono">{{order}}</td>
+    <td><a href="{{editUrl}}">{{name}}</a>
+      {{#catchAll}}<span class="pill dim">catch-all</span>{{/catchAll}}
+      <div class="dim mono">{{matches}}</div></td>
+    <td>{{#forwards}}<span class="mono">{{forwardTo}}</span>{{/forwards}}{{^forwards}}<span class="dim">dropped</span>{{/forwards}}</td>
+    <td>{{#enabled}}<span class="pill good">on</span>{{/enabled}}{{^enabled}}<span class="pill dim">off</span>{{/enabled}}</td>
+    <td class="actions"><a href="{{editUrl}}">edit</a></td>
+  </tr>{{/rules}}</tbody>
+</table>
+{{/any}}
+{{#full}}<p class="warn">That is as many rules as one domain gets.</p>{{/full}}
+
+<p class="hint">A catch-all rule matches everything below it as well, so it belongs last. An address
+  that no rule matches is accepted and discarded &mdash; <a href="{{addressesUrl}}">Addresses</a>
+  says which of yours are in that state.</p>
+{{/content}}{{/shell}}
