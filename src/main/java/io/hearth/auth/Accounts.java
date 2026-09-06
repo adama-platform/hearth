@@ -38,6 +38,12 @@ public class Accounts {
   /** the static pages this database serves, and the caches in front of them */
   public final Site site;
 
+  /** things to do and habits to keep, and the sheet that says what today looks like */
+  public final io.hearth.tasks.Tasks tasks;
+
+  /** named state machines a task can walk */
+  public final io.hearth.tasks.Processes processes;
+
   /** decisions being made together, by people and by their agents */
   public final io.hearth.vote.Votes votes;
 
@@ -132,6 +138,8 @@ public class Accounts {
     this.oauthClients = new io.hearth.mcp.OauthClients(store);
     this.site = new Site(databaseDomain, store, caches, events, verbose);
     this.mutations = new io.hearth.content.Mutations(store);
+    this.tasks = new io.hearth.tasks.Tasks(store, zone);
+    this.processes = new io.hearth.tasks.Processes(store);
     this.votes = new io.hearth.vote.Votes(store);
     this.availability = new io.hearth.vote.Availability(store);
     this.userKeys = new io.hearth.hevy.UserKeys(store);

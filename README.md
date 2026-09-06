@@ -1,116 +1,122 @@
 # Hearth
 
-**A multi-user platform for a small number of people to coordinate using AI.**
+**One person's infrastructure, on one machine, with AI as the interface.**
 
-One Java jar. A door somebody decides who comes through, a website an AI can be handed the keys to,
-and pages whose body is a program — so an idea can be tried on real people the same afternoon it is
-had.
+A gym log, a ranch to-do list, habits that graduate, and a way to get five friends to agree on a
+Thursday. One Java jar, one directory, no company.
 
 ```bash
 java -jar hearth.jar --root /var/hearth
 ```
 
-That is the entire operation. No database to install, no daemon to supervise, no cluster, no
-company. Backup is copying a directory.
+That is the entire operation. No database to install, no daemon to supervise. Backup is copying a
+directory.
 
-## Social presence, redefined
+This is a **Ranch OS**. It is built for the person who wrote it, and it is open source because the
+whole of it fits in a context window — so somebody else with a ranch and a barbell can ask an AI to
+make it theirs, rather than asking it to understand a platform.
 
-A group's presence online used to mean a site somebody maintained, or a feed somebody else ranked.
-Hearth is neither. It is three things that only matter together:
+## The three things it does
 
-**A door.** Accounts, and a human deciding who comes through. Everything else assumes it: a
-directed AI acting for a member is only safe because membership means something.
+### The gym
 
-**An AI-directed content management system.** The site is a database, not a folder of files, and
-every part of it — pages, templates, the fields a template declares, the navigation, and the dynamic
-pages themselves — is reachable by a model over MCP. `site_spec` hands it the whole surface,
-generated from what exists right now rather than written down, so the functions it is told about are
-the functions there are. The point is not that a model can type faster. It is that *the whole site is
-addressable*, so "make a page for Thursday and link it from the front" is one instruction rather
-than a project. An assistant acts **as the person who connected it** and can do nothing that person
-could not.
+Save a Hevy API key on your own page, and an agent connected to your account can read your workouts
+and build routines *as you*.
 
-**An app platform for validating ideas quickly.** A page's body can be JavaScript, run on every
-request. Two functions: `render(text)` builds the document, `meta(key, value)` sets the title and
-whatever the template asked for.
-
-```js
-meta('title', 'Who is bringing what');
-['bread', 'soup', 'the chairs'].forEach(function (job) { render('<li>' + job + '</li>'); });
+```
+gym_workouts          what was actually lifted, newest first
+gym_exercises         every exercise template, with ids
+gym_exercise_create   invent one
+gym_routine_create    build a routine from exercises and sets
 ```
 
-**And somewhere to keep things.** Under Content › Tables you declare a table — fields, and which of
-them are indexed — and it becomes a small set of functions the page can call:
+`gym_exercise_create` is the point. Hevy's built-in list covers barbells and almost none of the
+mobility work worth programming — 90/90 hip switches, couch stretch holds, carries with an odd
+implement. **A routine you cannot express is a routine you do not do**, so the tool tells the model
+to make the exercise rather than approximate with a lift that happens to be listed. Enums are checked
+here rather than by Hevy: a refusal naming the field costs a model one turn, a 400 costs it several.
 
-```js
-signups_get_id(id)            // one row, or null
-signups_list_job('bread')     // every row with that indexed value
-signups_page(idAfter, 20)     // the next 20 after an id
-signups_all()                 // all of it
-query('page', 0)              // ?page=2 arrives as the number 2
+> Hevy's API is theirs, and they say of it: *"we make no guarantees that we won't completely change
+> the structure or abandon the project entirely so use it at your own risk."* Hevy Pro only.
+
+### The ranch
+
+Tasks, habits, and a daily sheet.
+
+```
+day_sheet        what has to happen today · what is coming · what to pull from
+task_add         a task, or a habit with a cadence
+process_save     a state machine: surveyed -> materials -> built -> checked
+habit_mark       kept today
+habit_graduate   it did its job
 ```
 
-A page names a *function*, never a column — there is no filter argument and no fragment of SQL, so
-every query is one somebody wrote down. Those tables live in a **file of their own** beside the
-accounts database, because their shape is whatever was typed this afternoon and the system schema's
-is not.
+**Done/not-done is a lie about most ranch work.** A fence repair has steps, and which step it is at
+is the useful fact — so a task can walk a named process, and a state that is not in that process is
+refused rather than stored where no screen will list it.
 
-**A page reads; a mutation writes.** Writing lives at a different address behind a different method:
-declare one under Content › Mutations and it answers POST, for an approved member with a valid form
-token, running a program that can merge:
+**Habits graduate.** That is the difference between a habit tracker and a checklist: a habit exists
+to stop needing to exist. Graduating takes it off the sheet and keeps every mark, because deleting
+it throws away the only evidence the effort was worth anything. Marks are one row per day, not a
+counter — the question is *which days*, and a counter gives the number and never the shape.
 
-```js
-var result = signups_merge_by_id(form('id'), { job: form('job') });
-// { success: true }  or  { success: false, reasons: [...] }
-meta('redirect', '/thanks');
+Overdue work sits in today's list rather than an overdue section, because an overdue section is
+where things go to be ignored.
+
+### Getting people together
+
+A vote is a **pool of options that evolves**, not a ballot with a fixed slate. An agent proposes
+Thursday, another proposes the Thursday after, a third says both are bad and offers a Sunday.
+
+```
+vote_open · vote_propose · vote_cast · vote_narrow · when_free
 ```
 
-A merge changes only the keys it names, reports *every* reason rather than the first, and writes
-nothing unless all of them pass. Splitting it this way means a crawler, a preloader or a link
-checker cannot change anything by reading the site.
+Ballots are `yes` / `fine` / `no` / `blocked`. **`blocked` is a veto, not a low score** — one removes
+an option however many yes votes it has, because a date somebody cannot attend is worse than no
+date. Narrowing keeps the best few and records what was dropped and why. Deciding is deliberately
+not an agent's job, and the tool says so in as many words.
 
-**Every row has a `hidden` flag** an admin can set and no program can see — it is filtered out of
-every read and the flag is not in the rows a page gets, so there is nothing to test against. It is
-how something goes into the system before it is ready to be seen, and it is not a delete: the row
-keeps its id. There is a table editor under Tables for browsing, filtering and editing rows by
-hand.
+**Availability without handing over your calendar.** Publish an ICS link if you trust an agent with
+it, or write down a rough weekly shape if you do not. Every answer says *which of the two it is* and
+what to do with it — an agent handed a rough shape and left to assume it is a calendar will
+confidently propose a night you have had booked for a month. This server never fetches your ICS; it
+hands over the link and nothing else.
 
-That is the shortest path from *an idea* to *a thing the group can look at*. No build, no deploy, no
-second service — write it in the admin section and it is live at a URL. Read [what this cannot do
-yet](#the-app-platform-is-a-first-cut) before believing too much of it.
-
-## What is in the jar
+## What else is in the jar
 
 | | |
 | --- | --- |
-| **Accounts** | Sign in by emailed code, by password, or both. Every account waits for a human. Roles, permissions, bans. |
-| **A website** | Pages and templates in a database, every save versioned as a whole document, directory indexes so a template behaves like a blog, and the whole site as one JSON file that merges back. |
-| **Dynamic pages** | A body that is a program, run in V8 on every request, with a fresh isolate and a one-second ceiling. |
-| **Tables** | Declare fields and indexes; a page gets read-only functions for them. Cached per question, invalidated per write, with a row editor and a `hidden` flag. |
-| **Mutations** | Addresses that answer POST and run a program. The only thing that writes, behind an approved member and a form token. |
-| **A model endpoint** | MCP with OAuth: content and template tools, off by default, held to what the person who connected it may do. |
-| **Files** | Photographs, video, the PDF of the menu. The extension decides what a thing is; the browser's claim is thrown away. |
-| **Email, both ways** | SES out in the community's colours. SMTP in, with SPF, DKIM and DMARC checked and stamped. |
-| **An app** | Installable from the browser, with push notifications and a self-test that proves one arrives. |
-| **TLS** | Certificates it obtains and renews itself over HTTP-01, HTTP/2 by ALPN. No DNS records to add. |
-| **Terms and a privacy policy** | Published from day one, with export and erasure the policy can honestly describe. |
+| **Accounts** | Sign in by emailed code or password. Every account waits for a human. Roles, permissions, bans. |
+| **A website** | Pages and templates in a database, versioned as whole documents, with directory indexes and a JSON bundle that merges back. |
+| **Dynamic pages** | A page body that is a program, run in V8 per request with a fresh isolate and a one-second ceiling. |
+| **Tables** | Declare fields and indexes; a page gets read-only functions for them. Mutations are how anything writes. |
+| **A model endpoint** | MCP with OAuth. Everything above is reachable by an agent acting as the person who connected it. |
+| **Files, mail, push, TLS** | Uploads, SES out and SMTP in with SPF/DKIM/DMARC, an installable app, and certificates it renews itself. |
 
-Nothing on disk but the database, the certificates and what people upload. Every byte of every page
-comes from the machine you run it on — no third-party request of any kind.
+Nothing on disk but the databases, the certificates and what you upload. No third-party request of
+any kind.
+
+## Multi-user, on purpose
+
+Not to host a community — to invite four friends into the parts that need more than one person. A
+friend needs the `agent_connect` permission before their agent can do anything here, and that stays
+a permission rather than a membership baseline: an agent acting as somebody is the sharpest thing
+this hands out.
+
+Your gym, your tasks and your keys are yours. There is no argument anywhere for *whose* — every call
+uses the id of whoever connected the agent, so no phrasing of any request reads somebody else's
+list.
 
 ## Small on purpose
 
-**100 to 1,000 people.** An architecture, not a limit waiting to be lifted. One H2 file, caches in
-memory, a ring buffer for the log, no sharding, no queue, no second process.
+**Me, and a handful of people I know.** One H2 file per domain, caches in memory, no queue, no
+second process. That is not modesty — it is what makes handing an agent the keys reasonable. The AI
+log keeps the last 1,000 actions with arguments and results, and that is a number a person can
+actually get to the bottom of.
 
-This is not modesty, it is the thing that makes the AI half safe. A model that can rewrite the site
-is only a reasonable idea when one person can read everything it did — the AI log holds the last
-1,000 actions with arguments and results, and that is a number a human can actually get to the
-bottom of.
-
-**Never** rank a feed by engagement. **Never** move money. **Never** track anybody — two cookies,
-both needed to keep you signed in, which is why there is no consent banner. **Never** require a
-company to exist for a group to keep existing. **Never** grow past what one person can check.
+**Never** rank a feed. **Never** move money. **Never** track anybody. **Never** require a company to
+exist. **Never** grow past what one person can check.
 
 ## Getting started
 
@@ -120,108 +126,68 @@ just run          # serve the checked-in ./site root on 8080, narrating every de
 just              # list the rest
 ```
 
-Then open <http://localhost:8080/register>, type any email address, and the code prints in the
-terminal. Paste it back and the account exists — waiting for an admin, unless the address is in that
-domain's `admin_emails`. The shipped config lists `owner@example.com`, which gets straight in.
+Then open <http://localhost:8080/register>, type any email, and the code prints in the terminal.
 
-Setting up a real one is a series of walkthroughs, each of which writes one file and tells you what
-it wrote:
+Setting up a real one is a series of walkthroughs, each writing one file and telling you what it
+wrote:
 
 ```bash
 java -jar hearth.jar --root /var/hearth --setup                       # ports and TLS
-java -jar hearth.jar --root /var/hearth --domain-setup example.org    # a community
+java -jar hearth.jar --root /var/hearth --domain-setup example.org    # a domain
 java -jar hearth.jar --root /var/hearth --setup-certs                 # certificates
 java -jar hearth.jar --root /var/hearth --setup-email example.org     # real email
 ```
 
 Then `--install <dir>` writes a systemd unit and a start script into a directory you already own,
-and stops — it needs no root and starts nothing. `--verbose` narrates every routing decision.
+and stops — it needs no root and starts nothing.
 
-One box hosts several groups: `<root>/domains` is a flat directory of `<domain>.cfg` files, and a
-domain is served if and only if one exists for it.
+There is no version number and no release recipe. `just package` produces the jar; copy it to the
+box. It reports `MAIN`, and the commit is the identity.
 
 ## The admin section
 
-`/admin` is a top bar, a nested sidebar, and a main area.
+`/admin` — **Overview**, **People** (with **Bans**, **Roles**), **Content** (with **Templates**,
+**Tables**, **Mutations**, **Directories**, **Navigation**, **Files**, **Unused** files, and bundles
+for **Import & export**), **Settings** (with **Setup**), **Customization** (look) holding
+**Appearance**, **Legal** and **Messages**, and **System** — **Machine**, **Settings**, **Events**,
+**Analytics**, **Caching**, **AI**, **Logs**, **Clean up**.
 
-- **Overview** — what there is
-- **People** — approve, promote, turn off, reject; with **Bans** and **Roles**
-- **Content** — pages, with **Templates**, **Tables**, **Mutations**, **Directories**,
-  **Navigation**, **Files**, **Unused** files and **Import & export** (bundles)
-- **Settings** — what this community is, with **Setup**
-- **Customization** (look) — **Appearance**, **Legal**, **Messages**
-- **System** — **Machine**, **Settings**, **Events**, **Analytics**, **Caching**, **AI**, **Logs**,
-  **Clean up**
+Your own page at `/self` has **Today** (the sheet), **Profile**, **Connections** (your Hevy key and
+your availability) and **Your data**.
 
 A section you may not open is absent from the sidebar and answers 404 rather than 403 — a 403
-confirms what is behind the door. A control that would refuse is not drawn at all.
-
-Every page is timed. The content listing has a **p99 column** — the slowest of the last 50 builds —
-for every kind, because 40ms means nothing until the markdown page beside it reads 0.3ms.
-
-## The app platform is a first cut
-
-Worth saying plainly, because the pitch above is the easy part.
-
-A dynamic page today gets `render`, `meta`, `query`, `csrf` and its community's table functions, and
-**nothing else**: no network, no timers, no way back into this server, and no way to write. Not
-because something refuses — because nothing was ever bound. Every execution gets a fresh V8 isolate, so nothing one page defines is
-visible to the next; it runs on its own thread pool, created on first use; and it is stopped after a
-second, so `while(true){}` is a page that says so rather than a server that stops answering. **No
-agent may write one**, in either direction — an agent acts as somebody who probably holds
-`content_write` and has no idea they lent anybody an interpreter.
-
-So it validates *ideas*, not products. A page can read what the group has collected, answer
-differently for `?page=2`, and post a form to a mutation that changes a row. What it still cannot do
-is know **who is asking** — neither a page nor a mutation is told which member is on the other end,
-so anything per-person is out of reach. That is the next question, and it is the one that turns this
-from a CMS into a place that runs code. The bar has not moved: **can one person enumerate how it
-fails.**
+confirms what is behind the door.
 
 ## Where it is today
 
-Working, serving real traffic over HTTP/2 and TLS with certificates it gets for itself.
-
-**1000-odd tests**, mostly not unit tests: the testkit boots the whole server on an ephemeral port
-with real databases and drives it over HTTP. `just validate` is the gate rather than a convenience —
-it builds clean, runs everything, packages the jar, and then makes real HTTP requests against that
-jar running as a server. Nothing here is claimed to work on a green test suite alone.
+**1150-odd tests**, mostly not unit tests: the testkit boots the whole server on an ephemeral port
+with real databases and drives it over HTTP. `just validate` is the gate — it builds clean, runs
+everything, packages the jar, then makes real HTTP requests against that jar running as a server.
 
 **What has never been verified** is written down as such in [CLAUDE.md](CLAUDE.md#not-verified) —
-the mail validators against real mail, anything under concurrency. That is a
-different thing from a defect and gets a different kind of attention.
-
-**It used to be much bigger.** A discussion board, a calendar with RSVPs, an address book, an
-availability grid, a members directory, an invitation funnel, projects, a training log, a live
-channel and a JSON API — about 26,000 lines, all of it working. It was removed because surface you
-cannot validate is surface you cannot safely run, and because none of it was the point.
+including that nothing here has ever talked to Hevy's real API.
 
 ## The documents
 
-Three, and `just docs` and `just suite` are part of `just validate`: they fail the build when a
-link, a flag, a recipe, a schema version, an invariant number or a test count has drifted, or when a
-test class is sitting there with nothing in it.
-
 - **[MISSION.md](MISSION.md)** — why this exists and what it refuses to become.
 - **[CLAUDE.md](CLAUDE.md)** — every invariant, why it exists, and what broke when it did not hold.
-  It is long because the decisions are the product.
 - **README.md** — this.
+
+`just docs` and `just suite` are part of `just validate`: they fail the build when a link, a flag, a
+recipe, a schema version, an invariant number or a test count has drifted, or when a test class is
+sitting there with nothing in it.
 
 ## Contributing
 
 **A finding gets reproduced from the outside first, fixed with a test that fails before and passes
-after, and then written into the comment above the code that fixes it.** There is no list of
-known-broken things, because a standing list is a second place to look that says what the code
-already says.
-
-New checks belong in the justfile — if a check is not reachable from `just validate`, it is not part
-of the definition of "working".
+after, and then written into the comment above the code that fixes it.** New checks belong in the
+justfile — if a check is not reachable from `just validate`, it is not part of the definition of
+"working".
 
 ## License
 
-MIT — see [LICENSE](LICENSE). Third-party components and their licences are in
-[THIRD-PARTY.md](THIRD-PARTY.md) and served in full from a running server at `/3rd/licenses`,
-because vendoring is redistribution.
+MIT — see [LICENSE](LICENSE). Third-party components are listed in [THIRD-PARTY.md](THIRD-PARTY.md)
+and served from a running server at `/3rd/licenses`.
 
 ## Lineage
 

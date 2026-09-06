@@ -110,6 +110,192 @@ public class AiSurface {
     }
   }
 
+  // ---- the ranch -------------------------------------------------------------------------------
+
+  /**
+   * Tasks and habits, which are the person's own and nobody else's.
+   *
+   * Same rule as the gym: every call uses {@code actorId} and there is no argument for whose list
+   * this is. A to-do list is one of the more revealing things a person keeps, and a "user"
+   * parameter here would be one prompt from reading somebody else's.
+   */
+  public Map<String, Object> daySheet() throws SQLException, Refused {
+    long actor = gymActor();
+    io.hearth.tasks.Tasks.Sheet sheet = accounts.tasks.sheet(actor, accounts.processes);
+    LinkedHashMap<String, Object> out = new LinkedHashMap<>();
+    out.put("today", accounts.tasks.today().toString());
+    out.put("has_to_happen_today", sheet.today());
+    out.put("coming_up", sheet.horizon());
+    out.put("pull_from_when_today_is_done", sheet.anytime());
+    out.put("graduated_habits", sheet.graduated());
+    return out;
+  }
+
+  public List<Map<String, Object>> listTasks(boolean includeFinished)
+      throws SQLException, Refused {
+    long actor = gymActor();
+    ArrayList<Map<String, Object>> rows = new ArrayList<>();
+    for (io.hearth.tasks.Tasks.Record task : accounts.tasks.all(actor, includeFinished)) {
+      rows.add(accounts.tasks.describe(task, accounts.processes));
+    }
+    return rows;
+  }
+
+  public Map<String, Object> addTask(Map<String, Object> fields) throws SQLException, Refused {
+    assertWritable();
+    long actor = gymActor();
+    try {
+      if (fields.containsKey("process")) {
+        String process = str(fields, "process");
+        if (process != null && !process.isBlank()
+            && accounts.processes.bySlug(process) == null) {
+          throw new Refused("there is no process called '" + process + "'. Make it with"
+              + " process_save, or leave it out for a plain open/done task.");
+        }
+      }
+      io.hearth.tasks.Tasks.Record made =
+          accounts.tasks.add(actor, str(fields, "title"), fields, accounts.processes);
+      return accounts.tasks.describe(made, accounts.processes);
+    } catch (io.hearth.tasks.Tasks.Refused refused) {
+      throw new Refused(refused.getMessage());
+    }
+  }
+
+  public Map<String, Object> changeTask(long id, Map<String, Object> fields)
+      throws SQLException, Refused {
+    assertWritable();
+    mineOrRefuse(id);
+    try {
+      return accounts.tasks.describe(accounts.tasks.update(id, fields, gymActor()),
+          accounts.processes);
+    } catch (io.hearth.tasks.Tasks.Refused refused) {
+      throw new Refused(refused.getMessage());
+    }
+  }
+
+  public Map<String, Object> moveTask(long id, String state) throws SQLException, Refused {
+    assertWritable();
+    mineOrRefuse(id);
+    try {
+      return accounts.tasks.describe(
+          accounts.tasks.moveTo(id, state, accounts.processes, gymActor()), accounts.processes);
+    } catch (io.hearth.tasks.Tasks.Refused refused) {
+      throw new Refused(refused.getMessage());
+    }
+  }
+
+  public Map<String, Object> markHabit(long id, String day, String note)
+      throws SQLException, Refused {
+    assertWritable();
+    io.hearth.tasks.Tasks.Record task = mineOrRefuse(id);
+    try {
+      accounts.tasks.mark(id, parseDay(day), note, gymActor());
+      io.hearth.tasks.Tasks.Standing standing = accounts.tasks.standing(accounts.tasks.byId(id));
+      LinkedHashMap<String, Object> out = new LinkedHashMap<>(
+          accounts.tasks.describe(accounts.tasks.byId(id), accounts.processes));
+      out.put("streak", standing.streak());
+      out.put("last_7_days", standing.last7());
+      out.put("last_30_days", standing.last30());
+      out.put("kept_this_week", standing.keptThisWeek());
+      return out;
+    } catch (io.hearth.tasks.Tasks.Refused refused) {
+      throw new Refused(refused.getMessage());
+    }
+  }
+
+  public Map<String, Object> graduateHabit(long id) throws SQLException, Refused {
+    assertWritable();
+    mineOrRefuse(id);
+    try {
+      return accounts.tasks.describe(accounts.tasks.graduate(id, gymActor()), accounts.processes);
+    } catch (io.hearth.tasks.Tasks.Refused refused) {
+      throw new Refused(refused.getMessage());
+    }
+  }
+
+  public Map<String, Object> habitHistory(long id, int days) throws SQLException, Refused {
+    io.hearth.tasks.Tasks.Record task = mineOrRefuse(id);
+    if (!task.isHabit()) {
+      throw new Refused("'" + task.title() + "' is a task, not a habit");
+    }
+    io.hearth.tasks.Tasks.Standing standing = accounts.tasks.standing(task);
+    LinkedHashMap<String, Object> out = new LinkedHashMap<>();
+    out.put("habit", task.title());
+    out.put("cadence", task.cadence().name());
+    out.put("streak", standing.streak());
+    out.put("last_7_days", standing.last7());
+    out.put("last_30_days", standing.last30());
+    out.put("kept_this_week", standing.keptThisWeek());
+    out.put("needed_per_week", standing.neededThisWeek());
+    ArrayList<String> days2 = new ArrayList<>();
+    for (java.time.LocalDate day : accounts.tasks.marks(id, Math.max(7, Math.min(400, days)))) {
+      days2.add(day.toString());
+    }
+    out.put("days_kept", days2);
+    return out;
+  }
+
+  public List<Map<String, Object>> listProcesses() throws SQLException, Refused {
+    gymActor();
+    ArrayList<Map<String, Object>> rows = new ArrayList<>();
+    for (io.hearth.tasks.Processes.Record process : accounts.processes.all()) {
+      LinkedHashMap<String, Object> row = new LinkedHashMap<>();
+      row.put("process", process.slug());
+      row.put("title", process.title());
+      row.put("states", process.states());
+      rows.add(row);
+    }
+    return rows;
+  }
+
+  public Map<String, Object> saveProcess(String slug, String title, Object states)
+      throws SQLException, Refused {
+    assertWritable();
+    long actor = gymActor();
+    ArrayList<String> list = new ArrayList<>();
+    if (states instanceof List<?> raw) {
+      for (Object one : raw) {
+        list.add(String.valueOf(one));
+      }
+    }
+    try {
+      io.hearth.tasks.Processes.Record saved = accounts.processes.save(slug, title, list, actor);
+      LinkedHashMap<String, Object> out = new LinkedHashMap<>();
+      out.put("process", saved.slug());
+      out.put("title", saved.title());
+      out.put("states", saved.states());
+      return out;
+    } catch (io.hearth.tasks.Tasks.Refused refused) {
+      throw new Refused(refused.getMessage());
+    }
+  }
+
+  /**
+   * A task belongs to the person this agent is acting for, or it does not exist.
+   *
+   * "Not yours" and "not there" answer the same, because the alternative tells an agent that task
+   * 41 exists and belongs to somebody else -- which is a fact about another person's list.
+   */
+  private io.hearth.tasks.Tasks.Record mineOrRefuse(long id) throws SQLException, Refused {
+    long actor = gymActor();
+    io.hearth.tasks.Tasks.Record task = accounts.tasks.byId(id);
+    if (task == null || task.userId() != actor) {
+      throw new Refused("there is no task " + id + " on your list");
+    }
+    return task;
+  }
+
+  private static java.time.LocalDate parseDay(String raw) {
+    if (raw == null || raw.isBlank()) {
+      return null;
+    }
+    try {
+      return java.time.LocalDate.parse(raw.trim());
+    } catch (Exception ex) {
+      return null;
+    }
+  }
+
   // ---- getting people together -----------------------------------------------------------------
 
   /**
@@ -690,7 +876,7 @@ public class AiSurface {
     //
     // The one thing an agent must not be able to do is widen its own reach, which is why there is
     // no tool for making a table -- only for writing a page that reads the ones a person declared.
-    // Same shape as invariant 105: the safety is that the tool does not exist.
+    // Same shape as invariant 120: the safety is that the tool does not exist.
     String template = changes.containsKey("template")
         ? str(changes, "template")
         : (existing == null ? null : existing.templateName());

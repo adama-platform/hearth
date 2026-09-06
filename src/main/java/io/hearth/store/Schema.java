@@ -29,7 +29,7 @@ import java.util.List;
  */
 public class Schema {
   /** bumped whenever the tables below change; recorded in schema_meta for the boot audit */
-  public static final int VERSION = 44;
+  public static final int VERSION = 45;
 
   public static final String EMAILS = "emails";
   public static final String SESSIONS = "sessions";
@@ -40,6 +40,9 @@ public class Schema {
   public static final String USER_KEYS = "user_keys";
   public static final String VOTES = "votes";
   public static final String AVAILABILITY = "availability";
+  public static final String TASKS = "tasks";
+  public static final String PROCESSES = "processes";
+  public static final String HABIT_MARKS = "habit_marks";
   public static final String PROFILES = "profiles";
   public static final String BANS = "bans";
   public static final String OAUTH_CLIENTS = "oauth_clients";
@@ -288,6 +291,81 @@ public class Schema {
       // an ICS url, if they are willing to share one
       .column(Column.of("ics_url", "VARCHAR(1024)").notNull().withDefault("''"))
       .column(Column.of("updated_at", "TIMESTAMP").notNull().withDefault("CURRENT_TIMESTAMP"))
+      .build();
+
+  /**
+   * A named state machine a task can walk.
+   *
+   * <b>Because done/not-done is a lie about most ranch work.</b> A calf is not "fed or not"; a
+   * fence repair goes surveyed -> materials -> built -> checked, and knowing which of those it is
+   * in is the whole value. Defining the process once and pointing several tasks at it is what stops
+   * that becoming forty tasks called "step 2".
+   *
+   * The states are a JSON array of names in order. Order matters: it is what "advance" means, and
+   * what a sheet sorts by.
+   */
+  public static final Table PROCESSES_TABLE = Table.named(PROCESSES)
+      .column(Column.id("id"))
+      .column(Column.of("slug", "VARCHAR(64)").notNull().unique())
+      .column(Column.of("title", "VARCHAR(200)").notNull().withDefault("''"))
+      .column(Column.of("states", "VARCHAR(8192)").notNull().withDefault("'[]'"))
+      .column(Column.of("created_at", "TIMESTAMP").notNull().withDefault("CURRENT_TIMESTAMP"))
+      .build();
+
+  /**
+   * One thing to do, or one habit to keep.
+   *
+   * <b>Tasks and habits are one table because they are one list.</b> The daily sheet does not care
+   * which a thing is; it cares what has to happen today. Splitting them would mean two queries,
+   * two screens, and a person having to know which kind of thing they are looking for before they
+   * can look for it.
+   *
+   * <b>A habit graduates rather than being deleted.</b> That is the difference between a habit
+   * tracker and a checklist: the point of a habit is to stop needing to be tracked, and deleting it
+   * throws away the evidence that it worked. Graduated habits leave the sheet and keep their marks.
+   */
+  public static final Table TASKS_TABLE = Table.named(TASKS)
+      .column(Column.id("id"))
+      .column(Column.of("title", "VARCHAR(400)").notNull().withDefault("''"))
+      .column(Column.of("detail", "VARCHAR(65536)").notNull().withDefault("''"))
+      // task | habit
+      .column(Column.of("kind", "VARCHAR(16)").notNull().withDefault("'task'"))
+      // for a task: open | done | dropped, or a state of its process
+      .column(Column.of("state", "VARCHAR(64)").notNull().withDefault("'open'"))
+      // the process this task walks, if it walks one
+      .column(Column.of("process", "VARCHAR(64)").notNull().withDefault("''"))
+      // daily | weekly | none -- how often a habit has to happen
+      .column(Column.of("cadence", "VARCHAR(16)").notNull().withDefault("'none'"))
+      // how many times a week a weekly habit needs doing
+      .column(Column.of("per_week", "INTEGER").notNull().withDefault("1"))
+      // a habit that has done its job; it leaves the sheet and keeps its history
+      .column(Column.of("graduated_at", "TIMESTAMP"))
+      // when this has to happen, for a task with a date
+      .column(Column.of("due_on", "DATE"))
+      // what this belongs to: gym, ranch, whatever somebody types
+      .column(Column.of("area", "VARCHAR(64)").notNull().withDefault("''"))
+      .column(Column.of("user_id", "BIGINT").notNull())
+      .column(Column.of("created_at", "TIMESTAMP").notNull().withDefault("CURRENT_TIMESTAMP"))
+      .column(Column.of("updated_at", "TIMESTAMP").notNull().withDefault("CURRENT_TIMESTAMP"))
+      .column(Column.of("done_at", "TIMESTAMP"))
+      .index("idx_tasks_user", "user_id")
+      .index("idx_tasks_state", "state")
+      .build();
+
+  /**
+   * One day a habit was kept.
+   *
+   * A row per day rather than a counter, because the question a habit tracker exists to answer is
+   * "which days" -- a streak, a gap, a month where it fell apart. A counter can produce the number
+   * and can never produce the shape, and the shape is what tells somebody whether to graduate it.
+   */
+  public static final Table HABIT_MARKS_TABLE = Table.named(HABIT_MARKS)
+      .column(Column.id("id"))
+      .column(Column.of("task_id", "BIGINT").notNull())
+      .column(Column.of("on_day", "DATE").notNull())
+      .column(Column.of("note", "VARCHAR(1024)").notNull().withDefault("''"))
+      .column(Column.of("created_at", "TIMESTAMP").notNull().withDefault("CURRENT_TIMESTAMP"))
+      .unique("uq_habit_marks", "task_id", "on_day")
       .build();
 
   public static final Table TEMPLATES_TABLE = Table.named(TEMPLATES)
@@ -676,7 +754,8 @@ public class Schema {
           THEMES_TABLE, LEGAL_TABLE, SYSTEM_TEMPLATES_TABLE,
           ATTACHMENTS_TABLE,
           CONFIG_TABLE, MUTATIONS_TABLE, USER_KEYS_TABLE,
-          VOTES_TABLE, AVAILABILITY_TABLE);
+          VOTES_TABLE, AVAILABILITY_TABLE,
+          PROCESSES_TABLE, TASKS_TABLE, HABIT_MARKS_TABLE);
 
   private Schema() {
   }

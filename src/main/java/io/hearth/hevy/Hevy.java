@@ -16,7 +16,7 @@ import java.util.Locale;
 /**
  * Hevy's public API, from this server, on somebody's behalf.
  *
- * <b>One host, hard-coded, and that is the security story.</b> Invariant 111 is about a
+ * <b>One host, hard-coded, and that is the security story.</b> Invariant 137 is about a
  * member-supplied url being an instruction to make a request; this is the opposite case and stays
  * that way by construction -- the base is a constant, the path comes from a closed set of methods
  * on this class, and nothing a caller passes can move the request to another host. There is no

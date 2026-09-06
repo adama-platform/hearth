@@ -151,6 +151,105 @@ public class McpTools {
     // Two dead section headers stood here, for the polls and the training log, describing rules a
     // model would need for features that were removed a while ago.
 
+    // ---- the ranch -----------------------------------------------------------------------------
+    //
+    // The list is the person's own and there is no argument anywhere for whose. A to-do list is one
+    // of the more revealing things anybody keeps.
+
+    tools.add(new Tool("day_sheet", "What today looks like",
+        "THE ONE TO START WITH. Three lists: what has to happen today (overdue work and habits due"
+            + " now), what is coming up in the next month, and the pool to pull from when today is"
+            + " done. Overdue things are in today's list rather than a separate one, because a"
+            + " separate overdue section is where things go to be ignored.\n"
+            + "Habits carry their streak and how many times they have been kept this week, so you"
+            + " can see which are holding and which are slipping without asking again.",
+        schema()));
+
+    tools.add(new Tool("task_list", "Everything on the list",
+        "Every task and habit, including finished and graduated ones if you ask. Use day_sheet for"
+            + " what to actually do; use this to find something by name or to review.",
+        schema(prop("include_finished", "boolean", "true to include done, dropped and graduated"))));
+
+    tools.add(new Tool("task_add", "Add a task or a habit",
+        "Put something on the list.\n"
+            + "A TASK is a piece of work. Give it a due_on if it has a date; leave it off and it"
+            + " sits in the pull-from pool. Give it a `process` if it has steps worth tracking --"
+            + " see process_list -- and it starts at that process's first state instead of being"
+            + " open/done.\n"
+            + "A HABIT is something to keep doing. It needs a cadence: `daily`, or `weekly` with"
+            + " per_week. Habits are marked with habit_mark and can graduate when they have done"
+            + " their job.\n"
+            + "`area` groups things -- gym, ranch, house, whatever the person already says.",
+        required(schema(prop("title", "string", "what it is, in the person's own words"),
+                prop("detail", "string", "anything that will not fit in the title"),
+                prop("kind", "string", "task (default) or habit"),
+                prop("cadence", "string", "habits only: daily or weekly"),
+                prop("per_week", "integer", "weekly habits: how many times a week, 1 to 7"),
+                prop("due_on", "string", "tasks only: a date, YYYY-MM-DD"),
+                prop("process", "string", "a process from process_list, for multi-step work"),
+                prop("area", "string", "gym, ranch, house...")),
+            "title")));
+
+    tools.add(new Tool("task_change", "Change a task",
+        "Edit a task or habit. Only the fields you send are changed -- everything else is left"
+            + " alone, so sending a new due date does not blank the detail.",
+        required(schema(prop("id", "integer", "from day_sheet or task_list"),
+                prop("title", "string", ""), prop("detail", "string", ""),
+                prop("due_on", "string", "YYYY-MM-DD"), prop("area", "string", ""),
+                prop("cadence", "string", "daily or weekly"),
+                prop("per_week", "integer", "1 to 7")),
+            "id")));
+
+    tools.add(new Tool("task_move", "Finish it, drop it, or move it a step",
+        "Set a task's state. Every task can go to `done` or `dropped`. A task with a process can"
+            + " also go to any of that process's states -- day_sheet tells you the next one. A"
+            + " state that is not in the process is refused rather than stored, because a typo puts"
+            + " work in a state no screen lists and nobody finds it again.\n"
+            + "Habits are not finished this way. Mark them with habit_mark.",
+        required(schema(prop("id", "integer", "from day_sheet"),
+                prop("state", "string", "done, dropped, open, or a state of its process")),
+            "id", "state")));
+
+    tools.add(new Tool("habit_mark", "Mark a habit kept",
+        "Record that a habit was done, today by default. Marking twice on one day is the same as"
+            + " once. Comes back with the streak and the week so far, so you can tell the person"
+            + " how it is going without another call.",
+        required(schema(prop("id", "integer", "from day_sheet"),
+                prop("day", "string", "YYYY-MM-DD; omit for today"),
+                prop("note", "string", "anything worth remembering about this one")),
+            "id")));
+
+    tools.add(new Tool("habit_history", "How a habit is going",
+        "Every day a habit was kept, with the streak and the last week and month. Use this before"
+            + " suggesting a habit graduates -- the shape matters more than the count, and a habit"
+            + " with a good number and a two-week hole in it has not finished its job.",
+        required(schema(prop("id", "integer", "from day_sheet"),
+                prop("days", "integer", "how far back to look, up to 400")),
+            "id")));
+
+    tools.add(new Tool("habit_graduate", "Retire a habit that has done its job",
+        "Take a habit off the sheet, keeping every mark. This is what a habit is FOR -- it exists"
+            + " to stop needing to exist, and graduating is the success case rather than deleting."
+            + " Suggest it when a habit has been kept without effort for long enough that tracking"
+            + " it is no longer doing anything; check habit_history first.",
+        required(schema(prop("id", "integer", "from day_sheet")), "id")));
+
+    tools.add(new Tool("process_list", "The state machines tasks can walk",
+        "Named sequences of states, for work that is not done-or-not: a fence goes surveyed ->"
+            + " materials -> built -> checked. Read this before giving a task a process.",
+        schema()));
+
+    tools.add(new Tool("process_save", "Define a state machine",
+        "Create or replace a process: a name, a title, and the states in ORDER -- the order is what"
+            + " 'the next step' means. Two states at least; `done` and `dropped` are not states you"
+            + " define, every task already has them.\n"
+            + "Redefining one does not move the tasks already walking it, on purpose: quietly"
+            + " moving somebody's work to a step it has not reached is worse than an odd row.",
+        required(schema(prop("process", "string", "short name, e.g. fence-repair"),
+                prop("title", "string", "what it is called"),
+                stringArrayProp("states", "in order, e.g. [surveyed, materials, built, checked]")),
+            "process", "states")));
+
     // ---- getting people together -----------------------------------------------------------------
     //
     // These carry the most instruction of any tool here, because the failure mode is social rather
@@ -458,6 +557,55 @@ public class McpTools {
   public Result call(String name, JsonNode arguments) throws SQLException, AiSurface.Refused {
     Map<String, Object> args = asMap(arguments);
     switch (name) {
+      case "day_sheet" -> {
+        Map<String, Object> sheet = surface.daySheet();
+        return new Result(sheet, null, "read today's sheet");
+      }
+      case "task_list" -> {
+        List<Map<String, Object>> tasks = surface.listTasks(
+            optBoolean(args, "include_finished") != null && optBoolean(args, "include_finished"));
+        return new Result(Map.of("tasks", tasks, "count", tasks.size()), null,
+            tasks.size() + " item(s)");
+      }
+      case "task_add" -> {
+        String title = optString(args, "title");
+        return new Result(surface.addTask(args), title, "added '" + title + "'");
+      }
+      case "task_change" -> {
+        long id = optInt(args, "id", 0);
+        return new Result(surface.changeTask(id, args), String.valueOf(id), "changed task " + id);
+      }
+      case "task_move" -> {
+        long id = optInt(args, "id", 0);
+        String state = optString(args, "state");
+        return new Result(surface.moveTask(id, state), String.valueOf(id),
+            "moved task " + id + " to " + state);
+      }
+      case "habit_mark" -> {
+        long id = optInt(args, "id", 0);
+        return new Result(surface.markHabit(id, optString(args, "day"), optString(args, "note")),
+            String.valueOf(id), "marked habit " + id);
+      }
+      case "habit_history" -> {
+        long id = optInt(args, "id", 0);
+        return new Result(surface.habitHistory(id, optInt(args, "days", 60)),
+            String.valueOf(id), "read the history of habit " + id);
+      }
+      case "habit_graduate" -> {
+        long id = optInt(args, "id", 0);
+        return new Result(surface.graduateHabit(id), String.valueOf(id),
+            "graduated habit " + id);
+      }
+      case "process_list" -> {
+        List<Map<String, Object>> processes = surface.listProcesses();
+        return new Result(Map.of("processes", processes, "count", processes.size()), null,
+            processes.size() + " process(es)");
+      }
+      case "process_save" -> {
+        String slug = optString(args, "process");
+        return new Result(surface.saveProcess(slug, optString(args, "title"), args.get("states")),
+            slug, "defined the process " + slug);
+      }
       case "vote_list" -> {
         List<Map<String, Object>> votes = surface.listVotes(optBoolean(args, "open_only") != null
             && optBoolean(args, "open_only"));
@@ -723,7 +871,7 @@ public class McpTools {
     // string -- so every nested object a tool declared arrived as "". place_save has advertised a
     // `fields` object since the address book shipped and reads it with an `instanceof Map` that
     // could never be true, which meant a model filling in a kind's own fields was told it had
-    // worked and nothing was written. That is the precise failure invariant 104 refuses for an
+    // worked and nothing was written. That is the precise failure invariant 119 refuses for an
     // *undeclared* field, arriving through the plumbing instead: silent success for a write that
     // did not happen. Objects are now objects, and ToolArgumentTests holds both halves down.
     if (node.isObject()) {

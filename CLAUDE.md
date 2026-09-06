@@ -2,39 +2,45 @@
 
 ## What this is
 
-**A multi-user platform for a small number of people to coordinate using AI.** One jar, one process,
-one config directory, hosting a handful of groups of 100 to 1,000 people each.
+**One person's infrastructure, on one machine, with AI as the interface.** A Ranch OS: a gym log, a
+ranch to-do list, habits that graduate, and a way to get a few friends to agree on a Thursday. One
+jar, one directory, no company.
 
-Three things that only matter together:
+Three things it does, and everything else is underneath them:
 
-1. **A door.** Accounts, and a human deciding who comes through. Everything else rests on it -- an
-   AI acting for a member is only safe because membership means something.
-2. **An AI-directed content management system.** The site is a database rather than a folder of
-   files, and all of it -- pages, templates, the fields a template declares, the navigation -- is
-   addressable by a model over MCP, acting *as* the person who connected it.
-3. **An app platform for validating ideas quickly.** A page's body can be a program. The shortest
-   path from an idea to something the group can look at, with no build and no deploy.
+1. **The gym.** A per-person Hevy key and MCP tools over their API -- read workouts, build routines,
+   and *invent exercises*, because the mobility work worth programming is not in anybody's standard
+   list.
+2. **The ranch.** Tasks that walk a named state machine, habits with a cadence that can graduate,
+   and a daily sheet with a horizon to pull from.
+3. **Getting people together.** Votes an agent opens and other agents vote in, converging a pool of
+   options; availability given as either a calendar link or a rough weekly shape, with the agent
+   told which.
 
-Around those: files, mail in and out, push, TLS, and the legal documents. Those are plumbing. When a
-change has to trade against something, it trades in favour of the three above.
+Underneath: accounts and approval, a website, dynamic pages, user tables, files, mail both ways,
+push, TLS.
 
-[MISSION.md](MISSION.md) is why it exists and what it refuses to become. [README.md](README.md) is
-what it does today.
+**It was a community server and is not one now.** A discussion board, a calendar, an invitation
+funnel, a members directory -- all of it is in the git history and none of it is coming back. It was
+software looking for a community rather than a person with a problem.
 
-**It used to be much larger.** A discussion board, a calendar with RSVPs and emailed invitations, an
-address book, an availability grid, a members directory, an invitation funnel, projects and a
-training log, a live channel and a JSON API were all removed in one pass. None of it was the point,
-and the reason is the governing constraint on everything below: **surface that one person cannot
-validate is surface they cannot safely operate.** The bar for adding anything back is not "would
-this be useful" -- it is "can one person enumerate how this fails".
+**Multi-user stays, deliberately.** Not to host anybody: to invite four friends into the parts that
+need more than one person. A friend needs `agent_connect` before their agent can act, and that stays
+a permission rather than a membership baseline.
 
-That bar is sharper now than it was, not softer, because of what the AI half is. A model that can
-rewrite the site is only a reasonable thing to offer while a person can still read everything it
-did. Small is what makes directed AI safe here; it is not modesty.
+**AI is the interface, not a feature.** The screens exist and work, but the design target is an agent
+doing the typing. A tool description here *is* a prompt; the guidance is generated from what exists
+rather than written down; and anything a person can do, an agent should be able to do *as* that
+person. There is no argument anywhere for *whose* gym, list or ballot -- every call uses the id of
+whoever connected the agent.
 
-No money will ever move through this server. The scale target (100 to 1,000 members) is a design
-input: when a choice comes up between a simple approach that works at that scale and a general
-approach that scales further, take the simple one and say why in a comment.
+No money will ever move through this. The scale target is one person and a handful of friends: when
+a simple approach works at that scale and a general one scales further, take the simple one and say
+why in a comment.
+
+**Open source so somebody else can bend it.** The useful thing is not the shape -- it is that the
+whole of it fits in a context window, so a person with a different ranch can ask an AI to make it
+theirs rather than asking it to understand a platform.
 
 ## Ground rules
 
@@ -283,6 +289,8 @@ src/main/java/io/hearth/
   tables/UserField.java           one column, and the four types that land cleanly in JavaScript
   tables/UserTable.java           one table somebody invented; names validated, then prefixed
   tables/UserTables.java          the second database file: create, alter, drop, and read
+  tasks/Processes.java            named state machines a task can walk; the order is the meaning
+  tasks/Tasks.java                tasks and habits in one list, and the sheet that says what today is
   template/Templates.java         mustache, compiled at boot
   theme/Theme.java                six colours twice, and the CSS every layout interpolates
   theme/Themes.java               the palettes for one community, cached because every render asks
@@ -554,261 +562,311 @@ justfile                   the primary interface; `just validate` is the gate
     makes V8 collect often enough to hide the whole thing. A test that cannot tell the two apart is
     worse than none.
 
+### The gym, the ranch, and getting people together
+
+75. **There is no argument for whose.** Not for a Hevy key, not for a task list, not for a ballot.
+    Every call uses the actor's id, so no phrasing of any request reads somebody else's -- which is
+    the only defence that survives a model being told to try harder. "Not yours" and "not there"
+    answer the same, because the alternative confirms that task 41 belongs to somebody.
+76. **A key is held in the clear because it must be presented.** A session token can be a hash; this
+    cannot. So it is never printed back (last four characters only), never in an export, one row,
+    one button to clear it, and gone on erasure.
+77. **The host is a constant and there is no `get(url)`.** The path comes from a closed set of
+    methods, an id that is not `[A-Za-z0-9_-]` is refused rather than escaped, and redirects are not
+    followed. Invariant 111 is about a member-supplied url; this is the opposite case and stays that
+    way by construction.
+78. **Somebody else's unstable API is passed through as JSON.** Hevy say they may change or abandon
+    it. Mapping their shapes onto records here would be a second thing to fix every time theirs
+    moves, and a model reads JSON perfectly well.
+79. **An enum is checked here, not by them.** A refusal naming the field and listing what is allowed
+    costs a model one turn; a 400 from somebody else's server costs it several and the message is
+    not ours to write.
+80. **`blocked` is a veto, not a low score.** One removes an option however many yes votes it has,
+    because a date somebody cannot attend is worse than no date. Without it the arithmetic produces
+    evenings that read as popular and that somebody is out of the country for.
+81. **The vote history is append-only and is the feature.** What everybody asks afterwards is not
+    what won but why, and a tally that cannot show its working is one nobody trusts -- doubly so
+    when half the voters are agents acting for people who were asleep.
+82. **Narrowing is an agent's job; deciding is a person's.** The tool says so in as many words. An
+    agent that settles an evening on its own initiative produces a real argument between real
+    people.
+83. **An availability answer says what kind of answer it is.** A rough weekly shape handed over
+    without that label is a calendar as far as an agent is concerned, and it will propose a night
+    somebody has had booked for a month. This server never fetches the ICS: that would mean holding
+    a copy of the calendar the person was avoiding sharing.
+84. **Somebody who has said nothing is absent, not listed as unknown.** A row saying "we do not
+    know" invites an agent to fill the gap with a guess.
+85. **Done/not-done is a lie about most work.** A task can walk a named process, and a state that is
+    not in that process is refused rather than stored -- a typo otherwise puts work in a state no
+    screen lists, found months later. A task with a process starts at that process's *first* state,
+    or it would claim to have steps and be unable to name one.
+86. **A habit graduates rather than being deleted.** A habit exists to stop needing to exist, and
+    the marks are the evidence it worked. Deleting throws that away; graduating keeps all of it and
+    takes it off the sheet.
+87. **Marks are one row per day, not a counter.** The question is *which days* -- a streak, a gap,
+    the month it fell apart. A counter gives the number and never the shape, and the shape is what
+    decides whether to graduate.
+88. **A streak counts back from today, and today being undone does not break it.** Otherwise every
+    streak reads zero every morning, which is wrong and is the most discouraging thing a tracker can
+    do.
+89. **Overdue work is in today's list.** A separate overdue section is where things go to be
+    ignored; in today's list it is simply what has to happen, which is true.
+
 ### Tables
 
-75. **A second database file, and that is the whole safety argument.** The system schema is code,
+90. **A second database file, and that is the whole safety argument.** The system schema is code,
     upgraded by diffing, never dropped from; a user table's shape is whatever somebody typed this
     afternoon and the operations are CREATE, ALTER and DROP. One file would put a `DROP TABLE` on
     the connection holding every account in the community. `<domain>.data.mv.db` sits beside
     `<domain>.mv.db`: deleting it loses every user table and nothing else.
-76. **Names are validated, then prefixed, and both matter.** Validation makes a name splice-able at
+91. **Names are validated, then prefixed, and both matter.** Validation makes a name splice-able at
     all; the `t_`/`f_` prefixes are what make it *safe*, because MODE=STRICT reserves the standard's
     keywords and `value`, `order` and `key` are the first three things anybody names a column.
     Prefixing kills the class rather than keeping a denylist that is wrong at the next upgrade.
-77. **A page names a function, never a column.** Every function is generated from a stored
+92. **A page names a function, never a column.** Every function is generated from a stored
     definition's own strings, so there is no filter argument, no operator and no fragment of SQL. An
     index is a declaration rather than a hint: declaring one is what creates the `_list_` function,
     which makes the set of indexes exactly the set of questions anybody may ask.
-78. **A write invalidates the id, both sides of every index that moved, and the listings.** Naming
+93. **A write invalidates the id, both sides of every index that moved, and the listings.** Naming
     only the *new* index value leaves the row cached under the value it used to have, which is a
     member still listed in the group they just left. That is why an update reads the old row first.
-79. **A page reads; it never writes.** A dynamic page runs for every request including a crawler's,
+94. **A page reads; it never writes.** A dynamic page runs for every request including a crawler's,
     so a page that could insert is a table filling itself with whatever fetched it. Writing is the
     admin section's, where there is somebody to hold responsible.
-80. **Asking for a table that is gone throws.** The tempting alternative -- an empty list -- reads
+95. **Asking for a table that is gone throws.** The tempting alternative -- an empty list -- reads
     exactly like "no rows yet", so a page whose table was dropped this morning renders an empty
     listing and nobody finds out.
-81. **One function crosses into Java and it takes a string.** `__data(json) -> json`, dispatched on
+96. **One function crosses into Java and it takes a string.** `__data(json) -> json`, dispatched on
     the Java side, so no object graph is converted across the boundary and adding a capability is a
     case in a switch rather than a binding with new lifetime rules.
-82. **A query parameter arrives as the strictest type it honestly is.** `?page=2` is the number 2,
+97. **A query parameter arrives as the strictest type it honestly is.** `?page=2` is the number 2,
     because every page that reads it does arithmetic and `"2" + 1` is `"21"` -- a plausible wrong
     answer, which is the worst kind. A leading zero or a `+` stays text, because that is somebody's
     identifier rather than a number.
 
-83. **A hidden row is absent, not flagged.** The published read filters it out *and* does not carry
+98. **A hidden row is absent, not flagged.** The published read filters it out *and* does not carry
     the flag, because absent is stronger than false: there is nothing for a page to test, so no page
     can be written that behaves differently for a row somebody might later hide. It is not a delete
     -- the row keeps its id and unhiding is a checkbox.
-84. **The cache key carries what the read was allowed to see.** Without it an admin browsing the
+99. **The cache key carries what the read was allowed to see.** Without it an admin browsing the
     table editor fills the cache with hidden rows and the next page render serves them: a visibility
     rule turned into a race, correct on a quiet machine and wrong under traffic.
-85. **A GET never writes.** Pages render and mutations write, split by method and by address, so a
+100. **A GET never writes.** Pages render and mutations write, split by method and by address, so a
     crawler, a preloader or a link checker cannot change a row by reading the site. A page's
     prologue does not contain the merge function at all -- absent rather than refusing.
-86. **A mutation needs an approved member and a token.** A public POST that writes is a queue
+101. **A mutation needs an approved member and a token.** A public POST that writes is a queue
     somebody else fills; without the CSRF check another site's form posts here with a member's
     cookies. `csrf()` exists so a page can render a form that works.
-87. **A mutation that is off answers 404.** Whether a draft exists at an address is not something an
+102. **A mutation that is off answers 404.** Whether a draft exists at an address is not something an
     anonymous POST should be able to discover.
-88. **A merge names its keys and leaves the rest.** That is what makes it safe from a form showing
+103. **A merge names its keys and leaves the rest.** That is what makes it safe from a form showing
     three of nine fields; treating the delta as the whole row blanks the six nobody submitted while
     looking like it worked.
-89. **Every reason, and nothing written unless all of them pass.** A caller sending four fields with
+104. **Every reason, and nothing written unless all of them pass.** A caller sending four fields with
     two wrong is told about both, because the alternative is finding them one save at a time -- and
     a partial merge would leave a row half-updated with `success:false` beside it.
-90. **A program can never change `hidden`.** It is refused by name rather than ignored, so a caller
+105. **A program can never change `hidden`.** It is refused by name rather than ignored, so a caller
     finds out rather than wondering why it had no effect.
 
 ### Settings
 
-91. **What lives in the database is decided by what a setting is about, not how awkward it is to
+106. **What lives in the database is decided by what a setting is about, not how awkward it is to
     change.** Product and presentation are the community's. Anything deciding who gets in, what a
     credential is, what a program may do, or how many bytes a request may carry is the operator's
     and stays in a file. `admin_emails` is the sharpest case and it stays.
-92. **A setting's key is the path it had in the config file**, and a value is applied by writing it
+107. **A setting's key is the path it had in the config file**, and a value is applied by writing it
     into a copy of that file's JSON and parsing the whole thing again — so the check that refuses a
     bad value at boot is the same check that refuses one typed into the admin section.
-93. **The file seeds; the database overrides; clearing reverts.** A row exists only where somebody
+108. **The file seeds; the database overrides; clearing reverts.** A row exists only where somebody
     decided something, and the rebuild always starts from the file, never from the last rebuild.
-94. **A write rebuilds and swaps; a read is still a field access.** Triggered from the DAO rather
+109. **A write rebuilds and swaps; a read is still a field access.** Triggered from the DAO rather
     than the handler, for the reason invariant 45 gives.
-95. **A shared database is one set of settings, and one clock** — the same rule that makes it one
+110. **A shared database is one set of settings, and one clock** — the same rule that makes it one
     account space.
-96. **No agent tool reaches any of it, and the proof is that there is no tool** — not one that
+111. **No agent tool reaches any of it, and the proof is that there is no tool** — not one that
     refuses, which would still appear in a listing and cost a model turns.
 
 ### The model endpoint
 
-97. **An agent is a session with a bit set, never a parallel notion of identity.** That is what
+112. **An agent is a session with a bit set, never a parallel notion of identity.** That is what
     makes revocation, expiry, the reaper and the cap work without a second implementation of "still
     valid" that would eventually disagree with the first.
-98. **Every AI rule is enforced in `AiSurface`, once.** A rule enforced in fifteen tools is a rule
+113. **Every AI rule is enforced in `AiSurface`, once.** A rule enforced in fifteen tools is a rule
     that will be forgotten in the sixteenth.
-99. **Human only is asymmetric, on purpose.** Reads are *invisible* — absent from listings, searches
+114. **Human only is asymmetric, on purpose.** Reads are *invisible* — absent from listings, searches
     and fetches. Writes are *refused out loud*. An agent can never set or clear the bit. A locked
     page that merely looked empty to a write would be overwritten by an agent asked to "add an
     about page"; a write claiming success while doing nothing teaches a model it succeeded.
-100. **The connection is a permission, not a rank.** `agent_connect` is granted in a role and
+115. **The connection is a permission, not a rank.** `agent_connect` is granted in a role and
     re-checked at consent, at redemption and on every call, so taking it away stops an agent at its
     next request.
-101. **A write is refused by name; a read is narrowed.** Refusing a member's assistant a listing
+116. **A write is refused by name; a read is narrowed.** Refusing a member's assistant a listing
     would make the tool useless; answering in full would hand them a draft they cannot open.
-102. **A tool that could only ever refuse is not offered at all**, and a narrowed listing needs the
+117. **A tool that could only ever refuse is not offered at all**, and a narrowed listing needs the
     same narrowing on the fetch-by-id beside it — the oldest shape of this bug.
-103. **What is advertised and what is executable are checked against each other, for every tool.**
+118. **What is advertised and what is executable are checked against each other, for every tool.**
     Two hand-maintained lists agree until somebody adds a tool.
-104. **A structured argument has to arrive as structure.** `unwrap` once fell through to `asText()`,
+119. **A structured argument has to arrive as structure.** `unwrap` once fell through to `asText()`,
     which for a container node is the empty string, so every nested object arrived as `""` and the
     handler's correct refusal was unreachable.
-105. **There is no AI tool for a bundle.** It is the one view of the content table that ignores
-    human-only, and invariant 99 survives by that view not existing for a model.
-106. **A tool description is a prompt.** The model reads nothing else about this server, so they say
+120. **There is no AI tool for a bundle.** It is the one view of the content table that ignores
+    human-only, and invariant 114 survives by that view not existing for a model.
+121. **A tool description is a prompt.** The model reads nothing else about this server, so they say
     what a thing is *for* and when not to use it.
-107. **Redirect matching is an explicit prefix list and nothing else** — no wildcards, no host-suffix
+122. **Redirect matching is an explicit prefix list and nothing else** — no wildcards, no host-suffix
     matching. A prefix with no path is normalized to end at the authority boundary, because
     `startsWith` has no idea where a hostname ends, and a code sent to the wrong host is an agent
     token handed to whoever owns it.
 
 ### Uploads
 
-108. **The extension decides what an upload is; the browser's content type is thrown away.** The
+123. **The extension decides what an upload is; the browser's content type is thrown away.** The
     allow list is closed, `text/html` is not on it for any extension or configuration, and `svg` is
     deliberately absent — it is a document that can carry script and arrives looking like a picture.
-109. **Nothing about an attachment's address is a path.** The id is a long, the extension is looked
+124. **Nothing about an attachment's address is a path.** The id is a long, the extension is looked
     up in a table, and the file is computed from both.
-110. **Private is the default and it answers 404.** Whether a private file exists is itself private,
+125. **Private is the default and it answers 404.** Whether a private file exists is itself private,
     and a sign-in form is no use to the `<img>` tag that asked.
-111. **`Cache-Control: private` on every attachment, always.** These are frequently photographs of
+126. **`Cache-Control: private` on every attachment, always.** These are frequently photographs of
     somebody's children.
-112. **The referrer check is a bandwidth measure, not a boundary.** A request with no referrer is
+127. **The referrer check is a bandwidth measure, not a boundary.** A request with no referrer is
     honoured, because browsers omit it constantly.
-113. **One path is allowed a body bigger than a form, and the pipeline decides that from the request
+128. **One path is allowed a body bigger than a form, and the pipeline decides that from the request
     line**, before the aggregator buffers anything.
-114. **The garbage collector's marking is the dangerous half, so it reads everything** — including a
+129. **The garbage collector's marking is the dangerous half, so it reads everything** — including a
     page's history, which is the one nobody thinks of.
-115. **A partial scan offers nothing.** If any source could not be read, the answer is "I do not
+130. **A partial scan offers nothing.** If any source could not be read, the answer is "I do not
     know", and a delete button on top of that offers to remove files it never looked for.
 
 ### Push
 
-116. **A push subscription cannot outlive its session**, and its VAPID keypair dies with it — so
+131. **A push subscription cannot outlive its session**, and its VAPID keypair dies with it — so
     "sign me out" means unreachable, not merely unwatched.
-117. **A push says who and where, never what.** It crosses somebody else's infrastructure and lands
+132. **A push says who and where, never what.** It crosses somebody else's infrastructure and lands
     on a lock screen.
-118. **Every step of subscribing is a no-op the second time**, so a browser whose subscription was
+133. **Every step of subscribing is a no-op the second time**, so a browser whose subscription was
     rotated repairs itself rather than going silently dead.
-119. **The manifest is declared on every page, and its icons are fetchable.** `AppIcon` draws them at
-    request time, so invariant 123 holds and a community that changes its colours changes its icon.
-120. **The worker has a fetch handler and still caches nothing.** A browser will not install an app
+134. **The manifest is declared on every page, and its icons are fetchable.** `AppIcon` draws them at
+    request time, so invariant 138 holds and a community that changes its colours changes its icon.
+135. **The worker has a fetch handler and still caches nothing.** A browser will not install an app
     whose worker cannot answer a navigation offline; the only thing built inside it is a "no
     connection" page, for which stale is not a possible state.
-121. **The self-test reports two facts, never one**: "the push service accepted it" and "this device
+136. **The self-test reports two facts, never one**: "the push service accepted it" and "this device
     showed it" are different, and every push problem lives in the gap.
 
 ### Outbound requests
 
-122. **A member-supplied url is an instruction to make a request.** https only, public addresses only
+137. **A member-supplied url is an instruction to make a request.** https only, public addresses only
     *after resolution*, no redirects, a timeout and a ceiling. What actually closes DNS rebinding is
     https plus certificate verification — relaxing either re-opens it.
 
 ### Assets
 
-123. **No bytes on disk except the database, the certificate cache, and what people upload.** Images
+138. **No bytes on disk except the database, the certificate cache, and what people upload.** Images
     are inline SVG from `Icons`; a page costs one request. Vendored browser libraries under `/3rd`
     are classpath resources baked into the jar — one artifact to deploy, nothing beside it to
     forget to copy, which was always the actual rule.
-124. **Vendoring is redistribution.** Every third-party bundle travels with its licence, checked into
+139. **Vendoring is redistribution.** Every third-party bundle travels with its licence, checked into
     git even though the bundles are not, and served at `/3rd/licenses`.
 
 ### Certificates
 
-125. **Certificate work happens after the socket is open, never during boot.** HTTP-01 validation is
+140. **Certificate work happens after the socket is open, never during boot.** HTTP-01 validation is
     the authority fetching a path from this very server.
-126. **The ACME challenge is answered before anything can refuse it** — ahead of the shield, the
+141. **The ACME challenge is answered before anything can refuse it** — ahead of the shield, the
     method gate and host resolution, each of which can say no for a reason unrelated to
     certificates.
-127. **No certificate is worth failing to start over.** A domain that will not validate gets a loud
+142. **No certificate is worth failing to start over.** A domain that will not validate gets a loud
     complaint and a retry; the server serves plain HTTP throughout.
-128. **Port 80 never becomes a redirect.** It serves the site *and* answers the challenge; turning
+143. **Port 80 never becomes a redirect.** It serves the site *and* answers the challenge; turning
      it into a redirect would quietly break renewal three months later.
-129. **"Ready" means every listener is bound.**
-130. **Report what happened, not what is about to.** The boot output prints each certificate as it
+144. **"Ready" means every listener is bound.**
+145. **Report what happened, not what is about to.** The boot output prints each certificate as it
      actually lands or actually fails.
-131. **A wildcard is not a way to serve subdomains**, because HTTP-01 cannot issue one. `subdomains`
+146. **A wildcard is not a way to serve subdomains**, because HTTP-01 cannot issue one. `subdomains`
      is the answer: a written-down list, ordered along with the domain.
-132. **A named subdomain is the same community, never a second one** — one config, one database, one
+147. **A named subdomain is the same community, never a second one** — one config, one database, one
      set of accounts, which is what makes it safe to accept mail for.
 
 ### Mail
 
-133. **This server never relays.** Inbound mail is accepted only for a domain with a config file,
+148. **This server never relays.** Inbound mail is accepted only for a domain with a config file,
      matched exactly, and refused at RCPT before a body arrives. An open relay is found within days.
-134. **One message, one community.** Recipients on two domains are two deliveries.
-135. **Advertise only what is honoured.** EHLO names SIZE and 8BITMIME and nothing else.
-136. **The ten-lookup cap in SPF is the security property**, counted across the whole evaluation:
+149. **One message, one community.** Recipients on two domains are two deliveries.
+150. **Advertise only what is honoured.** EHLO names SIZE and 8BITMIME and nothing else.
+151. **The ten-lookup cap in SPF is the security property**, counted across the whole evaluation:
      an unbounded record is amplification on the sender's behalf.
-137. **A DNS failure is temporary, never a forgery.** `temperror` throughout, so an unreachable
+152. **A DNS failure is temporary, never a forgery.** `temperror` throughout, so an unreachable
      nameserver bounces nothing.
-138. **Only what the domain owner asked for gets refused** — `p=reject` and nothing else. An SPF
+153. **Only what the domain owner asked for gets refused** — `p=reject` and nothing else. An SPF
      failure alone means a mailing list far more often than a forgery.
-139. **Nothing vouching for a message is not the same as nothing objecting to it.** The fallback for
+154. **Nothing vouching for a message is not the same as nothing objecting to it.** The fallback for
      a domain with no DMARC record is SPF or DKIM actually *passing*; it once also accepted anything
      reporting `=none`, which is present for exactly those domains and made the other clauses dead.
-140. **There is one email layout**, and every message says what it is, why it arrived and what
+155. **There is one email layout**, and every message says what it is, why it arrived and what
      interacting means. The footer is built by `MailLayout` and is not optional, in both halves —
      spam filters read the text.
-141. **The wording of a message is a community's; the shape of it is not.** Three boxes; the layout,
+156. **The wording of a message is a community's; the shape of it is not.** Three boxes; the layout,
      the button, the plain-text half and the footer stay in `MailLayout`.
-142. **A flow declares what it can say.** `availableParameters()` is printed beside a filled-in
+157. **A flow declares what it can say.** `availableParameters()` is printed beside a filled-in
      preview, because a template naming something that does not exist renders as a hole and nobody
      notices until it has gone out.
 
 ### Appearance and the law
 
-143. **A palette is six hex strings or it is the default.** It is interpolated raw into a `<style>`
+158. **A palette is six hex strings or it is the default.** It is interpolated raw into a `<style>`
      block, so every value goes through `Theme.isColour` and a slot that fails keeps what it had.
-144. **Red means refused and green means it worked, and nobody may change that.**
-145. **Light unless somebody says otherwise, and it is their choice rather than their laptop's.**
+159. **Red means refused and green means it worked, and nobody may change that.**
+160. **Light unless somebody says otherwise, and it is their choice rather than their laptop's.**
      `/~theme.js` sets the attribute before first paint — a file rather than an inline script
      because inline needs a nonce, and not deferred because deferred is a white flash.
-146. **The two legal documents ship in the jar and are published from the first day.** A row exists
+161. **The two legal documents ship in the jar and are published from the first day.** A row exists
      only when a community has overridden one, so upgrading the software improves them.
-147. **`/legal` is open to everybody.** Every email links to the terms and most go to somebody with
+162. **`/legal` is open to everybody.** Every email links to the terms and most go to somebody with
      no account yet.
-148. **The cookie notice is a line in the footer, not a banner.** Two cookies, both strictly
+163. **The cookie notice is a line in the footer, not a banner.** Two cookies, both strictly
      necessary, which is the category that needs no consent.
-149. **The privacy policy this software ships is a specification.** Every promise in it is a thing
+164. **The privacy policy this software ships is a specification.** Every promise in it is a thing
      the code does: `DataExport` and `Erasure`, reachable by the member and by an administrator.
      Changing the policy is changing a requirement.
-150. **An erasure is checked by looking, not by remembering.** `RightsTests` walks *every column of
+165. **An erasure is checked by looking, not by remembering.** `RightsTests` walks *every column of
      every table* afterwards looking for the address, which is the only form of that test worth
      writing.
 
 ### Storage
 
-151. **The schema is code.** Add a column where it belongs, bump `VERSION`, restart. A column added
+166. **The schema is code.** Add a column where it belongs, bump `VERSION`, restart. A column added
      later must be nullable or carry a default — there is no correct value for existing rows.
-152. **A column whose name has stopped being true gets renamed.** `Column.renamedFrom` declares it
+167. **A column whose name has stopped being true gets renamed.** `Column.renamedFrom` declares it
      and the upgrader performs it, before it looks for anything missing.
-153. **The upgrader adds, never drops or retypes.** A column the code no longer declares is reported
+168. **The upgrader adds, never drops or retypes.** A column the code no longer declares is reported
      and left alone, which is what makes the reduction safe for an existing database.
-154. **A test that writes "hello" proves that "hello" fits.** Anything that stores what a person
+169. **A test that writes "hello" proves that "hello" fits.** Anything that stores what a person
      typed gets a test with a realistic amount of it in.
-155. **Boot never drops anything; a person does.** The other half of invariant 153. Leftover tables
+170. **Boot never drops anything; a person does.** The other half of invariant 168. Leftover tables
      are listed at `/admin/system/cleanup` with their row counts and dropped one at a time, by
      somebody holding `everything`. An operator who upgrades, hits a regression and rolls the jar
      back must still have their data, so the upgrader can never be the thing that deletes it.
-156. **The table name on that screen is untrusted.** `Leftovers.drop` re-derives the leftover list
+171. **The table name on that screen is untrusted.** `Leftovers.drop` re-derives the leftover list
      and refuses anything not on it, using the database's own spelling rather than the form's.
      Without that the most powerful button in the admin section is an arbitrary `DROP TABLE` with a
      text field in front of it.
-157. **A column nothing reads is not free.** It is a sentence in the privacy policy that has to stay
+172. **A column nothing reads is not free.** It is a sentence in the privacy policy that has to stay
      true and a column every erasure test keeps walking. The ten address and geo columns outlived
      their feature by a whole reduction, with a dead `SELECT` list in `PeopleStore` naming them.
 
 ### Installing
 
-158. **A walkthrough writes a file you could have written by hand, and says what it wrote.** They
+173. **A walkthrough writes a file you could have written by hand, and says what it wrote.** They
      refuse without a terminal, because each exists to make somebody think and a pipe cannot think.
-159. **A walkthrough run twice must not undo the first run.** Every question pre-fills from the file
+174. **A walkthrough run twice must not undo the first run.** Every question pre-fills from the file
      it is about to rewrite.
-160. **`--install` needs no root and starts nothing.** The half that needs root is written out as
+175. **`--install` needs no root and starts nothing.** The half that needs root is written out as
      `install.sh` to be read first.
-161. **A second `--install` stages a jar; it never overwrites the running one.** Overwriting leaves
+176. **A second `--install` stages a jar; it never overwrites the running one.** Overwriting leaves
      the file on disk and the software in memory disagreeing.
-162. **The unit asks for `CAP_NET_BIND_SERVICE` and bounds the set to it.**
-163. **16px on every field, 44px on everything you can press, a visible focus ring on everything.**
+177. **The unit asks for `CAP_NET_BIND_SERVICE` and bounds the set to it.**
+178. **16px on every field, 44px on everything you can press, a visible focus ring on everything.**
 ## The virtual hosting rules
 
 **Flat on disk, tree in memory.** `<root>/domains` is a flat directory of `<domain>.cfg` JSON files;
@@ -989,6 +1047,17 @@ Different from a defect: nobody has proved these wrong, and nobody has proved th
 - **The suite has flaky timeouts under load.** A handful of HTTP tests occasionally hit the client's
   ten-second ceiling; the set moves between runs and every one of them passes when its class is run
   alone. It has not been chased down, and it means a red suite needs reading rather than trusting.
+- **Nothing here has ever talked to Hevy's real API.** Every refusal, the key handling, the enum
+  checks and the request shape are tested against a stub that answers in their shapes; that their
+  server accepts what this sends is unproven. A mock that agrees with whatever the code does would
+  prove only that the code agrees with itself, which is why this is written down instead. Their API
+  is also explicitly unstable by their own description, so this is the entry most likely to become a
+  defect without anybody touching this repository.
+- **No agent has driven the voting to a real decision with real people.** Two agents converging is
+  tested; five friends and their assistants actually arranging an evening is not, and the failure
+  modes there are social rather than technical.
+- **The habit arithmetic has not seen a year.** Streaks, weekly cadence and graduation are tested
+  against days this code made up. Nothing has run across a daylight-saving change or a new year.
 - **The vendored browser libraries are not in git** (`src/main/resources/3rd/`). A fresh clone that
   runs `just package` gets a warning and a jar whose rich editor falls back to a textarea; `just
   third-party` fetches them. Their **licences are in git**.

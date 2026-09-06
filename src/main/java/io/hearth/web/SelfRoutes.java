@@ -43,6 +43,7 @@ public class SelfRoutes {
 
   /** the tabs, in order */
   public enum Tab {
+    today("Today"),
     profile("Profile"),
     keys("Connections"),
     data("Your data");
@@ -191,6 +192,35 @@ public class SelfRoutes {
             + " workouts and build routines as you.";
       }
       verbose.detail("self: " + me.email() + " changed their Hevy key");
+    } else if (action.equals("task_add")) {
+      try {
+        accounts.tasks.add(me.id(), form.raw("title"),
+            java.util.Map.of("kind", String.valueOf(form.get("kind")),
+                "cadence", String.valueOf(form.get("cadence")),
+                "due_on", String.valueOf(form.get("due_on")),
+                "area", String.valueOf(form.get("area"))),
+            accounts.processes);
+      } catch (io.hearth.tasks.Tasks.Refused refused) {
+        show(config, accounts, ctx, req, me, Tab.today, refused.getMessage(), recorder);
+        return;
+      }
+      tab = Tab.today;
+      done = "Added.";
+    } else if (action.equals("task_done") || action.equals("habit_mark")) {
+      long id = longOr(form.get("id"));
+      try {
+        if (action.equals("habit_mark")) {
+          accounts.tasks.mark(id, null, null, me.id());
+          done = "Marked for today.";
+        } else {
+          accounts.tasks.moveTo(id, "done", accounts.processes, me.id());
+          done = "Done.";
+        }
+      } catch (io.hearth.tasks.Tasks.Refused refused) {
+        show(config, accounts, ctx, req, me, Tab.today, refused.getMessage(), recorder);
+        return;
+      }
+      tab = Tab.today;
     } else if (action.equals("availability")) {
       try {
         accounts.availability.save(me.id(), form.text("weekly"), form.text("notes"),
@@ -315,6 +345,7 @@ public class SelfRoutes {
     model.put("canEnterAdmin", accounts.access.canEnterAdmin(me));
     model.put("nav", Navigation.forRequest(config, accounts, req));
     model.put("tabs", tabs(config, active));
+    model.put("onToday", active == Tab.today);
     model.put("onProfile", active == Tab.profile);
     model.put("onKeys", active == Tab.keys);
     model.put("onData", active == Tab.data);
@@ -325,6 +356,15 @@ public class SelfRoutes {
     model.put("hevyHint", accounts.userKeys.hint(me.id(), io.hearth.hevy.UserKeys.Service.hevy));
     model.put("hevyDisclaimer", io.hearth.hevy.Hevy.DISCLAIMER);
     model.put("hevyKeyPage", io.hearth.hevy.Hevy.KEY_PAGE);
+    io.hearth.tasks.Tasks.Sheet sheet = accounts.tasks.sheet(me.id(), accounts.processes);
+    model.put("sheetToday", sheet.today());
+    model.put("anyToday", !sheet.today().isEmpty());
+    model.put("sheetHorizon", sheet.horizon());
+    model.put("anyHorizon", !sheet.horizon().isEmpty());
+    model.put("sheetAnytime", sheet.anytime());
+    model.put("anyAnytime", !sheet.anytime().isEmpty());
+    model.put("graduatedCount", sheet.graduated());
+    model.put("theDate", accounts.tasks.today().toString());
     io.hearth.vote.Availability.Record free = accounts.availability.of(me.id());
     model.put("weekly", free.hasWeekly() ? free.weekly() : "");
     model.put("availNotes", free.notes());
@@ -373,6 +413,15 @@ public class SelfRoutes {
   }
 
 
+
+  /** a number out of a form, which is untrusted however plain it looks */
+  private static long longOr(String raw) {
+    try {
+      return raw == null ? 0 : Long.parseLong(raw.trim());
+    } catch (NumberFormatException ex) {
+      return 0;
+    }
+  }
 
   private static List<Map<String, Object>> tabs(DomainConfig config, Tab active) {
     ArrayList<Map<String, Object>> tabs = new ArrayList<>();

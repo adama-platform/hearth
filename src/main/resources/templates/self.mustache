@@ -16,6 +16,64 @@
 {{#done}}<p class="done">{{.}}</p>{{/done}}
 <nav class="tabs">{{#tabs}}<a href="{{href}}" class="{{#active}}on{{/active}}">{{label}}{{#bubble}}<span class="bubble">{{.}}</span>{{/bubble}}</a>{{/tabs}}</nav>
 
+{{#onToday}}
+<h2>{{theDate}}</h2>
+
+<h3>Has to happen today</h3>
+{{^anyToday}}<p class="hint">Nothing. Pull something from below.</p>{{/anyToday}}
+{{#anyToday}}<ul class="cando">
+  {{#sheetToday}}<li>
+    <strong>{{title}}</strong>
+    {{#area}}<span class="pill dim">{{.}}</span>{{/area}}
+    {{#overdue_by_days}}<span class="pill warn">{{.}} day(s) late</span>{{/overdue_by_days}}
+    {{#streak}}<span class="pill good">{{.}} in a row</span>{{/streak}}
+    {{#next_state}}<span class="dim">&rarr; {{.}}</span>{{/next_state}}
+    <form class="inline" method="post" action="{{action}}">
+      <input type="hidden" name="csrf" value="{{csrf}}">
+      <input type="hidden" name="id" value="{{id}}">
+      <input type="hidden" name="action" value="{{#cadence}}habit_mark{{/cadence}}{{^cadence}}task_done{{/cadence}}">
+      <button type="submit">{{#cadence}}mark{{/cadence}}{{^cadence}}done{{/cadence}}</button>
+    </form>
+  </li>{{/sheetToday}}
+</ul>{{/anyToday}}
+
+{{#anyHorizon}}
+<h3>Coming up</h3>
+<ul class="cando">
+  {{#sheetHorizon}}<li><span class="dim">in {{in_days}} day(s)</span> {{title}}
+    {{#area}}<span class="pill dim">{{.}}</span>{{/area}}</li>{{/sheetHorizon}}
+</ul>
+{{/anyHorizon}}
+
+{{#anyAnytime}}
+<h3>Pull from here when today is done</h3>
+<ul class="cando">
+  {{#sheetAnytime}}<li>{{title}}
+    {{#area}}<span class="pill dim">{{.}}</span>{{/area}}
+    {{#state}}<span class="dim">{{.}}</span>{{/state}}</li>{{/sheetAnytime}}
+</ul>
+{{/anyAnytime}}
+
+<h3>Add something</h3>
+<form method="post" action="{{action}}">
+  <input type="hidden" name="csrf" value="{{csrf}}">
+  <input type="hidden" name="action" value="task_add">
+  <div class="row">
+    <div><label for="t-title">what</label><input id="t-title" type="text" name="title" required></div>
+    <div><label for="t-area">area</label><input id="t-area" type="text" name="area" placeholder="ranch"></div>
+  </div>
+  <div class="row">
+    <div><label for="t-kind">kind</label><select id="t-kind" name="kind"><option value="task">a task</option><option value="habit">a habit</option></select></div>
+    <div><label for="t-cadence">if a habit</label><select id="t-cadence" name="cadence"><option value="daily">daily</option><option value="weekly">weekly</option></select></div>
+    <div><label for="t-due">due</label><input id="t-due" type="date" name="due_on"></div>
+  </div>
+  <div class="doing"><button type="submit">Add</button></div>
+</form>
+
+{{#graduatedCount}}<p class="hint">{{.}} habit(s) have graduated &mdash; they did their job and
+  came off this sheet, and every mark they earned is still recorded.</p>{{/graduatedCount}}
+{{/onToday}}
+
 {{#onProfile}}
 <p class="hint">This is what an admin sees when deciding whether to let you in, and what the rest of
 the community sees afterwards.</p>
