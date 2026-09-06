@@ -110,6 +110,185 @@ public class AiSurface {
     }
   }
 
+  // ---- getting people together -----------------------------------------------------------------
+
+  /**
+   * Votes, opened and voted in by agents acting for people.
+   *
+   * <b>Every agent acts as its person and votes as them.</b> There is no argument for whose ballot
+   * this is, exactly as there is none for whose Hevy key -- so an agent can be as pushy as it likes
+   * and still only ever cast one vote, the one belonging to whoever connected it.
+   *
+   * <b>Reading is open to anybody connected; writing is too.</b> No permission gates a vote,
+   * deliberately: the whole feature is friends' agents converging on a date, and a permission would
+   * mean an admin granting each friend the right to have an opinion.
+   */
+  private String actorName() throws SQLException {
+    io.hearth.auth.UserRecord me = actorId == null ? null : accounts.users.byId(actorId);
+    if (me == null) {
+      return "somebody";
+    }
+    String name = accounts.people.profileOf(me.id()).nameOr("");
+    // a display name if they have one, never the email: a vote is read by other people's agents
+    return name.isBlank() ? "member " + me.id() : name;
+  }
+
+  public List<Map<String, Object>> listVotes(boolean openOnly) throws SQLException, Refused {
+    ArrayList<Map<String, Object>> rows = new ArrayList<>();
+    for (io.hearth.vote.Votes.Record vote : accounts.votes.all(openOnly)) {
+      LinkedHashMap<String, Object> row = new LinkedHashMap<>();
+      row.put("vote", vote.slug());
+      row.put("title", vote.title());
+      row.put("state", vote.state().name());
+      row.put("options", vote.optionsJson().size());
+      if (!vote.outcome().isBlank()) {
+        row.put("outcome", vote.outcome());
+      }
+      rows.add(row);
+    }
+    return rows;
+  }
+
+  /**
+   * One vote in full: where it stands and how it got there.
+   *
+   * The history comes back with it rather than behind a second tool, because the question an agent
+   * needs answered before voting is not "what are the options" but "what has already been said" --
+   * and an agent that has to ask twice will often not.
+   */
+  public Map<String, Object> getVote(String slug) throws SQLException, Refused {
+    io.hearth.vote.Votes.Record vote = accounts.votes.bySlug(slug);
+    if (vote == null) {
+      throw new Refused("there is no vote called '" + slug + "'");
+    }
+    LinkedHashMap<String, Object> out = new LinkedHashMap<>();
+    out.put("vote", vote.slug());
+    out.put("title", vote.title());
+    out.put("question", vote.question());
+    out.put("state", vote.state().name());
+    out.put("outcome", vote.outcome());
+    ArrayList<Map<String, Object>> standing = new ArrayList<>();
+    for (io.hearth.vote.Votes.Tally tally : accounts.votes.tally(vote)) {
+      LinkedHashMap<String, Object> row = new LinkedHashMap<>();
+      row.put("option", tally.label());
+      row.put("score", tally.score());
+      row.put("yes", tally.yes());
+      row.put("fine", tally.fine());
+      row.put("no", tally.no());
+      row.put("blocked", tally.blocked());
+      if (tally.blocked() > 0) {
+        row.put("blocked_by", tally.blockedBy());
+      }
+      row.put("voters", tally.voters());
+      standing.add(row);
+    }
+    out.put("standing", standing);
+    out.put("options", JSON_NODES.convertValue(vote.optionsJson(), List.class));
+    out.put("history", JSON_NODES.convertValue(vote.historyJson(), List.class));
+    return out;
+  }
+
+  public Map<String, Object> openVote(Map<String, Object> args) throws SQLException, Refused {
+    assertWritable();
+    ArrayList<String> first = new ArrayList<>();
+    Object raw = args.get("options");
+    if (raw instanceof List<?> list) {
+      for (Object one : list) {
+        first.add(String.valueOf(one));
+      }
+    }
+    try {
+      accounts.votes.open(str(args, "vote"), str(args, "title"), str(args, "question"),
+          first, gymActor(), actorName());
+    } catch (io.hearth.vote.Votes.Refused refused) {
+      throw new Refused(refused.getMessage());
+    }
+    return getVote(str(args, "vote"));
+  }
+
+  public Map<String, Object> proposeOption(String slug, String label, String detail)
+      throws SQLException, Refused {
+    assertWritable();
+    try {
+      accounts.votes.propose(slug, label, detail, gymActor(), actorName());
+    } catch (io.hearth.vote.Votes.Refused refused) {
+      throw new Refused(refused.getMessage());
+    }
+    return getVote(slug);
+  }
+
+  public Map<String, Object> castBallot(String slug, String option, String ballot, String because)
+      throws SQLException, Refused {
+    assertWritable();
+    try {
+      accounts.votes.cast(slug, option, io.hearth.vote.Votes.Ballot.of(ballot), because,
+          gymActor(), actorName());
+    } catch (io.hearth.vote.Votes.Refused refused) {
+      throw new Refused(refused.getMessage());
+    }
+    return getVote(slug);
+  }
+
+  public Map<String, Object> narrowVote(String slug, int keep) throws SQLException, Refused {
+    assertWritable();
+    try {
+      accounts.votes.narrow(slug, keep, gymActor(), actorName());
+    } catch (io.hearth.vote.Votes.Refused refused) {
+      throw new Refused(refused.getMessage());
+    }
+    return getVote(slug);
+  }
+
+  public Map<String, Object> decideVote(String slug, String option) throws SQLException, Refused {
+    assertWritable();
+    try {
+      accounts.votes.decide(slug, option, gymActor(), actorName());
+    } catch (io.hearth.vote.Votes.Refused refused) {
+      throw new Refused(refused.getMessage());
+    }
+    return getVote(slug);
+  }
+
+  /**
+   * When the people in this vote are free.
+   *
+   * <b>The kind rides on every answer.</b> An agent handed a rough weekly shape and left to assume
+   * it is a calendar will confidently propose a night somebody has had booked for a month. So each
+   * person comes back with what kind of answer it is and one sentence about what to do with it.
+   *
+   * <b>No addresses.</b> A display name and what they said about their week; an agent coordinating
+   * a board game night has no business collecting the other players' email addresses.
+   */
+  public List<Map<String, Object>> whenPeopleAreFree() throws SQLException, Refused {
+    ArrayList<Map<String, Object>> rows = new ArrayList<>();
+    for (io.hearth.auth.UserRecord person : accounts.users.recent(200)) {
+      if (!person.isApproved()) {
+        continue;
+      }
+      io.hearth.vote.Availability.Record found = accounts.availability.of(person.id());
+      if (found.kind() == io.hearth.vote.Availability.Kind.unknown) {
+        // somebody who has said nothing is absent rather than listed as unknown: a row saying
+        // "we do not know" invites an agent to fill the gap with a guess
+        continue;
+      }
+      LinkedHashMap<String, Object> row = new LinkedHashMap<>();
+      row.put("who", accounts.people.profileOf(person.id()).nameOr("member " + person.id()));
+      row.put("kind", found.kind().name());
+      row.put("what_to_do_with_it", found.advice());
+      if (found.hasWeekly()) {
+        row.put("weekly", JSON_NODES.convertValue(found.weeklyJson(), Map.class));
+      }
+      if (!found.notes().isBlank()) {
+        row.put("notes", found.notes());
+      }
+      if (found.hasCalendar()) {
+        row.put("ics_url", found.icsUrl());
+      }
+      rows.add(row);
+    }
+    return rows;
+  }
+
   // ---- the gym ---------------------------------------------------------------------------------
 
   /**

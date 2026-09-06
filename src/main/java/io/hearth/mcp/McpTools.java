@@ -151,6 +151,95 @@ public class McpTools {
     // Two dead section headers stood here, for the polls and the training log, describing rules a
     // model would need for features that were removed a while ago.
 
+    // ---- getting people together -----------------------------------------------------------------
+    //
+    // These carry the most instruction of any tool here, because the failure mode is social rather
+    // than technical: an agent that proposes a night its person cannot make, or that decides on
+    // everybody's behalf without asking, produces a real argument between real people. So the
+    // descriptions say when to stop and let the humans choose.
+
+    tools.add(new Tool("vote_list", "Votes in progress",
+        "Decisions being made here. Start with this when asked to help arrange something -- there"
+            + " may already be a vote open about it, and a second one about the same evening is how"
+            + " a group ends up meeting twice.",
+        schema(prop("open_only", "boolean", "true for votes still taking ballots"))));
+
+    tools.add(new Tool("vote_get", "One vote, and how it got here",
+        "Everything about one vote: the options, where each stands, and the full history of who"
+            + " proposed and voted what and why. READ THIS BEFORE VOTING. The history is the point"
+            + " -- somebody may already have explained why Thursday is impossible, and a ballot"
+            + " that ignores what was said is how a vote goes round in circles.",
+        required(schema(prop("vote", "string", "the vote's name, from vote_list")), "vote")));
+
+    tools.add(new Tool("vote_open", "Start a vote",
+        "Open a decision for people and their agents to converge on. Give it a short name (lowercase"
+            + " letters, digits and dashes), a title, the question in a sentence, and as many first"
+            + " options as you have. Others can add more -- the pool is meant to grow.\n"
+            + "Check when_free first if this is about a date: proposing options nobody can make"
+            + " wastes everybody's turns.",
+        required(schema(prop("vote", "string", "short name, e.g. board-games-october"),
+                prop("title", "string", "what this is deciding"),
+                prop("question", "string", "the question in a sentence"),
+                stringArrayProp("options", "the first options; more can be added later")),
+            "vote", "title")));
+
+    tools.add(new Tool("vote_propose", "Add an option",
+        "Put another option into a vote, at any point -- including after voting has started, which"
+            + " is normal here. If everything on the table is blocked, propose something else"
+            + " rather than arguing for a blocked option.",
+        required(schema(prop("vote", "string", "the vote's name"),
+                prop("option", "string", "a short label, e.g. 'Thursday 9 October, 7pm'"),
+                prop("detail", "string", "anything that will not fit in the label")),
+            "vote", "option")));
+
+    tools.add(new Tool("vote_cast", "Vote",
+        "Cast your person's ballot on one option. One of:\n"
+            + "  yes     -- they want this\n"
+            + "  fine    -- they can do this\n"
+            + "  no      -- they would rather not\n"
+            + "  blocked -- they CANNOT do this\n"
+            + "`blocked` is a veto, not a strong no: one of them removes an option however many"
+            + " yes votes it has, because a date somebody cannot attend is worse than no date. Use"
+            + " it only for a real impossibility, and always give a reason -- other agents read"
+            + " it.\n"
+            + "You vote as the person who connected you and nobody else. Voting again on the same"
+            + " option replaces your last ballot, and both stay in the history.",
+        required(schema(prop("vote", "string", "the vote's name"),
+                prop("option", "string", "the option's label"),
+                prop("ballot", "string", "yes, fine, no or blocked"),
+                prop("because", "string", "why -- other agents read this and it changes outcomes")),
+            "vote", "option", "ballot")));
+
+    tools.add(new Tool("vote_narrow", "Cut it down to a shortlist",
+        "Drop everything except the best few options, recording what went and why. Blocked options"
+            + " go whatever their score. Do this when the pool has grown past what a person will"
+            + " read -- the purpose is to hand humans a short list they can choose between, not to"
+            + " pick a winner.",
+        required(schema(prop("vote", "string", "the vote's name"),
+                prop("keep", "integer", "how many to keep, 2 to 10")),
+            "vote")));
+
+    tools.add(new Tool("vote_decide", "Settle it",
+        "Record the outcome. DO NOT DO THIS ON YOUR OWN INITIATIVE. Narrowing is an agent's job;"
+            + " deciding is the humans'. Call this when a person has told you what was chosen, and"
+            + " otherwise leave the vote narrowed and tell them it is ready for them.",
+        required(schema(prop("vote", "string", "the vote's name"),
+                prop("option", "string", "the option that won")),
+            "vote", "option")));
+
+    tools.add(new Tool("when_free", "When people are free",
+        "What everybody here has said about their availability. Each person comes back with a"
+            + " `kind` and a sentence saying what to do with it, and you must read that:\n"
+            + "  calendar -- an ICS url they share. Fetch it YOURSELF and read real engagements;"
+            + " this server does not hold a copy.\n"
+            + "  weekly   -- a rough shape they typed. It is NOT a calendar. It says what they"
+            + " usually can do, not what they have already agreed to. Anything built on it is a"
+            + " proposal to confirm, never a commitment.\n"
+            + "  both     -- the calendar says what is impossible, the shape says what is welcome.\n"
+            + "Somebody who has said nothing is simply absent from this list. Do not fill that gap"
+            + " with a guess: propose options and let their agent vote.",
+        schema()));
+
     // ---- the gym -------------------------------------------------------------------------------
     //
     // These descriptions carry more than the others because a model has no screen and Hevy's
@@ -369,6 +458,49 @@ public class McpTools {
   public Result call(String name, JsonNode arguments) throws SQLException, AiSurface.Refused {
     Map<String, Object> args = asMap(arguments);
     switch (name) {
+      case "vote_list" -> {
+        List<Map<String, Object>> votes = surface.listVotes(optBoolean(args, "open_only") != null
+            && optBoolean(args, "open_only"));
+        return new Result(Map.of("votes", votes, "count", votes.size()), null,
+            votes.size() + " vote(s)");
+      }
+      case "vote_get" -> {
+        String slug = optString(args, "vote");
+        return new Result(surface.getVote(slug), slug, "read the vote " + slug);
+      }
+      case "vote_open" -> {
+        String slug = optString(args, "vote");
+        return new Result(surface.openVote(args), slug, "opened the vote " + slug);
+      }
+      case "vote_propose" -> {
+        String slug = optString(args, "vote");
+        String option = optString(args, "option");
+        return new Result(surface.proposeOption(slug, option, optString(args, "detail")),
+            slug, "proposed '" + option + "' in " + slug);
+      }
+      case "vote_cast" -> {
+        String slug = optString(args, "vote");
+        String option = optString(args, "option");
+        String ballot = optString(args, "ballot");
+        return new Result(surface.castBallot(slug, option, ballot, optString(args, "because")),
+            slug, "voted " + ballot + " on '" + option + "' in " + slug);
+      }
+      case "vote_narrow" -> {
+        String slug = optString(args, "vote");
+        return new Result(surface.narrowVote(slug, optInt(args, "keep", 3)), slug,
+            "narrowed " + slug);
+      }
+      case "vote_decide" -> {
+        String slug = optString(args, "vote");
+        String option = optString(args, "option");
+        return new Result(surface.decideVote(slug, option), slug,
+            "decided " + slug + ": " + option);
+      }
+      case "when_free" -> {
+        List<Map<String, Object>> people = surface.whenPeopleAreFree();
+        return new Result(Map.of("people", people, "count", people.size()), null,
+            "read availability for " + people.size() + " person/people");
+      }
       case "gym_workouts" -> {
         Map<String, Object> answer = surface.hevyWorkouts(
             optInt(args, "page", 1), optInt(args, "page_size", 10));

@@ -191,6 +191,17 @@ public class SelfRoutes {
             + " workouts and build routines as you.";
       }
       verbose.detail("self: " + me.email() + " changed their Hevy key");
+    } else if (action.equals("availability")) {
+      try {
+        accounts.availability.save(me.id(), form.text("weekly"), form.text("notes"),
+            form.get("ics_url"));
+      } catch (io.hearth.vote.Votes.Refused refused) {
+        show(config, accounts, ctx, req, me, Tab.keys, refused.getMessage(), recorder);
+        return;
+      }
+      tab = Tab.keys;
+      done = "Saved. Agents arranging something will be told what kind of answer this is.";
+      verbose.detail("self: " + me.email() + " updated their availability");
     } else if (action.equals("disconnect")) {
       // whoever connected it can take it away. The id is checked against their own agents rather
       // than trusted, because a session id in a form is a number somebody can change.
@@ -314,6 +325,12 @@ public class SelfRoutes {
     model.put("hevyHint", accounts.userKeys.hint(me.id(), io.hearth.hevy.UserKeys.Service.hevy));
     model.put("hevyDisclaimer", io.hearth.hevy.Hevy.DISCLAIMER);
     model.put("hevyKeyPage", io.hearth.hevy.Hevy.KEY_PAGE);
+    io.hearth.vote.Availability.Record free = accounts.availability.of(me.id());
+    model.put("weekly", free.hasWeekly() ? free.weekly() : "");
+    model.put("availNotes", free.notes());
+    model.put("icsUrl", free.icsUrl());
+    model.put("availKind", free.kind().name());
+    model.put("availAdvice", free.advice());
     model.put("exportUrl", config.urls.self + "?tab=data&download=export");
     model.put("privacyUrl", "/legal/privacy-policy");
     model.put("isConfigAdmin", accounts.access.isBootstrapAdmin(me.email()));

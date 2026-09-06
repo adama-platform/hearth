@@ -38,6 +38,12 @@ public class Accounts {
   /** the static pages this database serves, and the caches in front of them */
   public final Site site;
 
+  /** decisions being made together, by people and by their agents */
+  public final io.hearth.vote.Votes votes;
+
+  /** when somebody is free, and whether that is a calendar or a rough shape */
+  public final io.hearth.vote.Availability availability;
+
   /** keys somebody handed this server for a service somewhere else */
   public final io.hearth.hevy.UserKeys userKeys;
 
@@ -126,6 +132,8 @@ public class Accounts {
     this.oauthClients = new io.hearth.mcp.OauthClients(store);
     this.site = new Site(databaseDomain, store, caches, events, verbose);
     this.mutations = new io.hearth.content.Mutations(store);
+    this.votes = new io.hearth.vote.Votes(store);
+    this.availability = new io.hearth.vote.Availability(store);
     this.userKeys = new io.hearth.hevy.UserKeys(store);
     this.hevy = new io.hearth.hevy.Hevy(this.userKeys);
     io.hearth.tables.UserTables opened = null;

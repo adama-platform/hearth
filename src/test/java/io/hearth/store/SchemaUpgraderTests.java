@@ -313,7 +313,7 @@ public class SchemaUpgraderTests {
       "push_subs.session_id", "push_subs.user_id", "role_defs.name", "roles.role_name",
       "roles.user_id", "schema_meta.meta_key", "schema_meta.meta_value", "sessions.token_hash",
       "sessions.user_id", "system_templates.slug", "templates.name", "themes.scope",
-      "user_keys.service", "user_keys.user_id");
+      "availability.user_id", "user_keys.service", "user_keys.user_id", "votes.slug");
 
   @Test
   public void aVersionOneDatabaseUpgradesToVersionTwoInPlace() throws Exception {

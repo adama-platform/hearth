@@ -29,7 +29,7 @@ import java.util.List;
  */
 public class Schema {
   /** bumped whenever the tables below change; recorded in schema_meta for the boot audit */
-  public static final int VERSION = 43;
+  public static final int VERSION = 44;
 
   public static final String EMAILS = "emails";
   public static final String SESSIONS = "sessions";
@@ -38,6 +38,8 @@ public class Schema {
   public static final String TEMPLATES = "templates";
   public static final String MUTATIONS = "mutations";
   public static final String USER_KEYS = "user_keys";
+  public static final String VOTES = "votes";
+  public static final String AVAILABILITY = "availability";
   public static final String PROFILES = "profiles";
   public static final String BANS = "bans";
   public static final String OAUTH_CLIENTS = "oauth_clients";
@@ -232,6 +234,60 @@ public class Schema {
       .column(Column.of("created_at", "TIMESTAMP").notNull().withDefault("CURRENT_TIMESTAMP"))
       .column(Column.of("updated_at", "TIMESTAMP").notNull().withDefault("CURRENT_TIMESTAMP"))
       .unique("uq_user_keys", "user_id", "service")
+      .build();
+
+  /**
+   * One decision being made, with its options and everything that has happened to it.
+   *
+   * <b>Two blobs, on purpose.</b> The options are the current state; the history is append-only and
+   * holds every proposal, every ballot and every narrowing in order. Modelling ballots as rows
+   * would mean a schema for a thing whose shape is still being discovered -- an agent that wants to
+   * say "Thursday works but Friday is better" should not need a migration -- and the whole vote is
+   * small enough to rewrite atomically. One row is also one lock: two agents voting at the same
+   * moment cannot interleave into a half-applied ballot.
+   *
+   * <b>Append-only history is the point rather than an implementation detail.</b> The question
+   * everybody asks afterwards is not "what won" but "why", and a tally that cannot show its working
+   * is one nobody trusts -- especially when half the voters are agents.
+   */
+  public static final Table VOTES_TABLE = Table.named(VOTES)
+      .column(Column.id("id"))
+      .column(Column.of("slug", "VARCHAR(64)").notNull().unique())
+      .column(Column.of("title", "VARCHAR(256)").notNull().withDefault("''"))
+      .column(Column.of("question", "VARCHAR(4096)").notNull().withDefault("''"))
+      // open -> narrowed -> decided -> abandoned; a closed list in code
+      .column(Column.of("state", "VARCHAR(16)").notNull().withDefault("'open'"))
+      // what is being voted on right now, as a JSON array of options
+      .column(Column.of("options", "VARCHAR(1048576)").notNull().withDefault("'[]'"))
+      // every proposal, ballot and narrowing in order, as a JSON array
+      .column(Column.of("history", "VARCHAR(1048576)").notNull().withDefault("'[]'"))
+      // the option that won, once there is one
+      .column(Column.of("outcome", "VARCHAR(256)").notNull().withDefault("''"))
+      .column(Column.of("opened_by", "BIGINT"))
+      .column(Column.of("created_at", "TIMESTAMP").notNull().withDefault("CURRENT_TIMESTAMP"))
+      .column(Column.of("updated_at", "TIMESTAMP").notNull().withDefault("CURRENT_TIMESTAMP"))
+      .index("idx_votes_state", "state")
+      .build();
+
+  /**
+   * When somebody is free, without handing anybody their calendar.
+   *
+   * <b>Two answers, and which one you get is part of the answer.</b> Somebody who trusts an agent
+   * with their calendar publishes an ICS link and the agent reads real engagements. Somebody who
+   * does not writes down a weekly shape -- "most evenings, never Wednesday" -- and the agent is
+   * told that is what it is holding. Presenting a rough shape as though it were a calendar is how
+   * an agent confidently proposes a night somebody has had booked for a month.
+   */
+  public static final Table AVAILABILITY_TABLE = Table.named(AVAILABILITY)
+      .column(Column.id("id"))
+      .column(Column.of("user_id", "BIGINT").notNull().unique())
+      // a JSON object of weekday -> free windows, in the person's own words and their own clock
+      .column(Column.of("weekly", "VARCHAR(65536)").notNull().withDefault("'{}'"))
+      // anything an agent should know that a grid cannot say
+      .column(Column.of("notes", "VARCHAR(4096)").notNull().withDefault("''"))
+      // an ICS url, if they are willing to share one
+      .column(Column.of("ics_url", "VARCHAR(1024)").notNull().withDefault("''"))
+      .column(Column.of("updated_at", "TIMESTAMP").notNull().withDefault("CURRENT_TIMESTAMP"))
       .build();
 
   public static final Table TEMPLATES_TABLE = Table.named(TEMPLATES)
@@ -619,7 +675,8 @@ public class Schema {
           ROLE_DEFS_TABLE, PUSH_SUBS_TABLE,
           THEMES_TABLE, LEGAL_TABLE, SYSTEM_TEMPLATES_TABLE,
           ATTACHMENTS_TABLE,
-          CONFIG_TABLE, MUTATIONS_TABLE, USER_KEYS_TABLE);
+          CONFIG_TABLE, MUTATIONS_TABLE, USER_KEYS_TABLE,
+          VOTES_TABLE, AVAILABILITY_TABLE);
 
   private Schema() {
   }

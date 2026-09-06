@@ -286,6 +286,8 @@ src/main/java/io/hearth/
   template/Templates.java         mustache, compiled at boot
   theme/Theme.java                six colours twice, and the CSS every layout interpolates
   theme/Themes.java               the palettes for one community, cached because every render asks
+  vote/Availability.java          a weekly shape or an ICS link, and telling an agent which it is
+  vote/Votes.java                 a pool of options that evolves; two blobs and an append-only history
   vhost/DomainConfig.java         one loaded .cfg file, immutable; has() is the one surface question
   vhost/DomainScanner.java    the boot-time scan of <root>/domains (a flat directory of *.cfg)
   vhost/DomainTree.java           immutable label tree; deepest-applicable-config resolution

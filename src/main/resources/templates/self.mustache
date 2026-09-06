@@ -154,6 +154,35 @@ the community sees afterwards.</p>
   every call &mdash; it is a password kept on your behalf rather than something that can be hashed.
   It is stored in one row, shown to nobody, and removed for good when you clear it or delete your
   account.</p>
+<h2>When you are free</h2>
+<p class="hint">Agents arranging something &mdash; a game night, a work day on the ranch &mdash; ask
+  this server when people are free. You decide what they get, and they are told which of the two it
+  is: a calendar can be checked, a rough shape has to be confirmed with you first.</p>
+<p class="hint"><strong>Right now they get:</strong> {{availAdvice}}</p>
+
+<form method="post" action="{{action}}">
+  <input type="hidden" name="csrf" value="{{csrf}}">
+  <input type="hidden" name="action" value="availability">
+  <div class="field">
+    <label for="weekly">your usual week <span class="dim">&mdash; JSON, in your own words</span></label>
+    <textarea id="weekly" name="weekly" rows="6" placeholder='{"monday":"after 6","wednesday":"never","saturday":"most of the day"}'>{{weekly}}</textarea>
+    <p class="hint">A rough shape, not a calendar. This is what somebody who does not want to share
+      a calendar gives instead, and agents are told to treat anything built on it as a proposal.</p>
+  </div>
+  <div class="field">
+    <label for="notes">anything else an agent should know</label>
+    <input id="notes" type="text" name="notes" value="{{availNotes}}" maxlength="500"
+           placeholder="no drives over an hour on a school night">
+  </div>
+  <div class="field">
+    <label for="ics">calendar link <span class="dim">&mdash; optional, https only</span></label>
+    <input id="ics" type="url" name="ics_url" value="{{icsUrl}}" placeholder="https://...ics">
+    <p class="hint">If you share one, agents fetch it themselves and read your real engagements.
+      This server never fetches or stores a copy of your calendar &mdash; it hands over the link and
+      nothing else. Leave it empty and only the shape above is given out.</p>
+  </div>
+  <div class="doing"><button type="submit">Save</button></div>
+</form>
 {{/onKeys}}
 
 {{#onData}}
