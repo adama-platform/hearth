@@ -100,7 +100,28 @@ public class Tasks {
 
   public record Record(long id, String title, String detail, Kind kind, String state,
                        String process, Cadence cadence, int perWeek, Timestamp graduatedAt,
-                       Date dueOn, String area, long userId, Timestamp doneAt) {
+                       Date dueOn, String area, long userId, Timestamp doneAt,
+                       Date startsOn, Date endsOn) {
+    /**
+     * A challenge: a habit with an end.
+     *
+     * "Thirty days of mobility" is a different thing from "do mobility forever", and the difference
+     * is that it finishes. A challenge graduates itself when the last day passes rather than
+     * sitting on the sheet being missed -- which is what a habit with no end does when somebody has
+     * lost interest, and is why a spreadsheet full of stale checkboxes is dispiriting.
+     */
+    public boolean isChallenge() {
+      return endsOn != null;
+    }
+
+    public boolean hasStarted(LocalDate today) {
+      return startsOn == null || !today.isBefore(startsOn.toLocalDate());
+    }
+
+    public boolean hasEnded(LocalDate today) {
+      return endsOn != null && today.isAfter(endsOn.toLocalDate());
+    }
+
     public boolean isHabit() {
       return kind == Kind.habit;
     }
@@ -182,7 +203,7 @@ public class Tasks {
          PreparedStatement statement = connection.prepareStatement(
              "INSERT INTO " + Schema.TASKS
                  + " (title, detail, kind, state, process, cadence, per_week, due_on, area,"
-                 + " user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                 + " user_id, starts_on, ends_on) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
              java.sql.Statement.RETURN_GENERATED_KEYS)) {
       statement.setString(1, title.trim());
       statement.setString(2, orEmpty(str(fields, "detail")));
@@ -194,6 +215,8 @@ public class Tasks {
       setDate(statement, 8, str(fields, "due_on"));
       statement.setString(9, orEmpty(str(fields, "area")));
       statement.setLong(10, userId);
+      setDate(statement, 11, str(fields, "starts_on"));
+      setDate(statement, 12, str(fields, "ends_on"));
       statement.executeUpdate();
       try (ResultSet keys = statement.getGeneratedKeys()) {
         id = keys.next() ? keys.getLong(1) : 0;
@@ -236,9 +259,11 @@ public class Tasks {
       sets.add("per_week = ?");
       values.add(Math.max(1, Math.min(7, intOf(fields, "per_week", 1))));
     }
-    if (fields.containsKey("due_on")) {
-      sets.add("due_on = ?");
-      values.add(parseDate(str(fields, "due_on")));
+    for (String date : new String[]{"due_on", "starts_on", "ends_on"}) {
+      if (fields.containsKey(date)) {
+        sets.add(date + " = ?");
+        values.add(parseDate(str(fields, date)));
+      }
     }
     if (sets.isEmpty()) {
       return task;
@@ -306,6 +331,20 @@ public class Tasks {
    * needing to exist, and the marks are the evidence it worked. It leaves the sheet and keeps
    * everything.
    */
+  /** the same write, without the refusals: for a challenge whose last day has passed */
+  private void graduateQuietly(long id) throws SQLException {
+    try (Connection connection = store.connection();
+         PreparedStatement statement = connection.prepareStatement(
+             "UPDATE " + Schema.TASKS + " SET graduated_at = ?, updated_at = ?"
+                 + " WHERE id = ? AND graduated_at IS NULL")) {
+      Timestamp now = new Timestamp(System.currentTimeMillis());
+      statement.setTimestamp(1, now);
+      statement.setTimestamp(2, now);
+      statement.setLong(3, id);
+      statement.executeUpdate();
+    }
+  }
+
   public Record graduate(long id, long actor) throws SQLException, Refused {
     Record task = require(id);
     if (!task.isHabit()) {
@@ -479,8 +518,24 @@ public class Tasks {
       if (task.isFinished()) {
         continue;
       }
-      Map<String, Object> row = describe(task, processes);
+      Map<String, Object> row = new LinkedHashMap<>(describe(task, processes));
       if (task.isHabit()) {
+        // A challenge that has run out of days graduates itself.
+        //
+        // Not "goes stale on the sheet": the whole point of putting an end on a habit is that it
+        // finishes, and a thirty-day challenge still asking on day forty is exactly the dispiriting
+        // thing this is meant to replace. Done here rather than in a nightly job because the sheet
+        // is the only place it matters and there is no job to supervise.
+        if (task.hasEnded(now)) {
+          graduateQuietly(task.id());
+          graduated++;
+          continue;
+        }
+        if (!task.hasStarted(now)) {
+          row.put("starts_on", task.startsOn().toString());
+          horizon.add(row);
+          continue;
+        }
         Standing standing = standing(task);
         row.put("streak", standing.streak());
         row.put("last_7_days", standing.last7());
@@ -541,6 +596,12 @@ public class Tasks {
       if (task.cadence() == Cadence.weekly) {
         row.put("per_week", task.perWeek());
       }
+      if (task.isChallenge()) {
+        row.put("challenge", true);
+        row.put("ends_on", task.endsOn().toString());
+        row.put("days_left", java.time.temporal.ChronoUnit.DAYS.between(
+            today(), task.endsOn().toLocalDate()));
+      }
     }
     if (task.dueOn() != null) {
       row.put("due_on", task.dueOn().toString());
@@ -566,7 +627,8 @@ public class Tasks {
         Kind.of(found.getString("kind")), found.getString("state"), found.getString("process"),
         Cadence.of(found.getString("cadence")), found.getInt("per_week"),
         found.getTimestamp("graduated_at"), found.getDate("due_on"), found.getString("area"),
-        found.getLong("user_id"), found.getTimestamp("done_at"));
+        found.getLong("user_id"), found.getTimestamp("done_at"),
+        found.getDate("starts_on"), found.getDate("ends_on"));
   }
 
   private static void setDate(PreparedStatement statement, int at, String raw) throws SQLException {

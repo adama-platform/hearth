@@ -50,6 +50,40 @@ public enum SystemTemplate {
       "If that was not you, come and find an administrator now -- somebody else may have got in.",
       ""),
 
+  /**
+   * Asking one person whether they will host, before anybody else is told.
+   *
+   * A separate flow from the invitation because it is a different question. "Will you have people
+   * round on the 9th" is asked of one person and can be answered no; "we are meeting at Ana's on
+   * the 9th" is told to everybody and cannot. Sending the second when you meant the first is how
+   * somebody finds out they are hosting from a group email.
+   */
+  host_ask("Asking somebody to host",
+      "Would you host {{title}}?",
+      "{{who}} is arranging {{title}} and the group has landed on {{when}}.",
+      "Nobody else has been told yet -- this goes out only when you say yes. If it does not"
+          + " work, say so and the group will pick something else.",
+      "who", "title", "when", "link"),
+
+  /** the invitation itself, once there is something to invite people to */
+  invitation("Inviting everybody",
+      "{{title}} -- {{when}}",
+      "{{title}} is happening on {{when}}{{where}}.",
+      "This is the evening the group voted for.",
+      "title", "when", "where", "link"),
+
+  /**
+   * What is on today, sent in the morning and only when there is something.
+   *
+   * The parameters are deliberately a rendered block rather than a list: what goes in this email is
+   * the same sheet the screen shows, and building it twice is how the two drift.
+   */
+  docket("The daily docket",
+      "Today: {{count}} thing(s)",
+      "Here is what is on for {{date}}.",
+      "",
+      "date", "count", "today", "soon"),
+
   two_factor("The second step",
       "Your {{community}} code",
       "One more step to sign in to {{community}}.",

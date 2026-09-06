@@ -58,6 +58,37 @@ public class Votes {
     this.store = store;
   }
 
+  /**
+   * How a vote decides, which is a property of the group rather than of the software.
+   *
+   * <b>Consensus works for five people and fails for twenty.</b> With five friends, one `blocked`
+   * removing an evening is right: the point is that everybody comes. With twenty, somebody is
+   * always away, every option gets a veto, and the vote converges on nothing -- so the group that
+   * wanted a party gets no party because one person is in another country.
+   *
+   * So the mode is chosen when the vote is opened. `majority` maximises attendance: a block counts
+   * as a strong no and the option with the most people who can come wins. `consensus` is the
+   * default because the small case is the common one here and it is the one where an unattendable
+   * date is the worse failure.
+   */
+  public enum Mode {
+    /** one block removes an option: everybody comes, or it is not the evening */
+    consensus,
+    /** the most people who can make it wins; a block is a strong no rather than a veto */
+    majority;
+
+    public static Mode of(String raw) {
+      if (raw == null) {
+        return consensus;
+      }
+      try {
+        return valueOf(raw.trim().toLowerCase(Locale.ROOT));
+      } catch (IllegalArgumentException ex) {
+        return consensus;
+      }
+    }
+  }
+
   /** where a vote is in its life */
   public enum State {
     /** anybody may add options and vote */
@@ -127,7 +158,12 @@ public class Votes {
 
   public record Record(long id, String slug, String title, String question, State state,
                        String options, String history, String outcome, Long openedBy,
+                       Mode mode, Long hostId, boolean hostAccepted, Timestamp invitedAt,
                        Timestamp updatedAt) {
+    public boolean hasHost() {
+      return hostId != null && hostId > 0;
+    }
+
     public JsonNode optionsJson() {
       return read(options, JSON.createArrayNode());
     }
@@ -186,6 +222,20 @@ public class Votes {
    */
   public Record open(String slug, String title, String question, List<String> firstOptions,
                      long actor, String actorName) throws SQLException, Refused {
+    return open(slug, title, question, firstOptions, Mode.consensus, null, actor, actorName);
+  }
+
+  /**
+   * Start a vote, saying how it decides and who is hosting.
+   *
+   * <b>The host is part of the vote, not a note about it.</b> Somebody has to have the room, the
+   * table and the willingness, and their "I cannot" is final in either mode -- a majority cannot
+   * vote somebody into hosting. That is why {@link #tally} treats a host block as removing the
+   * option even under `majority`.
+   */
+  public Record open(String slug, String title, String question, List<String> firstOptions,
+                     Mode mode, Long hostId, long actor, String actorName)
+      throws SQLException, Refused {
     String clean = normalize(slug);
     if (!clean.matches("[a-z][a-z0-9-]{1,63}")) {
       return refuse("a vote's name is lowercase letters, digits and dashes, 2 to 64 characters");
@@ -206,14 +256,20 @@ public class Votes {
     try (Connection connection = store.connection();
          PreparedStatement statement = connection.prepareStatement(
              "INSERT INTO " + Schema.VOTES
-                 + " (slug, title, question, state, options, history, opened_by)"
-                 + " VALUES (?, ?, ?, 'open', ?, ?, ?)")) {
+                 + " (slug, title, question, state, options, history, opened_by, mode, host_id)"
+                 + " VALUES (?, ?, ?, 'open', ?, ?, ?, ?, ?)")) {
       statement.setString(1, clean);
       statement.setString(2, title.trim());
       statement.setString(3, question == null ? "" : question.trim());
       statement.setString(4, options.toString());
       statement.setString(5, history.toString());
       statement.setLong(6, actor);
+      statement.setString(7, (mode == null ? Mode.consensus : mode).name());
+      if (hostId == null || hostId <= 0) {
+        statement.setNull(8, java.sql.Types.BIGINT);
+      } else {
+        statement.setLong(8, hostId);
+      }
       statement.executeUpdate();
     }
     store.changed(Schema.VOTES, clean, MutationEvent.Kind.insert, actor);
@@ -341,18 +397,23 @@ public class Votes {
     ArrayList<Tally> viable = new ArrayList<>();
     ArrayList<String> dropped = new ArrayList<>();
     for (Tally each : tallies) {
-      if (each.blocked() > 0) {
-        dropped.add(each.label() + " (blocked by " + each.blockedBy() + ")");
+      if (each.ruledOut(vote.mode())) {
+        dropped.add(each.label() + (each.hostBlocked()
+            ? " (the host cannot)" : " (blocked by " + each.blockedBy() + ")"));
       } else {
         viable.add(each);
       }
     }
     if (viable.isEmpty()) {
-      return refuse("every option is blocked by somebody. Propose something else before narrowing.");
+      return refuse(vote.mode() == Mode.consensus
+          ? "every option is blocked by somebody. Propose something else, or open this as a"
+              + " majority vote if the group is too large for everybody to make one evening."
+          : "the host cannot do any of these. Propose something else.");
     }
     while (viable.size() > wanted) {
       Tally worst = viable.remove(viable.size() - 1);
-      dropped.add(worst.label() + " (scored " + worst.score() + ")");
+      dropped.add(worst.label() + (vote.mode() == Mode.majority
+          ? " (" + worst.canCome() + " could come)" : " (scored " + worst.score() + ")"));
     }
     LinkedHashSet<String> kept = new LinkedHashSet<>();
     for (Tally each : viable) {
@@ -390,6 +451,58 @@ public class Votes {
     return bySlug(slug);
   }
 
+  /**
+   * The host says yes or no, and that is the gate the invitation waits behind.
+   *
+   * <b>Nobody else has been told at this point.</b> That is the whole reason this step exists: "will
+   * you have people round on the 9th" is a question one person can answer no to, and "we are
+   * meeting at Ana's on the 9th" is not. Sending the second when you meant the first is how
+   * somebody finds out they are hosting from a group email.
+   *
+   * A no puts the vote back to narrowed rather than abandoning it: the group still wants the
+   * evening, they just need a different one or a different host.
+   */
+  public synchronized Record hostAnswer(String slug, boolean yes, String why, long actor,
+                                        String actorName) throws SQLException, Refused {
+    Record vote = require(slug);
+    if (!vote.hasHost()) {
+      return refuse("'" + slug + "' has no host to answer for it");
+    }
+    if (vote.hostId() != actor) {
+      return refuse("only the host can answer that");
+    }
+    ArrayNode history = (ArrayNode) vote.historyJson();
+    note(history, yes ? "host_accepted" : "host_declined", actor, actorName,
+        Map.of("why", why == null ? "" : why));
+    if (yes) {
+      saveFull(vote, (ArrayNode) vote.optionsJson(), history, vote.state(), vote.outcome(),
+          true, vote.invitedAt(), actor);
+    } else {
+      saveFull(vote, (ArrayNode) vote.optionsJson(), history, State.narrowed, "",
+          false, null, actor);
+    }
+    return bySlug(slug);
+  }
+
+  /** the invitation went out; recorded so it goes out once */
+  public synchronized Record markInvited(String slug, long actor, String actorName)
+      throws SQLException, Refused {
+    Record vote = require(slug);
+    ArrayNode history = (ArrayNode) vote.historyJson();
+    note(history, "invited", actor, actorName, Map.of("outcome", vote.outcome()));
+    saveFull(vote, (ArrayNode) vote.optionsJson(), history, vote.state(), vote.outcome(),
+        vote.hostAccepted(), new Timestamp(System.currentTimeMillis()), actor);
+    return bySlug(slug);
+  }
+
+  /** is this vote ready for people to be told about it? */
+  public boolean readyToInvite(Record vote) {
+    return vote.state() == State.decided
+        && !vote.outcome().isBlank()
+        && vote.invitedAt() == null
+        && (!vote.hasHost() || vote.hostAccepted());
+  }
+
   public synchronized Record abandon(String slug, String why, long actor, String actorName)
       throws SQLException, Refused {
     Record vote = require(slug);
@@ -403,7 +516,16 @@ public class Votes {
 
   /** one option's standing, highest first */
   public record Tally(String label, int score, int yes, int fine, int no, int blocked,
-                      String blockedBy, int voters) {
+                      String blockedBy, int voters, boolean hostBlocked, int canCome) {
+    /**
+     * Is this option out, whatever the numbers?
+     *
+     * Under consensus, any block. Under majority, only the host's -- a majority cannot vote
+     * somebody into having people round their house.
+     */
+    public boolean ruledOut(Mode mode) {
+      return hostBlocked || (mode == Mode.consensus && blocked > 0);
+    }
   }
 
   /**
@@ -415,6 +537,7 @@ public class Votes {
    */
   public List<Tally> tally(Record vote) {
     ArrayList<Tally> tallies = new ArrayList<>();
+    String host = vote.hasHost() ? String.valueOf(vote.hostId()) : null;
     for (JsonNode option : vote.optionsJson()) {
       int score = 0;
       int yes = 0;
@@ -422,11 +545,13 @@ public class Votes {
       int no = 0;
       int blocked = 0;
       int voters = 0;
+      boolean hostBlocked = false;
       ArrayList<String> blockers = new ArrayList<>();
       JsonNode ballots = option.path("ballots");
       java.util.Iterator<String> names = ballots.fieldNames();
       while (names.hasNext()) {
-        JsonNode each = ballots.get(names.next());
+        String voter = names.next();
+        JsonNode each = ballots.get(voter);
         Ballot ballot = Ballot.of(each.path("vote").asText());
         if (ballot == null) {
           continue;
@@ -439,16 +564,40 @@ public class Votes {
           case blocked -> {
             blocked++;
             blockers.add(each.path("who").asText("somebody"));
+            if (voter.equals(host)) {
+              hostBlocked = true;
+            }
           }
         }
         score += ballot.weight;
       }
+      // how many people could actually turn up, which is what majority maximises. `no` is somebody
+      // who would rather not and still could; `blocked` is somebody who cannot.
+      int canCome = yes + fine + no;
       tallies.add(new Tally(option.path("label").asText(), score, yes, fine, no, blocked,
-          String.join(", ", blockers), voters));
+          String.join(", ", blockers), voters, hostBlocked, canCome));
     }
+    // The order is the mode.
+    //
+    // Consensus sorts blocked options to the bottom, because one veto ends them. Majority sorts by
+    // how many people can come, because that is the thing it is maximising -- an evening four out
+    // of twenty cannot make still beats one six cannot. A host block sinks an option in either.
+    Mode mode = vote.mode();
     tallies.sort((left, right) -> {
-      if (left.blocked() != right.blocked()) {
-        return Integer.compare(left.blocked(), right.blocked());
+      if (left.hostBlocked() != right.hostBlocked()) {
+        return Boolean.compare(left.hostBlocked(), right.hostBlocked());
+      }
+      if (mode == Mode.consensus) {
+        if (left.blocked() != right.blocked()) {
+          return Integer.compare(left.blocked(), right.blocked());
+        }
+        if (left.score() != right.score()) {
+          return Integer.compare(right.score(), left.score());
+        }
+        return Integer.compare(right.yes(), left.yes());
+      }
+      if (left.canCome() != right.canCome()) {
+        return Integer.compare(right.canCome(), left.canCome());
       }
       if (left.score() != right.score()) {
         return Integer.compare(right.score(), left.score());
@@ -510,16 +659,24 @@ public class Votes {
 
   private void save(Record vote, ArrayNode options, ArrayNode history, State state, String outcome,
                     long actor) throws SQLException {
+    saveFull(vote, options, history, state, outcome, vote.hostAccepted(), vote.invitedAt(), actor);
+  }
+
+  private void saveFull(Record vote, ArrayNode options, ArrayNode history, State state,
+                        String outcome, boolean hostAccepted, Timestamp invitedAt, long actor)
+      throws SQLException {
     try (Connection connection = store.connection();
          PreparedStatement statement = connection.prepareStatement(
              "UPDATE " + Schema.VOTES + " SET options = ?, history = ?, state = ?, outcome = ?,"
-                 + " updated_at = ? WHERE id = ?")) {
+                 + " host_accepted = ?, invited_at = ?, updated_at = ? WHERE id = ?")) {
       statement.setString(1, options.toString());
       statement.setString(2, history.toString());
       statement.setString(3, state.name());
       statement.setString(4, outcome == null ? "" : outcome);
-      statement.setTimestamp(5, new Timestamp(System.currentTimeMillis()));
-      statement.setLong(6, vote.id());
+      statement.setBoolean(5, hostAccepted);
+      statement.setTimestamp(6, invitedAt);
+      statement.setTimestamp(7, new Timestamp(System.currentTimeMillis()));
+      statement.setLong(8, vote.id());
       statement.executeUpdate();
     }
     store.changed(Schema.VOTES, vote.slug(), MutationEvent.Kind.update, actor);
@@ -528,10 +685,14 @@ public class Votes {
   private static Record read(ResultSet found) throws SQLException {
     long by = found.getLong("opened_by");
     boolean noActor = found.wasNull();
+    long host = found.getLong("host_id");
+    boolean noHost = found.wasNull();
     return new Record(found.getLong("id"), found.getString("slug"), found.getString("title"),
         found.getString("question"), State.of(found.getString("state")),
         found.getString("options"), found.getString("history"), found.getString("outcome"),
-        noActor ? null : by, found.getTimestamp("updated_at"));
+        noActor ? null : by, Mode.of(found.getString("mode")), noHost ? null : host,
+        found.getBoolean("host_accepted"), found.getTimestamp("invited_at"),
+        found.getTimestamp("updated_at"));
   }
 
   public static String normalize(String slug) {

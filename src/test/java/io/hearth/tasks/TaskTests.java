@@ -337,4 +337,124 @@ public class TaskTests {
     assertTrue("and the sheet is where to start", tools.contains("THE ONE TO START WITH"));
     assertTrue("and overdue work is not hidden", tools.contains("where things go to be ignored"));
   }
+
+  // ---- challenges ------------------------------------------------------------------------------
+
+  /**
+   * A challenge graduates itself the day after it ends.
+   *
+   * That is what putting an end on a habit is FOR. A thirty-day challenge still asking on day forty
+   * is exactly the dispiriting stale checkbox this is meant to replace, and "the user should delete
+   * it" is not an answer -- the whole point is that it finishes on its own.
+   */
+  @Test
+  public void aChallengeGraduatesItselfWhenItsLastDayHasPassed() throws Exception {
+    LocalDate today = tasks().today();
+    Tasks.Record challenge = tasks().add(meId(), "Thirty days of mobility",
+        Map.of("kind", "habit", "cadence", "daily",
+            "starts_on", today.minusDays(31).toString(),
+            "ends_on", today.minusDays(1).toString()));
+    tasks().mark(challenge.id(), today.minusDays(2), null, meId());
+
+    Tasks.Sheet sheet = tasks().sheet(meId(), processes());
+    assertEquals("off the sheet", 0, sheet.today().size() + sheet.anytime().size());
+    assertEquals("and counted as finished", 1, sheet.graduated());
+    assertTrue(tasks().byId(challenge.id()).isGraduated());
+    assertEquals("keeping what it earned", 1, tasks().marks(challenge.id(), 60).size());
+  }
+
+  @Test
+  public void aChallengeThatHasNotStartedIsOnTheHorizonRatherThanTodaysList() throws Exception {
+    LocalDate today = tasks().today();
+    tasks().add(meId(), "Winter conditioning",
+        Map.of("kind", "habit", "cadence", "daily",
+            "starts_on", today.plusDays(5).toString(),
+            "ends_on", today.plusDays(40).toString()));
+
+    Tasks.Sheet sheet = tasks().sheet(meId(), processes());
+    assertEquals("not asking yet", 0, sheet.today().size());
+    assertEquals(1, sheet.horizon().size());
+    assertEquals(today.plusDays(5).toString(), sheet.horizon().get(0).get("starts_on"));
+  }
+
+  @Test
+  public void aRunningChallengeIsOnTodaysListWithDaysLeft() throws Exception {
+    LocalDate today = tasks().today();
+    tasks().add(meId(), "Thirty days of mobility",
+        Map.of("kind", "habit", "cadence", "daily",
+            "starts_on", today.minusDays(3).toString(),
+            "ends_on", today.plusDays(26).toString()));
+
+    Tasks.Sheet sheet = tasks().sheet(meId(), processes());
+    assertEquals(1, sheet.today().size());
+    assertEquals(Boolean.TRUE, sheet.today().get(0).get("challenge"));
+    assertEquals(26L, sheet.today().get(0).get("days_left"));
+  }
+
+  // ---- the daily docket --------------------------------------------------------------------------
+
+  /**
+   * Nothing on the docket means no email, and that is the feature.
+   *
+   * A daily message that arrives whether or not it has anything to say gets filtered within a
+   * fortnight, and then the one that mattered goes into the same folder.
+   */
+  @Test
+  public void aDocketWithNothingOnItIsNotSent() throws Exception {
+    server.auth.forDomain("example.org").users.approve(meId(), null);
+    Docket docket = new Docket(server.mail());
+    server.mail().clear();
+
+    Docket.Sent sent = docket.run(server.tree.resolve("example.org"),
+        server.auth.forDomain("example.org"));
+    assertEquals(0, sent.people());
+    assertEquals(0, server.mail().forFlow("docket").size());
+  }
+
+  @Test
+  public void aDocketWithSomethingOnItGoesOutOncePerDay() throws Exception {
+    server.auth.forDomain("example.org").users.approve(meId(), null);
+    tasks().add(meId(), "Move the heifers",
+        Map.of("due_on", tasks().today().toString(), "area", "ranch"));
+    tasks().add(meId(), "Worm the calves",
+        Map.of("due_on", tasks().today().plusDays(3).toString()));
+    Docket docket = new Docket(server.mail());
+    server.mail().clear();
+
+    assertEquals(1, docket.run(server.tree.resolve("example.org"),
+        server.auth.forDomain("example.org")).people());
+    assertEquals(1, server.mail().forFlow("docket").size());
+    String body = server.mail().forFlow("docket").get(0).note();
+    assertTrue(body, body.contains("Move the heifers"));
+    assertTrue("with what it belongs to", body.contains("(ranch)"));
+    assertTrue("and what is coming", body.contains("Worm the calves"));
+
+    assertEquals("a second pass on the same day sends nothing", 0,
+        docket.run(server.tree.resolve("example.org"),
+            server.auth.forDomain("example.org")).people());
+  }
+
+  @Test
+  public void aDocketSaysHowLateSomethingIs() throws Exception {
+    server.auth.forDomain("example.org").users.approve(meId(), null);
+    tasks().add(meId(), "Fix the gate",
+        Map.of("due_on", tasks().today().minusDays(4).toString()));
+    Docket docket = new Docket(server.mail());
+    server.mail().clear();
+    docket.run(server.tree.resolve("example.org"), server.auth.forDomain("example.org"));
+    assertTrue(server.mail().forFlow("docket").get(0).note().contains("4 day(s) late"));
+  }
+
+  @Test
+  public void somebodyWaitingForApprovalGetsNoDocket() throws Exception {
+    Browser waiting = signIn("new@example.com");
+    long id = server.auth.forDomain("example.org").users.byEmail("new@example.com").id();
+    tasks().add(id, "Their thing", Map.of("due_on", tasks().today().toString()));
+    server.mail().clear();
+
+    new Docket(server.mail()).run(server.tree.resolve("example.org"),
+        server.auth.forDomain("example.org"));
+    assertEquals(0, server.mail().forFlow("docket").size());
+    assertNotNull(waiting);
+  }
 }

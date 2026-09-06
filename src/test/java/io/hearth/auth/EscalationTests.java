@@ -104,7 +104,7 @@ public class EscalationTests {
 
   @Test
   public void somebodyWhoMayApproveStillCannotHandOverTheServer() throws Exception {
-    give("mild@example.com", "approver", Permission.people_approve);
+    give("mild@example.com", "approver", Permission.people_manage);
     signIn("newcomer@example.com");
 
     // they can do their job
@@ -145,7 +145,7 @@ public class EscalationTests {
     give("mild@example.com", "granter", Permission.people_roles);
 
     mild.submitToAndFollow("/admin/roles", Map.of("action", "save", "name", "sneaky",
-        "label", "Sneaky", "p_content_write", "1", "p_attachments_write", "1"));
+        "label", "Sneaky", "p_content_write", "1", "p_tables_write", "1"));
     assertNull("the role is not created at all", accounts().roleDefs.byName("sneaky"));
 
     // and what they do hold, they can still delegate -- otherwise the permission does nothing
@@ -157,7 +157,7 @@ public class EscalationTests {
   @Test
   public void anAdminCanStillGiveAwayAnything() throws Exception {
     boss.submitToAndFollow("/admin/roles", Map.of("action", "save", "name", "editor",
-        "label", "Editor", "p_content_write", "1", "p_attachments_write", "1"));
+        "label", "Editor", "p_content_write", "1", "p_tables_write", "1"));
     assertNotNull(accounts().roleDefs.byName("editor"));
   }
 

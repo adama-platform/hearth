@@ -41,6 +41,8 @@ public class AiSurface {
 
   private final Accounts accounts;
   private final boolean readOnly;
+  /** set alongside the community; null in contexts that never send */
+  private io.hearth.mail.Mailer mailer;
 
 
 
@@ -352,6 +354,18 @@ public class AiSurface {
     out.put("title", vote.title());
     out.put("question", vote.question());
     out.put("state", vote.state().name());
+    out.put("mode", vote.mode().name());
+    out.put("how_it_decides", vote.mode() == io.hearth.vote.Votes.Mode.consensus
+        ? "consensus: one `blocked` removes an option, because everybody coming is the point"
+        : "majority: the most people who can come wins; a block is a strong no. The HOST's block"
+            + " is still final -- a majority cannot vote somebody into hosting.");
+    if (vote.hasHost()) {
+      io.hearth.auth.UserRecord host = accounts.users.byId(vote.hostId());
+      out.put("host", host == null ? "(gone)"
+          : accounts.people.profileOf(host.id()).nameOr("member " + host.id()));
+      out.put("host_accepted", vote.hostAccepted());
+    }
+    out.put("invitation_sent", vote.invitedAt() != null);
     out.put("outcome", vote.outcome());
     ArrayList<Map<String, Object>> standing = new ArrayList<>();
     for (io.hearth.vote.Votes.Tally tally : accounts.votes.tally(vote)) {
@@ -383,13 +397,132 @@ public class AiSurface {
         first.add(String.valueOf(one));
       }
     }
+    Long host = null;
+    String hostName = str(args, "host");
+    if (hostName != null && !hostName.isBlank()) {
+      host = findMember(hostName);
+      if (host == null) {
+        throw new Refused("nobody here is called '" + hostName + "'. Names come from when_free"
+            + " and vote_get; leave `host` out if nobody is hosting.");
+      }
+    }
     try {
-      accounts.votes.open(str(args, "vote"), str(args, "title"), str(args, "question"),
-          first, gymActor(), actorName());
+      accounts.votes.open(str(args, "vote"), str(args, "title"), str(args, "question"), first,
+          io.hearth.vote.Votes.Mode.of(str(args, "mode")), host, gymActor(), actorName());
     } catch (io.hearth.vote.Votes.Refused refused) {
       throw new Refused(refused.getMessage());
     }
     return getVote(str(args, "vote"));
+  }
+
+  /**
+   * Somebody by their display name, because that is the only name an agent has ever seen.
+   *
+   * Emails do not appear anywhere in this surface, so an agent naming a host has a display name and
+   * nothing else. Ambiguity is refused rather than guessed: two people called Ana and a silent pick
+   * is an invitation to the wrong house.
+   */
+  private Long findMember(String name) throws SQLException {
+    String wanted = name.trim().toLowerCase(java.util.Locale.ROOT);
+    Long found = null;
+    for (io.hearth.auth.UserRecord person : accounts.users.recent(500)) {
+      if (!person.isApproved()) {
+        continue;
+      }
+      String theirs = accounts.people.profileOf(person.id()).nameOr("");
+      if (theirs.trim().toLowerCase(java.util.Locale.ROOT).equals(wanted)) {
+        if (found != null) {
+          return null;
+        }
+        found = person.id();
+      }
+    }
+    return found;
+  }
+
+  /** the host says yes or no, before anybody else is told */
+  public Map<String, Object> answerAsHost(String slug, boolean yes, String why)
+      throws SQLException, Refused {
+    assertWritable();
+    try {
+      accounts.votes.hostAnswer(slug, yes, why, gymActor(), actorName());
+    } catch (io.hearth.vote.Votes.Refused refused) {
+      throw new Refused(refused.getMessage());
+    }
+    return getVote(slug);
+  }
+
+  /**
+   * Send the invitation, once there is something to invite people to.
+   *
+   * <b>Refused until the host has said yes.</b> The whole point of naming a host is that one person
+   * is asked before twelve are told, and a tool that would send anyway makes that ordering a
+   * suggestion.
+   */
+  public Map<String, Object> sendInvitations(String slug, String where)
+      throws SQLException, Refused {
+    assertWritable();
+    io.hearth.vote.Votes.Record vote = accounts.votes.bySlug(slug);
+    if (vote == null) {
+      throw new Refused("there is no vote called '" + slug + "'");
+    }
+    if (vote.state() != io.hearth.vote.Votes.State.decided || vote.outcome().isBlank()) {
+      throw new Refused("'" + slug + "' has not been decided yet. A person picks the option;"
+          + " vote_narrow is as far as you go on your own.");
+    }
+    if (vote.hasHost() && !vote.hostAccepted()) {
+      throw new Refused("the host has not said yes yet. Ask them with vote_ask_host, and send"
+          + " this only once they have -- nobody else has been told about it.");
+    }
+    if (vote.invitedAt() != null) {
+      throw new Refused("the invitation for '" + slug + "' has already gone out");
+    }
+    int sent = 0;
+    for (io.hearth.auth.UserRecord person : accounts.users.recent(500)) {
+      if (!person.isApproved() || person.disabled()) {
+        continue;
+      }
+      io.hearth.mail.Mailer.Envelope envelope =
+          io.hearth.mail.Mailer.Envelope.to(domainConfig, accounts, person.email(), null);
+      mailerOrRefuse().sendInvitation(envelope, vote.title(), vote.outcome(),
+          where == null ? "" : where, "https://" + domainConfig.domain + "/");
+      sent++;
+    }
+    try {
+      accounts.votes.markInvited(slug, gymActor(), actorName());
+    } catch (io.hearth.vote.Votes.Refused refused) {
+      throw new Refused(refused.getMessage());
+    }
+    LinkedHashMap<String, Object> out = new LinkedHashMap<>(getVote(slug));
+    out.put("invited", sent);
+    return out;
+  }
+
+  /** ask the host, and nobody else */
+  public Map<String, Object> askHost(String slug) throws SQLException, Refused {
+    assertWritable();
+    io.hearth.vote.Votes.Record vote = accounts.votes.bySlug(slug);
+    if (vote == null) {
+      throw new Refused("there is no vote called '" + slug + "'");
+    }
+    if (!vote.hasHost()) {
+      throw new Refused("'" + slug + "' has no host. Open it with a `host` if somebody has to"
+          + " have people round.");
+    }
+    if (vote.outcome().isBlank()) {
+      throw new Refused("there is nothing to ask them about yet -- no option has been chosen");
+    }
+    io.hearth.auth.UserRecord host = accounts.users.byId(vote.hostId());
+    if (host == null) {
+      throw new Refused("the host's account is gone");
+    }
+    io.hearth.mail.Mailer.Envelope envelope =
+        io.hearth.mail.Mailer.Envelope.to(domainConfig, accounts, host.email(), null);
+    mailerOrRefuse().sendHostAsk(envelope, actorName(), vote.title(), vote.outcome(),
+        "https://" + domainConfig.domain + "/");
+    LinkedHashMap<String, Object> out = new LinkedHashMap<>(getVote(slug));
+    out.put("asked", accounts.people.profileOf(host.id()).nameOr("the host"));
+    return out;
   }
 
   public Map<String, Object> proposeOption(String slug, String label, String detail)
@@ -876,7 +1009,7 @@ public class AiSurface {
     //
     // The one thing an agent must not be able to do is widen its own reach, which is why there is
     // no tool for making a table -- only for writing a page that reads the ones a person declared.
-    // Same shape as invariant 120: the safety is that the tool does not exist.
+    // Same shape as invariant 128: the safety is that the tool does not exist.
     String template = changes.containsKey("template")
         ? str(changes, "template")
         : (existing == null ? null : existing.templateName());
@@ -1075,7 +1208,7 @@ public class AiSurface {
   public Map<String, Object> saveTemplate(String name, String body, Map<String, Object> index)
       throws SQLException, Refused {
     assertWritable();
-    assertCan(io.hearth.auth.Permission.templates_write);
+    assertCan(io.hearth.auth.Permission.content_write);
     if (name == null || !name.matches("[a-zA-Z0-9_-]{1,64}")) {
       throw new Refused("a template name is letters, digits, underscore or hyphen");
     }
@@ -1275,7 +1408,7 @@ public class AiSurface {
 
   public Map<String, Object> deleteTemplate(String name) throws SQLException, Refused {
     assertWritable();
-    assertCan(io.hearth.auth.Permission.templates_write);
+    assertCan(io.hearth.auth.Permission.content_write);
     TemplateRecord template = accounts.site.store().templateByName(name);
     if (template == null) {
       throw new Refused("there is no template called '" + name + "'");
@@ -1434,6 +1567,19 @@ public class AiSurface {
     this.domainConfig = config;
     this.zone = config == null ? java.time.ZoneOffset.UTC : config.zone;
     return this;
+  }
+
+  /** the mailer, for the two flows that reach people who are not the caller */
+  public AiSurface sending(io.hearth.mail.Mailer mailer) {
+    this.mailer = mailer;
+    return this;
+  }
+
+  private io.hearth.mail.Mailer mailerOrRefuse() throws Refused {
+    if (mailer == null || domainConfig == null) {
+      throw new Refused("this connection cannot send email");
+    }
+    return mailer;
   }
 
   private Long actorId;

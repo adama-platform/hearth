@@ -133,6 +133,76 @@ public final class Messages {
             + envelope.brand().domain() + " and this community asks for a second step.");
   }
 
+  /**
+   * Ask one person to host, and nobody else.
+   *
+   * The button goes to the vote, so answering happens where the decision lives rather than by
+   * replying to an email nothing reads.
+   */
+  public static Built hostAsk(Mailer.Envelope envelope, String who, String title, String when,
+                              String link) {
+    MailBrand brand = envelope.brand();
+    String why = "You are receiving this because somebody asked whether you would host this.";
+    Said said = say(envelope, SystemTemplate.host_ask,
+        java.util.Map.of("who", who, "title", title, "when", when, "link", link));
+    MailLayout layout = new MailLayout(brand, said.subject(), "Would you host this?")
+        .because(why)
+        .lead(said.lead());
+    if (said.anyBody()) {
+      layout.note(said.body());
+    }
+    return new Built(said.subject(),
+        said.lead() + "\n\n" + (said.anyBody() ? said.body() + "\n\n" : "") + link + "\n"
+            + MailLayout.textFooter(brand, why),
+        layout.button("Say yes or no", link).html(null));
+  }
+
+  /** the invitation, once somebody is hosting and there is a date */
+  public static Built invitation(Mailer.Envelope envelope, String title, String when, String where,
+                                 String link) {
+    MailBrand brand = envelope.brand();
+    String why = "You are receiving this because you are a member of " + brand.nameOr() + ".";
+    Said said = say(envelope, SystemTemplate.invitation,
+        java.util.Map.of("title", title, "when", when,
+            "where", where == null || where.isBlank() ? "" : ", at " + where, "link", link));
+    MailLayout layout = new MailLayout(brand, said.subject(), when)
+        .because(why)
+        .lead(said.lead());
+    if (said.anyBody()) {
+      layout.note(said.body());
+    }
+    return new Built(said.subject(),
+        said.lead() + "\n\n" + (said.anyBody() ? said.body() + "\n\n" : "") + link + "\n"
+            + MailLayout.textFooter(brand, why),
+        layout.button("See the details", link).html(null));
+  }
+
+  /**
+   * What is on today.
+   *
+   * The two blocks arrive already rendered, because this is the same sheet the screen shows and
+   * building it twice is how the two drift apart.
+   */
+  public static Built docket(Mailer.Envelope envelope, String date, int count, String today,
+                             String soon) {
+    MailBrand brand = envelope.brand();
+    String why = "You are receiving this because you have things on your list for today.";
+    Said said = say(envelope, SystemTemplate.docket,
+        java.util.Map.of("date", date, "count", String.valueOf(count),
+            "today", today == null ? "" : today, "soon", soon == null ? "" : soon));
+    MailLayout layout = new MailLayout(brand, said.subject(), date)
+        .because(why)
+        .lead(said.lead())
+        .note(today);
+    if (soon != null && !soon.isBlank()) {
+      layout.note(soon);
+    }
+    return new Built(said.subject(),
+        said.lead() + "\n\n" + today + (soon == null || soon.isBlank() ? "" : "\n\n" + soon)
+            + "\n" + MailLayout.textFooter(brand, why),
+        layout.html(null));
+  }
+
   public static Built passwordChanged(Mailer.Envelope envelope) {
     MailBrand brand = envelope.brand();
     String why = "You are receiving this because the password on your account at " + brand.domain()

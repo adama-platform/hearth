@@ -58,6 +58,26 @@ public class CapturingMailer implements Mailer {
     return record("password_changed", envelope, null, null);
   }
 
+  @Override
+  public Outcome sendHostAsk(Envelope envelope, String who, String title, String when,
+                             String link) {
+    // the `when` goes in the note, because what a test about host-asking wants to assert is which
+    // evening somebody was asked about
+    return record("host_ask", envelope, null, link, who + " asks about " + title + " on " + when);
+  }
+
+  @Override
+  public Outcome sendInvitation(Envelope envelope, String title, String when, String where,
+                                String link) {
+    return record("invitation", envelope, null, link, title + " -- " + when + " " + where);
+  }
+
+  @Override
+  public Outcome sendDocket(Envelope envelope, String date, int count, String today, String soon) {
+    return record("docket", envelope, null, null, date + " (" + count + ")\n" + today
+        + (soon == null || soon.isBlank() ? "" : "\n" + soon));
+  }
+
 
 
 
@@ -66,7 +86,12 @@ public class CapturingMailer implements Mailer {
 
 
   private Outcome record(String flow, Envelope envelope, String code, String link) {
-    sent.add(new Sent(flow, envelope.domain(), envelope.email(), code, link, null, null));
+    return record(flow, envelope, code, link, null);
+  }
+
+  /** the same, keeping what the message actually said, for flows whose words are the point */
+  private Outcome record(String flow, Envelope envelope, String code, String link, String note) {
+    sent.add(new Sent(flow, envelope.domain(), envelope.email(), code, link, null, note));
     return Outcome.ok("captured");
   }
 

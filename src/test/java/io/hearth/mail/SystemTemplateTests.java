@@ -221,7 +221,7 @@ public class SystemTemplateTests {
     Browser editor = signIn("editor@example.com");
     io.hearth.auth.Accounts accounts = server.auth.forDomain("example.org");
     accounts.roleDefs.save("wordsmith", "Wordsmith", "",
-        java.util.EnumSet.of(io.hearth.auth.Permission.legal_write), "blue", null);
+        java.util.EnumSet.of(io.hearth.auth.Permission.config_write), "blue", null);
     accounts.roles.grant(accounts.users.byEmail("editor@example.com").id(), "wordsmith", null);
 
     assertEquals("the screen is theirs", 200, editor.get("/admin/messages").status());

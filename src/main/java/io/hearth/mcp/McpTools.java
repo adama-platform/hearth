@@ -55,8 +55,8 @@ public class McpTools {
           java.util.Map.entry("content_delete", io.hearth.auth.Permission.content_write),
           java.util.Map.entry("template_list", io.hearth.auth.Permission.content_read),
           java.util.Map.entry("template_get", io.hearth.auth.Permission.content_read),
-          java.util.Map.entry("template_save", io.hearth.auth.Permission.templates_write),
-          java.util.Map.entry("template_delete", io.hearth.auth.Permission.templates_write),
+          java.util.Map.entry("template_save", io.hearth.auth.Permission.content_write),
+          java.util.Map.entry("template_delete", io.hearth.auth.Permission.content_write),
           java.util.Map.entry("navigation_get", io.hearth.auth.Permission.content_read),
           java.util.Map.entry("site_spec", io.hearth.auth.Permission.content_read)
           // The gym is the person's own, always.
@@ -170,7 +170,7 @@ public class McpTools {
             + " what to actually do; use this to find something by name or to review.",
         schema(prop("include_finished", "boolean", "true to include done, dropped and graduated"))));
 
-    tools.add(new Tool("task_add", "Add a task or a habit",
+    tools.add(new Tool("task_add", "Add a task, a habit, or a challenge",
         "Put something on the list.\n"
             + "A TASK is a piece of work. Give it a due_on if it has a date; leave it off and it"
             + " sits in the pull-from pool. Give it a `process` if it has steps worth tracking --"
@@ -179,6 +179,10 @@ public class McpTools {
             + "A HABIT is something to keep doing. It needs a cadence: `daily`, or `weekly` with"
             + " per_week. Habits are marked with habit_mark and can graduate when they have done"
             + " their job.\n"
+            + "A CHALLENGE is a habit with an end: give it ends_on. \"Thirty days of mobility\" is a"
+            + " different thing from \"do mobility forever\", and the difference is that it"
+            + " finishes -- a challenge graduates itself the day after it ends rather than sitting"
+            + " on the sheet being missed. starts_on keeps it off the sheet until it begins.\n"
             + "`area` groups things -- gym, ranch, house, whatever the person already says.",
         required(schema(prop("title", "string", "what it is, in the person's own words"),
                 prop("detail", "string", "anything that will not fit in the title"),
@@ -186,6 +190,8 @@ public class McpTools {
                 prop("cadence", "string", "habits only: daily or weekly"),
                 prop("per_week", "integer", "weekly habits: how many times a week, 1 to 7"),
                 prop("due_on", "string", "tasks only: a date, YYYY-MM-DD"),
+                prop("starts_on", "string", "challenges: when it begins, YYYY-MM-DD"),
+                prop("ends_on", "string", "challenges: the last day, YYYY-MM-DD"),
                 prop("process", "string", "a process from process_list, for multi-step work"),
                 prop("area", "string", "gym, ranch, house...")),
             "title")));
@@ -279,8 +285,43 @@ public class McpTools {
         required(schema(prop("vote", "string", "short name, e.g. board-games-october"),
                 prop("title", "string", "what this is deciding"),
                 prop("question", "string", "the question in a sentence"),
+                prop("mode", "string",
+                    "how it decides. `consensus` (the default) means one `blocked` removes an"
+                        + " option -- right for a handful of people where the point is that"
+                        + " everybody comes. `majority` means the option the most people can make"
+                        + " wins -- use it for a larger group, where somebody is always away and"
+                        + " consensus converges on nothing."),
+                prop("host", "string",
+                    "the display name of whoever is having people round, if somebody is. Their"
+                        + " `blocked` is final in EITHER mode -- a majority cannot vote somebody"
+                        + " into hosting -- and the invitation waits until they have said yes."),
                 stringArrayProp("options", "the first options; more can be added later")),
             "vote", "title")));
+
+    tools.add(new Tool("vote_ask_host", "Ask the host, and nobody else",
+        "Email the person hosting to ask whether they will have people round on the chosen date."
+            + " NOBODY ELSE IS TOLD by this. That ordering is the point: \"will you host on the"
+            + " 9th\" is a question one person can say no to, and \"we are meeting at Ana's on the"
+            + " 9th\" is not. Do this after a person has picked the option, then wait.",
+        required(schema(prop("vote", "string", "the vote's name")), "vote")));
+
+    tools.add(new Tool("vote_host_answer", "Answer as the host",
+        "Record that YOUR person -- the host -- will or will not host it. Only the host can answer."
+            + " A no puts the vote back to narrowed so the group can pick another date or another"
+            + " house; it does not abandon it.",
+        required(schema(prop("vote", "string", "the vote's name"),
+                prop("yes", "boolean", "true if they will host"),
+                prop("why", "string", "worth saying, especially for a no")),
+            "vote", "yes")));
+
+    tools.add(new Tool("vote_invite", "Send the invitation",
+        "Email everybody about the evening. This is the last step and it is refused until there is"
+            + " an outcome AND, if there is a host, until they have said yes -- because the whole"
+            + " reason to name a host is that one person is asked before twelve are told. It sends"
+            + " once.",
+        required(schema(prop("vote", "string", "the vote's name"),
+                prop("where", "string", "where it is happening, if that is settled")),
+            "vote")));
 
     tools.add(new Tool("vote_propose", "Add an option",
         "Put another option into a vote, at any point -- including after voting has started, which"
@@ -620,6 +661,21 @@ public class McpTools {
         String slug = optString(args, "vote");
         return new Result(surface.openVote(args), slug, "opened the vote " + slug);
       }
+      case "vote_ask_host" -> {
+        String slug = optString(args, "vote");
+        return new Result(surface.askHost(slug), slug, "asked the host about " + slug);
+      }
+      case "vote_host_answer" -> {
+        String slug = optString(args, "vote");
+        boolean yes = Boolean.TRUE.equals(optBoolean(args, "yes"));
+        return new Result(surface.answerAsHost(slug, yes, optString(args, "why")), slug,
+            (yes ? "accepted" : "declined") + " hosting " + slug);
+      }
+      case "vote_invite" -> {
+        String slug = optString(args, "vote");
+        return new Result(surface.sendInvitations(slug, optString(args, "where")), slug,
+            "sent the invitation for " + slug);
+      }
       case "vote_propose" -> {
         String slug = optString(args, "vote");
         String option = optString(args, "option");
@@ -871,7 +927,7 @@ public class McpTools {
     // string -- so every nested object a tool declared arrived as "". place_save has advertised a
     // `fields` object since the address book shipped and reads it with an `instanceof Map` that
     // could never be true, which meant a model filling in a kind's own fields was told it had
-    // worked and nothing was written. That is the precise failure invariant 119 refuses for an
+    // worked and nothing was written. That is the precise failure invariant 127 refuses for an
     // *undeclared* field, arriving through the plumbing instead: silent success for a write that
     // did not happen. Objects are now objects, and ToolArgumentTests holds both halves down.
     if (node.isObject()) {

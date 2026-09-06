@@ -12,7 +12,9 @@ import java.util.Map;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 /**
@@ -69,9 +71,9 @@ public class PermissionTests {
     assertNotNull(editor);
     assertFalse("it is a starting point, not a fixture", editor.builtin());
     assertTrue(editor.allows(Permission.content_write));
-    assertTrue(editor.allows(Permission.templates_write));
+    assertTrue(editor.allows(Permission.content_write));
     assertFalse("editors do not see the machine room", editor.allows(Permission.system_read));
-    assertFalse(editor.allows(Permission.people_roles));
+    assertFalse(editor.allows(Permission.people_manage));
   }
 
   @Test
@@ -245,5 +247,70 @@ public class PermissionTests {
     browser.submit(Map.of("email", email));
     browser.submit(Map.of("code", server.mail().lastCodeFor(email)));
     return browser;
+  }
+
+  // ---- the consolidation, and what it must not have broken ---------------------------------------
+
+  /**
+   * A role saved before nine permissions were renamed still means what it meant.
+   *
+   * Renaming silently un-grants, which is the worst failure available here: a stored role holds
+   * names, and without the map a role called "helper" comes back missing most of what it was given
+   * -- no error, no log line, just somebody who can no longer do their job.
+   */
+  @org.junit.Test
+  public void aRoleSavedBeforeTheRenameStillMeansWhatItMeant() {
+    assertEquals(Permission.content_write, Permission.of("templates_write"));
+    assertEquals(Permission.content_write, Permission.of("navigation_write"));
+    assertEquals(Permission.content_write, Permission.of("attachments_write"));
+    assertEquals(Permission.people_manage, Permission.of("people_approve"));
+    assertEquals(Permission.people_manage, Permission.of("people_remove"));
+    assertEquals(Permission.config_write, Permission.of("appearance_write"));
+    assertEquals(Permission.config_write, Permission.of("legal_write"));
+    assertEquals(Permission.system_read, Permission.of("ai_manage"));
+    assertNull("and something that was never a permission is still nothing",
+        Permission.of("moderate_board"));
+  }
+
+  /**
+   * Giving roles did NOT fold into approving people, and that is the point of the split.
+   *
+   * Merging them was tried and the escalation test caught it: somebody who can grant roles can
+   * grant themselves one holding every other permission, which is an administrator in all but the
+   * word. Approving somebody is not that.
+   */
+  @org.junit.Test
+  public void grantingRolesIsStillItsOwnPermission() {
+    assertNotEquals(Permission.people_manage, Permission.people_roles);
+    assertFalse("approving does not carry granting",
+        Permission.people_manage.implies().contains(Permission.people_roles));
+    assertTrue("but both let you see who is here",
+        Permission.people_manage.implies().contains(Permission.people_read));
+  }
+
+  /**
+   * Connecting an assistant is a baseline now, and it still implies nothing.
+   *
+   * Agents are how everybody who is not the owner uses this, so requiring a role grant per friend
+   * meant the voting did not work until somebody remembered a screen. What must not happen is a
+   * checkbox about assistants handing somebody the admin shell.
+   */
+  @org.junit.Test
+  public void connectingAnAssistantIsABaselineAndOpensNoDoor() {
+    assertTrue(Permission.agent_connect.isMemberBaseline());
+    assertFalse("never the admin section",
+        Permission.agent_connect.implies().contains(Permission.admin_enter));
+    assertEquals("and nothing else at all", 1, Permission.agent_connect.implies().size());
+  }
+
+  @org.junit.Test
+  public void everyPermissionStillOpensTheAdminSectionExceptTheBaseline() {
+    for (Permission permission : Permission.values()) {
+      if (permission.isMemberBaseline() || permission == Permission.admin_enter) {
+        continue;
+      }
+      assertTrue(permission + " has to open the door it is behind",
+          permission.implies().contains(Permission.admin_enter));
+    }
   }
 }

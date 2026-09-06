@@ -65,6 +65,14 @@ public class McpRoutes {
   private final Verbose verbose;
   private final Map<String, AuthCodes> codesByDomain = new HashMap<>();
 
+  /** the mailer, for the two vote flows that reach somebody other than the caller */
+  private io.hearth.mail.Mailer mailer;
+
+  public McpRoutes sending(io.hearth.mail.Mailer mailer) {
+    this.mailer = mailer;
+    return this;
+  }
+
   public McpRoutes(Templates templates, AiLog aiLog, Verbose verbose) {
     this.templates = templates;
     this.aiLog = aiLog;
@@ -458,6 +466,7 @@ public class McpRoutes {
     String method = body.hasNonNull("method") ? body.get("method").asText() : "";
     AiSurface surface = new AiSurface(accounts, config.mcp.readOnly)
         .inCommunity(config)
+        .sending(mailer)
         .actingAs(me.id(), me.email());
     McpTools tools = new McpTools(surface);
 

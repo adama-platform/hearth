@@ -51,6 +51,10 @@ habit_mark       kept today
 habit_graduate   it did its job
 ```
 
+A **challenge** is a habit with an `ends_on`: "thirty days of mobility" is a different thing from "do
+mobility forever", and the difference is that it finishes. It graduates itself the day after its
+last, rather than sitting on the sheet being missed.
+
 **Done/not-done is a lie about most ranch work.** A fence repair has steps, and which step it is at
 is the useful fact — so a task can walk a named process, and a state that is not in that process is
 refused rather than stored where no screen will list it.
@@ -63,6 +67,10 @@ counter — the question is *which days*, and a counter gives the number and nev
 Overdue work sits in today's list rather than an overdue section, because an overdue section is
 where things go to be ignored.
 
+**A daily email at six** with what is on and what is coming — and **none at all when there is nothing
+on the docket**, because a daily message that arrives empty gets filtered within a fortnight, and
+then the one that mattered goes to the same folder.
+
 ### Getting people together
 
 A vote is a **pool of options that evolves**, not a ballot with a fixed slate. An agent proposes
@@ -72,16 +80,33 @@ Thursday, another proposes the Thursday after, a third says both are bad and off
 vote_open · vote_propose · vote_cast · vote_narrow · when_free
 ```
 
-Ballots are `yes` / `fine` / `no` / `blocked`. **`blocked` is a veto, not a low score** — one removes
-an option however many yes votes it has, because a date somebody cannot attend is worse than no
-date. Narrowing keeps the best few and records what was dropped and why. Deciding is deliberately
-not an agent's job, and the tool says so in as many words.
+Ballots are `yes` / `fine` / `no` / `blocked`. **How a vote decides is a property of the group:**
+`consensus` (the default) lets one `blocked` remove an option, which is right for five friends where
+the point is that everybody comes. `majority` maximises who can make it, which is right for twenty,
+where somebody is always away and consensus converges on nothing.
 
-**Availability without handing over your calendar.** Publish an ICS link if you trust an agent with
-it, or write down a rough weekly shape if you do not. Every answer says *which of the two it is* and
-what to do with it — an agent handed a rough shape and left to assume it is a calendar will
-confidently propose a night you have had booked for a month. This server never fetches your ICS; it
-hands over the link and nothing else.
+**A vote can name a host, and their block is final in either mode** — a majority can outvote anybody
+about whether an evening is convenient, and cannot vote somebody into having twelve people in their
+kitchen.
+
+Narrowing keeps the best few and records what was dropped and why. Deciding is deliberately not an
+agent's job, and the tool says so in as many words.
+
+**Then the invite goes out, host first.** `vote_ask_host` emails one person — nobody else is told —
+because "will you host on the 9th" can be answered no and "we're at Ana's on the 9th" cannot. Only
+once they accept will `vote_invite` mail everybody, and a no puts the vote back to narrowed rather
+than ending it.
+
+**Availability without handing over your calendar.** Publish an ICS link if you trust this with it,
+or write down a rough weekly shape if you do not. Every answer says *which of the two it is* and what
+to do with it — an agent handed a rough shape and left to assume it is a calendar will confidently
+propose a night you have had booked for a month.
+
+A shared ICS is fetched, parsed and cached for an hour. **Only the busy windows are kept, never the
+summaries** — what a scheduler needs is when you are not free, and what an ICS carries is who you
+were meeting. There is no recurrence expansion, so a repeating event is seen once; that fails in the
+safe direction, since a missed window proposes a time somebody then blocks, and a wrongly-busy one
+would silently delete a good evening.
 
 ## What else is in the jar
 
@@ -99,10 +124,15 @@ any kind.
 
 ## Multi-user, on purpose
 
-Not to host a community — to invite four friends into the parts that need more than one person. A
-friend needs the `agent_connect` permission before their agent can do anything here, and that stays
-a permission rather than a membership baseline: an agent acting as somebody is the sharpest thing
-this hands out.
+Not to host a community — to invite four friends into the parts that need more than one person.
+**Every approved member can connect an agent**, because agents are how everybody who is not the owner
+uses this at all; approval is the boundary, and an agent can still only do what its person can do.
+Disabling an account stops their agent at its next request.
+
+There are eleven permissions, down from nineteen: writing pages, templates, navigation and files is
+one job at this scale, and so are the settings, the colours and the legal pages. Two stayed split
+because the blast radius genuinely differs — dropping a table destroys collected data, and granting
+roles is the sideways path to becoming an administrator.
 
 Your gym, your tasks and your keys are yours. There is no argument anywhere for *whose* — every call
 uses the id of whoever connected the agent, so no phrasing of any request reads somebody else's

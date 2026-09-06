@@ -265,8 +265,8 @@ public class AdminRoutes {
    */
   private static Permission neededForPerson(String action) {
     return switch (action) {
-      case "approve" -> Permission.people_approve;
-      case "reject", "reject_and_ban", "erase", "disable", "enable" -> Permission.people_remove;
+      case "approve" -> Permission.people_manage;
+      case "reject", "reject_and_ban", "erase", "disable", "enable" -> Permission.people_manage;
       case "grant_admin", "revoke_admin" -> Permission.people_roles;
       // an action nobody listed is refused rather than defaulting to the mildest one
       default -> Permission.everything;
@@ -2692,6 +2692,13 @@ public class AdminRoutes {
       case password_reset -> mailer.sendPasswordReset(envelope, "482913",
           "https://" + config.domain + config.urls.resetPassword + "?code=482913");
       case password_changed -> mailer.sendPasswordChanged(envelope);
+      case host_ask -> mailer.sendHostAsk(envelope, "Ana Rivera", "Board game night",
+          "Thursday 9 October, 7pm", "https://" + config.domain + "/");
+      case invitation -> mailer.sendInvitation(envelope, "Board game night",
+          "Thursday 9 October, 7pm", "Ana's", "https://" + config.domain + "/");
+      case docket -> mailer.sendDocket(envelope,
+          java.time.LocalDate.now(config.zone).toString(), 2,
+          "Move the heifers\nFix the north gate", "In 3 days: worm the calves");
     };
   }
 
@@ -2880,7 +2887,7 @@ public class AdminRoutes {
         // the picker, offered only to somebody who could upload one anyway: a button that opens a
         // panel they cannot fetch is a door drawn on a wall
         if (config.has(io.hearth.vhost.Surface.attachments)
-            && accounts.access.can(me, Permission.attachments_write)) {
+            && accounts.access.can(me, Permission.content_write)) {
           model.put("filesUrl", AdminView.panelPath(AdminView.Section.attachments, config)
               + "?pick=1");
         }

@@ -75,11 +75,15 @@ public class Access {
     if (isBootstrapAdmin(user.email())) {
       return true;
     }
-    // Reading, writing and voting on the board are things being let in is enough for. See
-    // Permission.MEMBER_BASELINE for why that is a baseline rather than a role nobody would ever
-    // decline to grant -- the short version is that the alternative is a board only administrators
-    // can read on the morning after an upgrade.
-    if (permission.isMemberBaseline() && isApproved(user)) {
+    // Connecting an assistant is something being let in is enough for: agents are how everybody
+    // who is not the owner uses this at all. See Permission.MEMBER_BASELINE.
+    //
+    // Approved AND not disabled, and the second half is not decoration. Turning an account off is
+    // the reversible middle between approving and rejecting, and a disabled account whose agent
+    // kept working would make that button a lie -- the person is out of the front door and their
+    // assistant is still inside. The baseline is the only permission with no role behind it, so
+    // this is the only place that check can live.
+    if (permission.isMemberBaseline() && isApproved(user) && !user.disabled()) {
       return true;
     }
     Set<Permission> allowed = defs.permissionsFor(roles.of(user.id()));

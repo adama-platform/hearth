@@ -47,6 +47,9 @@ public class Accounts {
   /** decisions being made together, by people and by their agents */
   public final io.hearth.vote.Votes votes;
 
+  /** calendars fetched and kept for an hour, reduced to busy windows */
+  public final io.hearth.vote.Calendars calendars;
+
   /** when somebody is free, and whether that is a calendar or a rough shape */
   public final io.hearth.vote.Availability availability;
 
@@ -142,6 +145,7 @@ public class Accounts {
     this.processes = new io.hearth.tasks.Processes(store);
     this.votes = new io.hearth.vote.Votes(store);
     this.availability = new io.hearth.vote.Availability(store);
+    this.calendars = new io.hearth.vote.Calendars(store);
     this.userKeys = new io.hearth.hevy.UserKeys(store);
     this.hevy = new io.hearth.hevy.Hevy(this.userKeys);
     io.hearth.tables.UserTables opened = null;

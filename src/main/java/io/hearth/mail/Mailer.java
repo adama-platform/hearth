@@ -34,6 +34,21 @@ public interface Mailer {
   Outcome sendPasswordChanged(Envelope envelope);
 
   /**
+   * Ask one person to host, before anybody else hears about it.
+   *
+   * Its own method rather than an argument on the invitation, for the reason the whole interface is
+   * a closed list: these are two different things to say and a boolean deciding which is one typo
+   * from telling twelve people about an evening nobody agreed to hold.
+   */
+  Outcome sendHostAsk(Envelope envelope, String who, String title, String when, String link);
+
+  /** the invitation, once there is a host and a date */
+  Outcome sendInvitation(Envelope envelope, String title, String when, String where, String link);
+
+  /** what is on today; sent only when there is something on it */
+  Outcome sendDocket(Envelope envelope, String date, int count, String today, String soon);
+
+  /**
    * Who the mail is for, which community is sending it, and what that community looks like.
    *
    * The brand rides on the envelope rather than being looked up by the mailer, because the mailer

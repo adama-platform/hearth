@@ -75,8 +75,8 @@ public class RoleDefs {
     if (byName(EDITOR) == null) {
       upsert(EDITOR, "Editor", "Writes and publishes the site.",
           EnumSet.of(Permission.admin_enter, Permission.content_read, Permission.content_write,
-              Permission.content_publish, Permission.templates_write,
-              Permission.navigation_write, Permission.attachments_write),
+              Permission.content_publish, Permission.content_write,
+              Permission.content_write, Permission.content_write),
           false, "blue", false);
     }
   }

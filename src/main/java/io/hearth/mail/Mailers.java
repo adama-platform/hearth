@@ -84,6 +84,23 @@ public class Mailers implements Mailer {
     return forDomain(envelope.domain()).sendPasswordChanged(envelope);
   }
 
+  @Override
+  public Outcome sendHostAsk(Envelope envelope, String who, String title, String when,
+                             String link) {
+    return forDomain(envelope.domain()).sendHostAsk(envelope, who, title, when, link);
+  }
+
+  @Override
+  public Outcome sendInvitation(Envelope envelope, String title, String when, String where,
+                                String link) {
+    return forDomain(envelope.domain()).sendInvitation(envelope, title, when, where, link);
+  }
+
+  @Override
+  public Outcome sendDocket(Envelope envelope, String date, int count, String today, String soon) {
+    return forDomain(envelope.domain()).sendDocket(envelope, date, count, today, soon);
+  }
+
 
 
 

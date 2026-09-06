@@ -194,7 +194,7 @@ public class AttachmentRoutes {
     try {
       SessionRecord session = AccountRoutes.currentSession(accounts, req);
       UserRecord me = session == null ? null : accounts.users.byId(session.userId());
-      if (me == null || !accounts.access.can(me, io.hearth.auth.Permission.attachments_write)) {
+      if (me == null || !accounts.access.can(me, io.hearth.auth.Permission.content_write)) {
         // the same 404 the admin section gives: this path does not confirm its own existence to
         // somebody who cannot use it
         notThere(ctx, req, recorder);

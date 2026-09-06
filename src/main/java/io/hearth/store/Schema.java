@@ -29,7 +29,7 @@ import java.util.List;
  */
 public class Schema {
   /** bumped whenever the tables below change; recorded in schema_meta for the boot audit */
-  public static final int VERSION = 45;
+  public static final int VERSION = 46;
 
   public static final String EMAILS = "emails";
   public static final String SESSIONS = "sessions";
@@ -43,6 +43,7 @@ public class Schema {
   public static final String TASKS = "tasks";
   public static final String PROCESSES = "processes";
   public static final String HABIT_MARKS = "habit_marks";
+  public static final String CALENDARS = "calendars";
   public static final String PROFILES = "profiles";
   public static final String BANS = "bans";
   public static final String OAUTH_CLIENTS = "oauth_clients";
@@ -266,6 +267,14 @@ public class Schema {
       .column(Column.of("history", "VARCHAR(1048576)").notNull().withDefault("'[]'"))
       // the option that won, once there is one
       .column(Column.of("outcome", "VARCHAR(256)").notNull().withDefault("''"))
+      // consensus | majority -- how this vote decides. See Votes.Mode.
+      .column(Column.of("mode", "VARCHAR(16)").notNull().withDefault("'consensus'"))
+      // who is hosting, if anybody. Their block is final whatever the mode.
+      .column(Column.of("host_id", "BIGINT"))
+      // has the host said yes? An invite fans out to everybody only once they have.
+      .column(Column.of("host_accepted", "BOOLEAN").notNull().withDefault("FALSE"))
+      // has the invitation gone out, so it goes out once
+      .column(Column.of("invited_at", "TIMESTAMP"))
       .column(Column.of("opened_by", "BIGINT"))
       .column(Column.of("created_at", "TIMESTAMP").notNull().withDefault("CURRENT_TIMESTAMP"))
       .column(Column.of("updated_at", "TIMESTAMP").notNull().withDefault("CURRENT_TIMESTAMP"))
@@ -340,6 +349,11 @@ public class Schema {
       .column(Column.of("per_week", "INTEGER").notNull().withDefault("1"))
       // a habit that has done its job; it leaves the sheet and keeps its history
       .column(Column.of("graduated_at", "TIMESTAMP"))
+      // A challenge: a habit with an end. "Thirty days of mobility" is a different thing from "do
+      // mobility forever", and the difference is that it finishes -- so it carries its own dates
+      // and graduates itself when the last day passes rather than sitting there being missed.
+      .column(Column.of("starts_on", "DATE"))
+      .column(Column.of("ends_on", "DATE"))
       // when this has to happen, for a task with a date
       .column(Column.of("due_on", "DATE"))
       // what this belongs to: gym, ranch, whatever somebody types
@@ -366,6 +380,28 @@ public class Schema {
       .column(Column.of("note", "VARCHAR(1024)").notNull().withDefault("''"))
       .column(Column.of("created_at", "TIMESTAMP").notNull().withDefault("CURRENT_TIMESTAMP"))
       .unique("uq_habit_marks", "task_id", "on_day")
+      .build();
+
+  /**
+   * Somebody's calendar, fetched and kept for an hour.
+   *
+   * <b>Cached because the alternative is fetching five calendars every time an agent asks a
+   * question.</b> An hour is long enough that a conversation about next Thursday costs one fetch
+   * per person, and short enough that something booked this morning is visible this afternoon.
+   *
+   * <b>Only the busy windows are kept, never the text.</b> What a scheduler needs is when somebody
+   * is not free; what an ICS carries is who they were meeting and about what. Storing the summaries
+   * would make this table the most sensitive thing on the machine in exchange for nothing.
+   */
+  public static final Table CALENDARS_TABLE = Table.named(CALENDARS)
+      .column(Column.id("id"))
+      .column(Column.of("user_id", "BIGINT").notNull().unique())
+      .column(Column.of("url", "VARCHAR(1024)").notNull().withDefault("''"))
+      // a JSON array of {start, end} in epoch millis, and nothing else from the file
+      .column(Column.of("busy", "VARCHAR(262144)").notNull().withDefault("'[]'"))
+      .column(Column.of("fetched_at", "TIMESTAMP"))
+      // what went wrong last time, so a broken link is visible rather than silently empty
+      .column(Column.of("trouble", "VARCHAR(512)").notNull().withDefault("''"))
       .build();
 
   public static final Table TEMPLATES_TABLE = Table.named(TEMPLATES)
@@ -755,7 +791,7 @@ public class Schema {
           ATTACHMENTS_TABLE,
           CONFIG_TABLE, MUTATIONS_TABLE, USER_KEYS_TABLE,
           VOTES_TABLE, AVAILABILITY_TABLE,
-          PROCESSES_TABLE, TASKS_TABLE, HABIT_MARKS_TABLE);
+          PROCESSES_TABLE, TASKS_TABLE, HABIT_MARKS_TABLE, CALENDARS_TABLE);
 
   private Schema() {
   }

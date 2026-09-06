@@ -289,7 +289,8 @@ public class Server {
     AdminRoutes adminRoutes =
         new AdminRoutes(templates, events, accessLog, aiLog, mailer, settings, verbose);
     SelfRoutes selfRoutes = new SelfRoutes(templates, accessLog, verbose);
-    io.hearth.mcp.McpRoutes mcpRoutes = new io.hearth.mcp.McpRoutes(templates, aiLog, verbose);
+    io.hearth.mcp.McpRoutes mcpRoutes =
+        new io.hearth.mcp.McpRoutes(templates, aiLog, verbose).sending(mailer);
     // uploads: one directory under the root, one cache in front of it, and a ceiling taken from
     // the most generous community on the box -- the pipeline needs one number and cannot ask a
     // domain, so the largest wins and UploadGate keeps it to the upload path
@@ -427,6 +428,40 @@ public class Server {
         Boot.ok("listening on " + smtp.port() + " (smtp, inbound only, never relays)");
       }
     }
+
+    // The daily docket.
+    //
+    // One thread for the whole process, waking every fifteen minutes and asking each domain whether
+    // it is past its own morning hour yet -- rather than a timer set for 06:00, which is wrong for
+    // every domain on a different clock and wrong again after a daylight-saving change. The send
+    // itself remembers who has had today's, so waking often costs nothing.
+    java.util.concurrent.ScheduledExecutorService docketClock =
+        java.util.concurrent.Executors.newSingleThreadScheduledExecutor(runnable -> {
+          Thread thread = new Thread(runnable, "docket");
+          thread.setDaemon(true);
+          return thread;
+        });
+    io.hearth.tasks.Docket docket = new io.hearth.tasks.Docket(mailer);
+    docketClock.scheduleWithFixedDelay(() -> {
+      for (Map.Entry<String, DomainConfig> entry : scan.tree.all().entrySet()) {
+        DomainConfig domain = entry.getValue();
+        io.hearth.auth.Accounts accounts = auth.forDomain(domain.domain);
+        if (accounts == null) {
+          continue;
+        }
+        if (java.time.ZonedDateTime.now(domain.zone).getHour() < io.hearth.tasks.Docket.SEND_AT_HOUR) {
+          continue;
+        }
+        try {
+          io.hearth.tasks.Docket.Sent sent = docket.run(domain, accounts);
+          if (sent.people() > 0) {
+            verbose.detail("docket: sent to " + sent.people() + " on " + domain.domain);
+          }
+        } catch (RuntimeException ex) {
+          verbose.say("docket: failed on " + domain.domain + " -- " + ex.getMessage());
+        }
+      }
+    }, 60, 15 * 60, java.util.concurrent.TimeUnit.SECONDS);
 
     if (certManager != null) {
       // Only now. HTTP-01 works by the authority fetching a path from this very server, so an

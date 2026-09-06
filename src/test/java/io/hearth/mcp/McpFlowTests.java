@@ -360,12 +360,20 @@ public class McpFlowTests {
         401, client.listTools().status());
   }
 
+  /**
+   * Losing the right to connect between consent and redemption stops the token.
+   *
+   * <b>The way somebody loses it changed, and the invariant did not.</b> `agent_connect` used to be
+   * a role grant, so this test revoked a role; it is a member baseline now, because agents are how
+   * everybody who is not the owner uses this at all. What takes it away today is ceasing to be a
+   * member -- being disabled, rejected or never approved -- and the re-check at redemption is what
+   * this is here to prove, not the mechanism that removed it.
+   */
   @Test
-  public void demotingTheAdminBetweenConsentAndRedemptionStopsTheToken() throws Exception {
+  public void losingTheRightToConnectBetweenConsentAndRedemptionStopsTheToken() throws Exception {
     Browser deputy = signIn("deputy@example.com");
     var accounts = server.auth.forDomain("example.org");
     long id = accounts.users.byEmail("deputy@example.com").id();
-    accounts.roles.grant(id, io.hearth.auth.Roles.ADMIN, null);
     accounts.users.approve(id, null);
 
     McpClient client = connector();
@@ -373,10 +381,10 @@ public class McpFlowTests {
     String code = client.authorize(deputy, REDIRECT, null);
     assertNotNull(code);
 
-    accounts.roles.revoke(id, io.hearth.auth.Roles.ADMIN);
+    accounts.users.setDisabled(id, true);
     McpClient.Response refused = client.redeem(code, REDIRECT);
     assertEquals(400, refused.status());
-    assertTrue(refused.contains("no longer valid"));
+    assertTrue(refused.body(), refused.contains("no longer valid"));
   }
 
   // ---- the endpoint ------------------------------------------------------------------------------------

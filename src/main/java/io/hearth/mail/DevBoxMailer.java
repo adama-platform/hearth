@@ -60,6 +60,26 @@ public class DevBoxMailer implements Mailer {
     return print(envelope, "password changed", "Your password was just changed. If that wasn't you, come find an admin.", null, null);
   }
 
+  @Override
+  public Outcome sendHostAsk(Envelope envelope, String who, String title, String when,
+                             String link) {
+    return print(envelope, "host?", who + " asks: would you host " + title + " on " + when + "?",
+        null, link);
+  }
+
+  @Override
+  public Outcome sendInvitation(Envelope envelope, String title, String when, String where,
+                                String link) {
+    return print(envelope, "invitation", title + " -- " + when
+        + (where == null || where.isBlank() ? "" : ", at " + where), null, link);
+  }
+
+  @Override
+  public Outcome sendDocket(Envelope envelope, String date, int count, String today, String soon) {
+    return print(envelope, "docket", date + ": " + count + " thing(s)\n\n" + today
+        + (soon == null || soon.isBlank() ? "" : "\n\n" + soon), null, null);
+  }
+
 
 
 

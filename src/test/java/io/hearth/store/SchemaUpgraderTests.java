@@ -315,7 +315,7 @@ public class SchemaUpgraderTests {
       "sessions.user_id", "system_templates.slug", "templates.name", "themes.scope",
       "availability.user_id", "habit_marks.on_day", "habit_marks.task_id",
       "processes.slug", "tasks.user_id", "user_keys.service", "user_keys.user_id",
-      "votes.slug");
+      "votes.slug", "calendars.user_id");
 
   @Test
   public void aVersionOneDatabaseUpgradesToVersionTwoInPlace() throws Exception {

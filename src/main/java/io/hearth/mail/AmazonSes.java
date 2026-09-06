@@ -75,6 +75,23 @@ public class AmazonSes implements Mailer {
     return send(envelope, Messages.passwordChanged(envelope));
   }
 
+  @Override
+  public Outcome sendHostAsk(Envelope envelope, String who, String title, String when,
+                             String link) {
+    return send(envelope, Messages.hostAsk(envelope, who, title, when, link));
+  }
+
+  @Override
+  public Outcome sendInvitation(Envelope envelope, String title, String when, String where,
+                                String link) {
+    return send(envelope, Messages.invitation(envelope, title, when, where, link));
+  }
+
+  @Override
+  public Outcome sendDocket(Envelope envelope, String date, int count, String today, String soon) {
+    return send(envelope, Messages.docket(envelope, date, count, today, soon));
+  }
+
 
 
 

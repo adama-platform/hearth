@@ -31,18 +31,18 @@ public final class AdminView {
   public enum Section {
     overview("", "Overview", "home", null, Permission.admin_enter),
     people("people", "People", "people", null, Permission.people_read),
-    bans("bans", "Bans", "x", people, Permission.people_remove),
+    bans("bans", "Bans", "x", people, Permission.people_manage),
     roles("roles", "Roles", "star", people, Permission.people_roles),
     content("content", "Content", "content", null, Permission.content_read),
-    templates("templates", "Templates", "template", content, Permission.templates_write),
+    templates("templates", "Templates", "template", content, Permission.content_write),
     directories("templates/directories", "Directories", "logs", content,
-        Permission.templates_write),
-    navigation("navigation", "Navigation", "logs", content, Permission.navigation_write),
+        Permission.content_write),
+    navigation("navigation", "Navigation", "logs", content, Permission.content_write),
     tables("tables", "Tables", "logs", content, Permission.tables_write),
     mutations("mutations", "Mutations", "logs", content, Permission.tables_write),
-    attachments("attachments", "Files", "content", content, Permission.attachments_write),
+    attachments("attachments", "Files", "content", content, Permission.content_write),
     bundles("content/bundles", "Import & export", "logs", content, Permission.content_write),
-    unused("attachments/unused", "Unused files", "x", attachments, Permission.attachments_write),
+    unused("attachments/unused", "Unused files", "x", attachments, Permission.content_write),
     // The three that decide what this community looks and sounds like, under one heading. They
     // were three top-level entries competing with People and Content for somebody's eye, and none
     // of them is opened weekly -- a colour, a policy and the wording of an email are things
@@ -53,17 +53,17 @@ public final class AdminView {
     // has at all.
     configuration("configuration", "Settings", "star", null, Permission.config_write),
     setup("configuration/setup", "Setup", "star", configuration, Permission.config_write),
-    look("look", "Customization", "star", null, Permission.appearance_write),
-    appearance("appearance", "Appearance", "star", look, Permission.appearance_write),
-    legal("legal", "Legal", "content", look, Permission.legal_write),
-    messages("messages", "Messages", "content", look, Permission.legal_write),
+    look("look", "Customization", "star", null, Permission.config_write),
+    appearance("appearance", "Appearance", "star", look, Permission.config_write),
+    legal("legal", "Legal", "content", look, Permission.config_write),
+    messages("messages", "Messages", "content", look, Permission.config_write),
     system("system", "System", "analytics", null, Permission.system_read),
     machine("system/machine", "Machine", "analytics", system, Permission.system_read),
     settings("system/settings", "Settings", "star", system, Permission.system_read),
     events("system/events", "Events", "events", system, Permission.system_read),
     analytics("system/analytics", "Analytics", "analytics", system, Permission.system_read),
     caching("system/caching", "Caching", "star", system, Permission.system_read),
-    ai("system/ai", "AI", "star", system, Permission.ai_manage),
+    ai("system/ai", "AI", "star", system, Permission.system_read),
     logs("system/logs", "Log", "logs", system, Permission.system_read),
     // `everything`, which no other section asks for.
     //

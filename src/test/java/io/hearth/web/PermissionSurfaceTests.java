@@ -160,7 +160,7 @@ public class PermissionSurfaceTests {
   public void aNarrowRoleDoesNotGetTheMembershipOnTheFrontOfTheAdmin() throws Exception {
     // `admin_enter` is implied by every permission, so this page is the one everybody with any
     // role at all lands on -- and it used to print who was online next to their email addresses
-    Browser decorator = memberWith("ana@example.com", "decorator", Permission.appearance_write);
+    Browser decorator = memberWith("ana@example.com", "decorator", Permission.config_write);
     Browser.Page page = decorator.get("/admin");
     assertEquals(200, page.status());
     assertFalse("no presence list", page.contains("Here now"));
@@ -178,13 +178,18 @@ public class PermissionSurfaceTests {
 
   @Test
   public void everySectionSomebodyMayNotOpenIsAbsentAndAnswersLikeItIsNotThere() throws Exception {
-    Browser decorator = memberWith("ana@example.com", "decorator", Permission.appearance_write);
+    Browser decorator = memberWith("ana@example.com", "decorator", Permission.config_write);
     Browser.Page appearance = decorator.get("/admin/appearance");
     assertEquals("the one they were given", 200, appearance.status());
+    assertEquals("and the ones that are now the same decision", 200,
+        decorator.get("/admin/legal").status());
     assertFalse("and nothing else in the sidebar", appearance.contains("/admin/people\""));
 
+    // `/admin/legal` is deliberately not in this list any more: the legal pages, the colours and
+    // the wording of email are one permission now, because at this scale they are one afternoon's
+    // work by one person rather than three jobs handed to three people.
     for (String path : new String[]{"/admin/people", "/admin/bans", "/admin/content",
-        "/admin/system/logs", "/admin/roles", "/admin/legal"}) {
+        "/admin/system/logs", "/admin/roles"}) {
       assertEquals(path + " should look like it does not exist", 404,
           decorator.get(path).status());
     }
@@ -198,6 +203,6 @@ public class PermissionSurfaceTests {
     assertEquals("a refusal is still a page, not a slammed door", 200, refused.status());
     assertTrue(refused.contains("You are not able to do that"));
     assertTrue("and it names the permission in the words the role editor uses",
-        refused.contains("Approve somebody waiting to join"));
+        refused.contains("Approve, disable, reject and ban"));
   }
 }
