@@ -42,19 +42,24 @@
     <label for="r-what">then</label>
     <select id="r-what" name="what">
       <option value="forward"{{#isForward}} selected{{/isForward}}>send it on</option>
-      <option value="drop"{{^isForward}} selected{{/isForward}}>accept it and let it go</option>
+      <option value="deliver"{{#isDeliver}} selected{{/isDeliver}}>keep it here, in a mailbox</option>
+      <option value="drop"{{#isDrop}} selected{{/isDrop}}>accept it and let it go</option>
     </select>
-    <p class="hint">Dropping accepts the message and tells the sender it arrived, which is the
-      honest answer for mail somebody simply does not want &mdash; refusing would tell them their
-      address is wrong when it is right.</p>
+    <p class="hint"><strong>Keeping it</strong> puts the message in the mailbox of whoever owns
+      that address, where they read it at <code>/self/mail</code> and get a notification. It needs
+      a named address with an owner, so it cannot be a catch-all.</p>
+    <p class="hint"><strong>Dropping</strong> accepts the message and tells the sender it arrived,
+      which is the honest answer for mail somebody simply does not want &mdash; refusing would tell
+      them their address is wrong when it is right.</p>
   </div>
 
   <div class="field">
     <label for="r-forward">send it to</label>
     <input id="r-forward" type="email" name="forwardTo" value="{{form_forwardTo}}" placeholder="her@gmail.com">
-    <p class="hint">Delivered to that domain&rsquo;s own mail exchangers, over TLS, with the message
-      untouched below the headers this server adds. It cannot be an address at {{domain}}, which
-      would send the message back through this same rule.</p>
+    <p class="hint">Only for &ldquo;send it on&rdquo;. Delivered to that domain&rsquo;s own mail
+      exchangers, over TLS, with the message untouched below the headers this server adds. It
+      cannot be an address at {{domain}}, which would send the message back through this same
+      rule.</p>
   </div>
 
   <div class="field">

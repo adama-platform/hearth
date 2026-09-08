@@ -68,6 +68,12 @@ public class Accounts {
   /** what arrived, what was decided about it, and what the far end said */
   public final io.hearth.smtp.MailLog mailLog;
 
+  /** the mail that was delivered here rather than sent on, one row per message per person */
+  public final io.hearth.inbox.Messages inbox;
+
+  /** somebody's own calendar, and the URL a phone subscribes to */
+  public final io.hearth.calendar.Events events;
+
   /**
    * The tables this community invented, in a database file of their own.
    *
@@ -149,6 +155,8 @@ public class Accounts {
     this.mutations = new io.hearth.content.Mutations(store);
     this.mailboxes = new io.hearth.smtp.Mailboxes(store);
     this.mailLog = new io.hearth.smtp.MailLog(store);
+    this.inbox = new io.hearth.inbox.Messages(store);
+    this.events = new io.hearth.calendar.Events(store);
     this.tasks = new io.hearth.tasks.Tasks(store, zone);
     this.processes = new io.hearth.tasks.Processes(store);
     this.votes = new io.hearth.vote.Votes(store);

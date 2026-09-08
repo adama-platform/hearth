@@ -316,7 +316,10 @@ public class SchemaUpgraderTests {
       "availability.user_id", "habit_marks.on_day", "habit_marks.task_id",
       "processes.slug", "tasks.user_id", "user_keys.service", "user_keys.user_id",
       "votes.slug", "calendars.user_id",
-      "mailboxes.domain", "mailboxes.local_part", "mail_rules.domain", "mail_log.domain");
+      "mailboxes.domain", "mailboxes.local_part", "mail_rules.domain", "mail_log.domain",
+      "mail_messages.user_id", "mail_messages.domain", "mail_messages.delivered_to",
+      "calendar_events.user_id", "calendar_events.uid", "calendar_events.starts_at",
+      "calendar_events.ends_at", "calendar_feeds.user_id", "calendar_feeds.token_hash");
 
   @Test
   public void aVersionOneDatabaseUpgradesToVersionTwoInPlace() throws Exception {

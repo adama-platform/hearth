@@ -30,7 +30,7 @@
     <td><a href="{{editUrl}}">{{name}}</a>
       {{#catchAll}}<span class="pill dim">catch-all</span>{{/catchAll}}
       <div class="dim mono">{{matches}}</div></td>
-    <td>{{#forwards}}<span class="mono">{{forwardTo}}</span>{{/forwards}}{{^forwards}}<span class="dim">dropped</span>{{/forwards}}</td>
+    <td>{{#forwards}}<span class="mono">{{forwardTo}}</span>{{/forwards}}{{#keeps}}<span class="pill good">kept here</span>{{/keeps}}{{^forwards}}{{^keeps}}<span class="dim">dropped</span>{{/keeps}}{{/forwards}}</td>
     <td>{{#enabled}}<span class="pill good">on</span>{{/enabled}}{{^enabled}}<span class="pill dim">off</span>{{/enabled}}</td>
     <td class="actions"><a href="{{editUrl}}">edit</a></td>
   </tr>{{/rules}}</tbody>
@@ -41,4 +41,8 @@
 <p class="hint">A catch-all rule matches everything below it as well, so it belongs last. An address
   that no rule matches is accepted and discarded &mdash; <a href="{{addressesUrl}}">Addresses</a>
   says which of yours are in that state.</p>
+<p class="hint">A rule that <strong>keeps</strong> mail puts it in the mailbox of whoever owns that
+  address; they read it at <code>/self/mail</code> and get a notification when it lands. Give the
+  address an owner under <a href="{{addressesUrl}}">Addresses</a> first &mdash; a message kept for
+  an address nobody owns would be a message nowhere.</p>
 {{/content}}{{/shell}}

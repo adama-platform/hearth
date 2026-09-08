@@ -292,10 +292,17 @@ public class Browser {
     }
     HttpResponse<String> response = client.send(builder.build(), HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
     absorbCookies(response.headers().allValues("set-cookie"));
+    java.util.LinkedHashMap<String, String> headers = new java.util.LinkedHashMap<>();
+    response.headers().map().forEach((name, values) -> {
+      if (!values.isEmpty()) {
+        headers.put(name.toLowerCase(java.util.Locale.ROOT), values.get(0));
+      }
+    });
     current = new Page(response.statusCode(), response.body(), path,
         response.headers().firstValue("location").orElse(null),
         response.headers().allValues("set-cookie"),
-        response.headers().firstValue("content-security-policy").orElse(null));
+        response.headers().firstValue("content-security-policy").orElse(null),
+        headers);
     return current;
   }
 
@@ -353,7 +360,20 @@ public class Browser {
 
   /** one response, with the bits a test wants to assert on or feed back in */
   public record Page(int status, String body, String requestedPath, String location,
-                     List<String> setCookies, String csp) {
+                     List<String> setCookies, String csp, Map<String, String> headers) {
+
+    /**
+     * One response header, lowercased by name, or "" when it is absent.
+     *
+     * Empty rather than null because every caller is asserting on the value: what a browser is
+     * told about a download -- the content type, the disposition, `nosniff` -- is the difference
+     * between handing somebody a file and running a stranger's document in this origin, and none
+     * of it is visible from inside a handler.
+     */
+    public String header(String name) {
+      String value = headers.get(name.toLowerCase(java.util.Locale.ROOT));
+      return value == null ? "" : value;
+    }
     /** the minted-form blob this page carries, or null when it is a plain page */
     public JsonNode mint() {
       Matcher matcher = MINT_BLOB.matcher(body);

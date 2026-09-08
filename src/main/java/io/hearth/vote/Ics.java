@@ -54,6 +54,14 @@ public final class Ics {
 
   /** the most occurrences one rule may produce, so a daily forever rule cannot fill memory */
   public static final int MAX_OCCURRENCES = 200;
+  /**
+   * How many times the expansion may step before giving up.
+   *
+   * Separate from the number of results, because a window a year away from a daily rule is three
+   * hundred steps that produce nothing worth keeping. Without this the two are the same number and
+   * a long-running repeat runs out of budget before it reaches the days somebody is looking at.
+   */
+  private static final int MAX_STEPS = 4000;
 
   /**
    * One window somebody is not free, and how certain that is.
@@ -153,9 +161,33 @@ public final class Ics {
    * total: a DAILY rule with no COUNT and no UNTIL is legal, infinite, and would otherwise be a
    * shared calendar that fills this machine's memory.
    */
-  static List<Long> occurrences(long start, String rule, ZoneId zone) {
+  // public for the same reason as unfold: the calendar expands a repeat to draw it, and RRULE has
+  // exactly one correct reading.
+  public static List<Long> occurrences(long start, String rule, ZoneId zone) {
+    return occurrencesIn(start, rule, zone, start, start + EXPAND_DAYS * 24L * 60 * 60 * 1000);
+  }
+
+  /**
+   * The same expansion, over a window that need not begin at the event.
+   *
+   * <b>A stored calendar is the case the other signature cannot serve.</b> A weekly standup set up
+   * two years ago has a `DTSTART` four hundred days behind today, so expanding "a hundred and
+   * twenty days from the start" produces a list that ends long before this morning -- and the
+   * meeting disappears from the calendar of everybody who has been attending it all along. That is
+   * fine for a calendar fetched fresh from somebody's URL, which is what the other one does, and
+   * wrong for one this server keeps.
+   *
+   * <b>Bounded by steps as well as by results.</b> Fast-forwarding to a window a year away costs
+   * three hundred iterations for a daily rule, so the iteration is capped separately from the
+   * collection -- otherwise a rule with no COUNT and no UNTIL is an infinite loop with a list on
+   * the end of it.
+   */
+  public static List<Long> occurrencesIn(long start, String rule, ZoneId zone, long from,
+                                         long to) {
     ArrayList<Long> out = new ArrayList<>();
-    out.add(start);
+    if (start >= from && start <= to) {
+      out.add(start);
+    }
     java.util.Map<String, String> parts = new java.util.HashMap<>();
     for (String piece : rule.split(";")) {
       int equals = piece.indexOf('=');
@@ -168,10 +200,13 @@ public final class Ics {
     int interval = Math.max(1, intOr(parts.get("INTERVAL"), 1));
     int count = intOr(parts.get("COUNT"), 0);
     long until = parts.containsKey("UNTIL") ? millisOf(parts.get("UNTIL"), zone) : -1;
-    long horizon = start + EXPAND_DAYS * 24L * 60 * 60 * 1000;
+    long horizon = to;
     if (until > 0) {
       horizon = Math.min(horizon, until);
     }
+    // COUNT is a number of occurrences from the beginning of the rule, not a number inside the
+    // window -- so what is produced has to be counted separately from what is kept.
+    int produced = 1;
 
     java.time.ZonedDateTime first = java.time.Instant.ofEpochMilli(start).atZone(zone);
     java.util.List<java.time.DayOfWeek> days = byDay(parts.get("BYDAY"));
@@ -182,7 +217,7 @@ public final class Ics {
       // only one of them.
       java.time.ZonedDateTime weekStart = first.minusDays(
           first.getDayOfWeek().getValue() - 1L);
-      for (int week = 0; out.size() < MAX_OCCURRENCES; week++) {
+      for (int week = 0; week < MAX_STEPS && out.size() < MAX_OCCURRENCES; week++) {
         java.time.ZonedDateTime cursor = weekStart.plusWeeks((long) week * interval);
         if (cursor.toInstant().toEpochMilli() > horizon) {
           break;
@@ -193,20 +228,27 @@ public final class Ics {
               .withHour(first.getHour()).withMinute(first.getMinute())
               .withSecond(first.getSecond());
           long millis = at.toInstant().toEpochMilli();
-          if (millis > start && millis <= horizon && !out.contains(millis)) {
+          if (millis <= start || millis > horizon) {
+            continue;
+          }
+          if (count > 0 && produced >= count) {
+            break;
+          }
+          produced++;
+          if (millis >= from && !out.contains(millis)) {
             out.add(millis);
           }
         }
-        if (count > 0 && out.size() >= count) {
+        if (count > 0 && produced >= count) {
           break;
         }
       }
       out.sort(Long::compare);
-      return trim(out, count);
+      return out;
     }
 
     java.time.ZonedDateTime cursor = first;
-    while (out.size() < MAX_OCCURRENCES) {
+    for (int step = 0; step < MAX_STEPS && out.size() < MAX_OCCURRENCES; step++) {
       cursor = switch (freq) {
         case "DAILY" -> cursor.plusDays(interval);
         case "WEEKLY" -> cursor.plusWeeks(interval);
@@ -223,16 +265,15 @@ public final class Ics {
       if (millis > horizon) {
         break;
       }
-      out.add(millis);
-      if (count > 0 && out.size() >= count) {
+      if (count > 0 && produced >= count) {
         break;
       }
+      produced++;
+      if (millis >= from) {
+        out.add(millis);
+      }
     }
-    return trim(out, count);
-  }
-
-  private static List<Long> trim(List<Long> out, int count) {
-    return count > 0 && out.size() > count ? new ArrayList<>(out.subList(0, count)) : out;
+    return out;
   }
 
   private static List<java.time.DayOfWeek> byDay(String value) {
@@ -276,7 +317,10 @@ public final class Ics {
    * a truncated timestamp followed by a line starting with a space, and both parse to something --
    * which is how a parser gets the wrong day without failing.
    */
-  static List<String> unfold(String text) {
+  // public because io.hearth.calendar parses the same files for a different reason. One
+  // implementation of line unfolding, not two: a second one would agree with this until the day a
+  // fold landed in the middle of a UTF-8 character in only one of them.
+  public static List<String> unfold(String text) {
     ArrayList<String> lines = new ArrayList<>();
     StringBuilder current = new StringBuilder();
     for (String raw : text.split("\r\n|\n|\r")) {

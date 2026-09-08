@@ -72,6 +72,18 @@ public final class Erasure {
   public static Report erase(Accounts accounts, io.hearth.analytics.AccessLog log,
                              UserRecord person, Long actor, boolean alsoRemoveWhatTheyWrote)
       throws SQLException {
+    return erase(accounts, log, person, actor, alsoRemoveWhatTheyWrote, null);
+  }
+
+  /**
+   * @param files where delivered mail's octets live, or null on a box that stores none. Null is a
+   *              real configuration and not a shortcut: a server that only forwards has no message
+   *              files, and the rows it has none of are deleted just the same.
+   */
+  public static Report erase(Accounts accounts, io.hearth.analytics.AccessLog log,
+                             UserRecord person, Long actor, boolean alsoRemoveWhatTheyWrote,
+                             io.hearth.inbox.MessageFiles files)
+      throws SQLException {
     long id = person.id();
     LinkedHashMap<String, Integer> counts = new LinkedHashMap<>();
 
@@ -99,6 +111,14 @@ public final class Erasure {
     // domain owner's, not the member's.
     counts.put("mail log entr(ies)", accounts.mailLog.forget(person.email()));
     counts.put("mailbox(es) unnamed", accounts.mailboxes.forgetOwner(id));
+    // Their mail, and the originals on disk with it.
+    //
+    // The files go first: a row deleted before its file leaves a message on disk that nothing
+    // names, which no later erasure will ever find. This is also why the ids are read out before
+    // anything is deleted rather than derived afterwards.
+    counts.put("stored message(s)", eraseMail(accounts, files, id));
+    counts.put("calendar event(s)", accounts.events.forget(id));
+    accounts.events.revokeFeed(id);
     // deleted rather than revoked: a revoked row lingers for a day, and this is the request that
     // means "there should be nothing left"
     counts.put("session(s)", accounts.sessions.deleteAllFor(id));
@@ -117,6 +137,23 @@ public final class Erasure {
 
     accounts.users.delete(id);
     return new Report(counts, person.email());
+  }
+
+  /**
+   * Every message of theirs, off the disk and out of the table.
+   *
+   * The files are removed first and the rows second. A row deleted before its file leaves an
+   * orphan on disk that nothing names and no later erasure will find -- which is somebody's mail
+   * surviving the request that was meant to remove all of it.
+   */
+  private static int eraseMail(Accounts accounts, io.hearth.inbox.MessageFiles files, long id)
+      throws SQLException {
+    if (files != null) {
+      for (Long messageId : accounts.inbox.idsFor(id)) {
+        files.delete(messageId);
+      }
+    }
+    return accounts.inbox.forget(id);
   }
 
   private static int update(Connection connection, String sql, Object... args) throws SQLException {

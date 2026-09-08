@@ -435,6 +435,46 @@ public class ForwardingTests {
     assertEquals("unrouted", accounts().mailLog.recent(DOMAIN, 1).get(0).outcome());
   }
 
+  /**
+   * A recipient no rule matched reaches the fallback, which prints it.
+   *
+   * This counted an unrouted recipient as handled and answered "forwarded", so on a box with no
+   * rules yet every message was accepted, reported as forwarded, and went nowhere at all -- while
+   * the boot line said anything unrouted was printed. Found by sending one real message over a
+   * socket to a real server, which is the only place it was visible.
+   */
+  @Test
+  public void aMessageNoRuleMatchesReachesTheFallbackRatherThanVanishing() throws Exception {
+    java.util.List<String> printed = new java.util.ArrayList<>();
+    FakeDns dns = new FakeDns();
+    Relay relay = new Relay(dns, "mail." + DOMAIN, false, far.port(), Verbose.OFF);
+    Forwarding forwarding = new Forwarding(server.auth, forwardConfig(), keys, relay,
+        envelope -> {
+          printed.add(envelope.subject());
+          return MailReceiver.Outcome.accepted("printed");
+        }, Verbose.OFF);
+
+    boxes().saveBox(0, DOMAIN, "jeff", "mine", null, true, null);
+    MailReceiver.Outcome outcome = forwarding.receive(arriving("jeff@" + DOMAIN));
+    assertAccepted(outcome);
+    assertEquals("it was printed, once", java.util.List.of("about Thursday"), printed);
+    assertEquals("and the answer says so rather than claiming a forward", "printed",
+        outcome.detail());
+  }
+
+  @Test
+  public void adomainWithNoRulesAtAllStillPrintsWhatArrives() throws Exception {
+    java.util.List<String> printed = new java.util.ArrayList<>();
+    Forwarding forwarding = new Forwarding(server.auth, forwardConfig(), keys,
+        new Relay(new FakeDns(), "mail." + DOMAIN, false, far.port(), Verbose.OFF),
+        envelope -> {
+          printed.add(envelope.subject());
+          return MailReceiver.Outcome.accepted("printed");
+        }, Verbose.OFF);
+    assertAccepted(forwarding.receive(arriving("anybody@" + DOMAIN)));
+    assertEquals(1, printed.size());
+  }
+
   @Test
   public void theTroubleListIsTheOneSomebodyActuallyOpens() throws Exception {
     forwardEverythingTo("her@elsewhere.example");

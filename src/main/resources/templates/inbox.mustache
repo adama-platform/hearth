@@ -1,0 +1,51 @@
+{{<layout}}{{$body}}
+<nav class="crumb"><a href="{{selfUrl}}">You</a> &middot; <a href="{{calendarUrl}}">Calendar</a></nav>
+<h1>Mail{{#unread}} <span class="pill">{{.}} new</span>{{/unread}}</h1>
+
+{{#flash}}<p class="{{#bad}}problem{{/bad}}{{#good}}done{{/good}}">{{text}}</p>{{/flash}}
+
+<form class="tools" method="get" action="{{inboxUrl}}">
+  <div class="search">
+    <input type="search" name="q" value="{{q}}" placeholder="Search sender, subject or text" aria-label="search your mail">
+  </div>
+  <button type="submit" class="quiet">Search</button>
+  {{^archived}}<a class="quiet" href="{{archiveUrl}}">Dealt with</a>{{/archived}}
+  {{#archived}}<a class="quiet" href="{{inboxUrl}}">Inbox</a>{{/archived}}
+</form>
+
+{{#clear}}
+<div class="card empty">
+  <h2>Nothing to do.</h2>
+  <p class="hint">The inbox is empty, which is where it is meant to be. Anything you have already
+    answered or filed is under <a href="{{archiveUrl}}">Dealt with</a>.</p>
+</div>
+{{/clear}}
+
+{{^clear}}
+{{^any}}<p class="hint">{{#searching}}Nothing matches &ldquo;{{q}}&rdquo;.{{/searching}}{{^searching}}Nothing here.{{/searching}}</p>{{/any}}
+{{#any}}
+<p class="count">{{count}}{{#archived}} dealt with{{/archived}}{{#searching}} found{{/searching}}</p>
+<ul class="mails">
+  {{#messages}}
+  <li class="mail{{#unread}} unread{{/unread}}">
+    <a href="{{openUrl}}">
+      <span class="mailwho">{{who}}</span>
+      <span class="mailsubject">{{subject}}</span>
+      <span class="mailpreview dim">{{preview}}</span>
+    </a>
+    <span class="mailmeta">
+      {{#hasAttachments}}<span class="pill dim" title="{{attachments}} attachment(s)">&#128206; {{attachments}}</span>{{/hasAttachments}}
+      {{#hasCalendar}}<span class="pill dim">invitation</span>{{/hasCalendar}}
+      {{#replied}}<span class="pill dim">answered</span>{{/replied}}
+      {{^authenticated}}<span class="pill warn" title="nothing vouched for this message">unverified</span>{{/authenticated}}
+      <span class="dim mono">{{when}}</span>
+    </span>
+  </li>
+  {{/messages}}
+</ul>
+{{/any}}
+{{/clear}}
+
+<p class="hint">Every message goes to one of your addresses, and a reply goes out from whichever
+  one it arrived at. Nothing in a message is ever loaded from somebody else&rsquo;s server.</p>
+{{/body}}{{/layout}}

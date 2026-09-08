@@ -56,6 +56,9 @@ public class WebHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
   private final io.hearth.mcp.McpRoutes mcp;
   private final io.hearth.attach.AttachmentRoutes attachments;
   private final PwaRoutes pwa;
+  /** reading mail and keeping a calendar; null when this box was built without them */
+  private io.hearth.inbox.InboxRoutes inbox;
+  private io.hearth.calendar.CalendarRoutes calendar;
   private final io.hearth.legal.LegalRoutes legal;
   private final ThirdParty thirdParty;
   private final ThemeRoutes theme;
@@ -85,6 +88,19 @@ public class WebHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
     this.challenges = challenges;
     this.accessLog = accessLog;
     this.verbose = verbose;
+  }
+
+  /**
+   * The two screens that only exist when this box stores mail.
+   *
+   * Set after construction rather than taken as constructor arguments, because a server with
+   * forwarding off has neither -- and thirteen constructor arguments where two are usually null is
+   * how a call site gets them the wrong way round.
+   */
+  public void alsoServes(io.hearth.inbox.InboxRoutes inbox,
+                         io.hearth.calendar.CalendarRoutes calendar) {
+    this.inbox = inbox;
+    this.calendar = calendar;
   }
 
   @Override
@@ -274,6 +290,17 @@ public class WebHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
       attachments.handle(config, accountsForDomain, ctx, req, recorder);
       return;
     }
+    // A calendar subscription, before the approval gate and before anything asks for a session.
+    //
+    // The token in the URL is the whole credential: a calendar client has no cookie jar and no way
+    // to sign in, which is why the token is long, random, hashed at rest and revocable. It answers
+    // 404 to a wrong one rather than anything that would confirm a near miss.
+    if (calendar != null && accountsForDomain != null && !post
+        && io.hearth.calendar.CalendarRoutes.isFeed(path)) {
+      verbose.detail("calendar feed on " + config.domain);
+      calendar.feed(config, accountsForDomain, ctx, req, recorder);
+      return;
+    }
     if (session != null && accountsForDomain != null && !isAlwaysReachable(config, path)
         && !approved(accountsForDomain, session)) {
       // signed in but not approved: they can write a profile and answer questions, and that is all.
@@ -313,6 +340,19 @@ public class WebHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
         && PwaRoutes.owns(path)) {
       verbose.detail("pwa " + path + " on " + config.domain);
       pwa.handle(config, accountsForDomain, ctx, req, recorder);
+      return;
+    }
+
+    if (inbox != null && accountsForDomain != null
+        && io.hearth.inbox.InboxRoutes.owns(config, path)) {
+      verbose.detail("inbox " + path + " on " + config.domain);
+      inbox.handle(config, accountsForDomain, ctx, req, recorder);
+      return;
+    }
+    if (calendar != null && accountsForDomain != null
+        && io.hearth.calendar.CalendarRoutes.owns(config, path)) {
+      verbose.detail("calendar " + path + " on " + config.domain);
+      calendar.handle(config, accountsForDomain, ctx, req, recorder);
       return;
     }
 

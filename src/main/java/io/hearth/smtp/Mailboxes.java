@@ -57,6 +57,15 @@ public class Mailboxes {
   public enum Action {
     /** send it on to somewhere else, by that domain's own MX */
     forward,
+    /**
+     * Keep it here, in the mailbox of whoever owns the address.
+     *
+     * The only action that needs the address to belong to somebody: a message put in a mailbox
+     * nobody owns sits in a table no screen lists, which is a message lost rather than delivered.
+     * The rule editor refuses to save one that would, and the address list says which addresses are
+     * in that state.
+     */
+    deliver,
     /** accept it and let it go; the sender is told nothing, because it was accepted */
     drop;
 
@@ -114,7 +123,11 @@ public class Mailboxes {
       if (!matchSubject.isBlank()) {
         out.append(" about ").append(matchSubject);
       }
-      out.append(action == Action.forward ? " -> " + forwardTo : " -> dropped");
+      out.append(switch (action) {
+        case forward -> " -> " + forwardTo;
+        case deliver -> " -> kept here";
+        case drop -> " -> dropped";
+      });
       return out.toString();
     }
   }
@@ -205,6 +218,23 @@ public class Mailboxes {
       statement.executeUpdate();
     }
     store.changed(Schema.MAILBOXES, id, MutationEvent.Kind.delete, actor);
+  }
+
+  /** every address that is this person's, which is the set a reply-all must not write back to */
+  public List<Box> ownedBy(long userId) throws SQLException {
+    ArrayList<Box> rows = new ArrayList<>();
+    try (Connection connection = store.connection();
+         PreparedStatement statement = connection.prepareStatement(
+             "SELECT * FROM " + Schema.MAILBOXES + " WHERE user_id = ? ORDER BY domain,"
+                 + " local_part")) {
+      statement.setLong(1, userId);
+      try (ResultSet found = statement.executeQuery()) {
+        while (found.next()) {
+          rows.add(readBox(found));
+        }
+      }
+    }
+    return rows;
   }
 
   /**

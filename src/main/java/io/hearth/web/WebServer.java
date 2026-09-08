@@ -41,6 +41,9 @@ public class WebServer implements Runnable {
   private final Verbose verbose;
   private final PwaRoutes pwa;
   private final io.hearth.legal.LegalRoutes legal;
+  /** the mail reader and the calendar, when this box has them */
+  private io.hearth.inbox.InboxRoutes inbox;
+  private io.hearth.calendar.CalendarRoutes calendar;
   private final io.hearth.certs.TlsContexts tls;
   private final AtomicBoolean started;
   private final CountDownLatch ready;
@@ -79,6 +82,20 @@ public class WebServer implements Runnable {
     this.stopped = false;
   }
 
+  /**
+   * The mail reader and the calendar, when this box stores mail.
+   *
+   * After construction rather than in it: a server with forwarding off has neither, and an
+   * already-long constructor with two more usually-null arguments is how a call site gets them the
+   * wrong way round.
+   */
+  public WebServer alsoServing(io.hearth.inbox.InboxRoutes inbox,
+                               io.hearth.calendar.CalendarRoutes calendar) {
+    this.inbox = inbox;
+    this.calendar = calendar;
+    return this;
+  }
+
   /** blocks until the listening channel closes */
   @Override
   public void run() {
@@ -96,7 +113,7 @@ public class WebServer implements Runnable {
           .childOption(ChannelOption.TCP_NODELAY, true)
           .childOption(ChannelOption.SO_KEEPALIVE, true)
           .childHandler(new Initializer(webConfig, domains, auth, pages, accounts, admin, self, mcp, attachments,
-              pwa, legal, challenges, accessLog, verbose, null));
+              pwa, legal, challenges, accessLog, verbose, null).alsoServing(inbox, calendar));
       verbose.say("binding " + webConfig.bind + ":" + webConfig.port + " with " + webConfig.workerThreads + " worker thread(s)");
       Channel bound = bootstrap.bind(new InetSocketAddress(webConfig.bind, webConfig.port)).sync().channel();
 
@@ -112,7 +129,8 @@ public class WebServer implements Runnable {
             .childOption(ChannelOption.TCP_NODELAY, true)
             .childOption(ChannelOption.SO_KEEPALIVE, true)
             .childHandler(new Initializer(webConfig, domains, auth, pages, accounts, admin, self,
-                mcp, attachments, pwa, legal, challenges, accessLog, verbose, tls));
+                mcp, attachments, pwa, legal, challenges, accessLog, verbose, tls)
+                .alsoServing(inbox, calendar));
         verbose.say("binding " + webConfig.bind + ":" + webConfig.httpsPort + " for https");
         httpsChannel = secure.bind(new InetSocketAddress(webConfig.bind, webConfig.httpsPort)).sync().channel();
       }

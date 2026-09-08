@@ -146,6 +146,19 @@ public class AdminRoutes {
 
   private io.hearth.smtp.MailKeys mailKeys;
 
+  /**
+   * Where delivered mail's octets live, so an erasure takes them with the rows.
+   *
+   * Null on a box that stores no mail, which is a real configuration rather than an oversight: a
+   * server that only forwards has no message files and the rows it has none of are deleted just
+   * the same.
+   */
+  private io.hearth.inbox.MessageFiles messageFiles;
+
+  public void knowsAbout(io.hearth.inbox.MessageFiles files) {
+    this.messageFiles = files;
+  }
+
   // ---- dispatch --------------------------------------------------------------------------------
 
   public void handle(DomainConfig config, Accounts accounts, ChannelHandlerContext ctx,
@@ -360,7 +373,7 @@ public class AdminRoutes {
         // the same erasure a request to be forgotten gets. It used to be a smaller sweep that left
         // the address in four other tables, which made "rejected and removed" not quite true.
         io.hearth.people.Erasure.Report report =
-            io.hearth.people.Erasure.erase(accounts, accessLog, target, me.id(), false);
+            io.hearth.people.Erasure.erase(accounts, accessLog, target, me.id(), false, messageFiles);
         yield Outcome.done(report.email()
             + (andBan ? " was rejected, removed and banned." : " was rejected and removed."),
             toList);
@@ -421,7 +434,7 @@ public class AdminRoutes {
     accounts.bans.ban(email, form.get("reason"), me.id());
     if (existing != null) {
       io.hearth.people.Erasure.Report report =
-          io.hearth.people.Erasure.erase(accounts, accessLog, existing, me.id(), false);
+          io.hearth.people.Erasure.erase(accounts, accessLog, existing, me.id(), false, messageFiles);
       return Outcome.done(email + " is banned, and the account was removed along with "
           + report.describe() + ".");
     }
@@ -1868,6 +1881,7 @@ public class AdminRoutes {
       row.put("matches", rule.describe());
       row.put("catchAll", io.hearth.smtp.Mailboxes.EVERYONE.equals(rule.matchTo()));
       row.put("forwards", rule.action() == io.hearth.smtp.Mailboxes.Action.forward);
+      row.put("keeps", rule.action() == io.hearth.smtp.Mailboxes.Action.deliver);
       row.put("forwardTo", rule.forwardTo());
       row.put("enabled", rule.enabled());
       row.put("editUrl", prefix + "/edit/" + rule.id());
@@ -1896,6 +1910,9 @@ public class AdminRoutes {
     model.put("form_forwardTo", rule == null ? "" : rule.forwardTo());
     model.put("form_enabled", rule == null || rule.enabled());
     model.put("isForward", rule == null || rule.action() == io.hearth.smtp.Mailboxes.Action.forward);
+    model.put("isDeliver", rule != null
+        && rule.action() == io.hearth.smtp.Mailboxes.Action.deliver);
+    model.put("isDrop", rule != null && rule.action() == io.hearth.smtp.Mailboxes.Action.drop);
     ArrayList<Map<String, Object>> known = new ArrayList<>();
     for (io.hearth.smtp.Mailboxes.Box box : accounts.mailboxes.boxes(config.domain)) {
       known.add(Map.of("localPart", box.localPart(), "label", box.label()));
@@ -2143,6 +2160,27 @@ public class AdminRoutes {
         && config.domain.equalsIgnoreCase(io.hearth.smtp.SmtpRouting.domainOf(forwardTo))) {
       return Outcome.refused("Forwarding to an address at " + config.domain
           + " sends mail back through this same rule, which is a loop.");
+    }
+    // A rule that keeps mail needs somewhere to keep it.
+    //
+    // The mailbox has to exist and belong to somebody: a message put in an address nobody owns
+    // sits in a table no screen lists, which is a message lost rather than delivered. Refusing
+    // here means the mistake is caught while somebody is looking at the form rather than the first
+    // time real mail arrives.
+    if (what == io.hearth.smtp.Mailboxes.Action.deliver) {
+      if (io.hearth.smtp.Mailboxes.EVERYONE.equals(matchTo)) {
+        return Outcome.refused("A catch-all cannot be kept: there is no one address to keep it"
+            + " in. Name the address this rule is for.");
+      }
+      io.hearth.smtp.Mailboxes.Box target = accounts.mailboxes.box(config.domain, matchTo);
+      if (target == null) {
+        return Outcome.refused(matchTo + "@" + config.domain + " is not an address here yet."
+            + " Add it first.");
+      }
+      if (target.userId() == null) {
+        return Outcome.refused("Nobody owns " + target.address() + ", so there is nowhere to keep"
+            + " its mail. Give it to somebody first.");
+      }
     }
     long saved = accounts.mailboxes.saveRule(id, config.domain,
         (int) Math.max(1, Math.min(9999, longOr(form.get("position")))),

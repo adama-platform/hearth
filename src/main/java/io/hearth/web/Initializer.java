@@ -54,7 +54,23 @@ public class Initializer extends ChannelInitializer<SocketChannel> {
   private final PwaRoutes pwa;
   private final io.hearth.legal.LegalRoutes legal;
   private final io.hearth.certs.TlsContexts tls;
+  /** the mail reader and the calendar, when this box has them */
+  private io.hearth.inbox.InboxRoutes inbox;
+  private io.hearth.calendar.CalendarRoutes calendar;
   private final Verbose verbose;
+
+  /**
+   * The two screens that exist only when this box stores mail.
+   *
+   * Handed to every handler this initializer builds, which is one per connection -- so a server
+   * started without them serves exactly the site it served before they existed.
+   */
+  public Initializer alsoServing(io.hearth.inbox.InboxRoutes inbox,
+                                 io.hearth.calendar.CalendarRoutes calendar) {
+    this.inbox = inbox;
+    this.calendar = calendar;
+    return this;
+  }
 
   public Initializer(WebConfig webConfig, DomainTree domains, AuthSystem auth, Pages pages,
                      AccountRoutes accounts, AdminRoutes admin, SelfRoutes self,
@@ -132,8 +148,10 @@ public class Initializer extends ChannelInitializer<SocketChannel> {
             io.hearth.attach.AttachmentRoutes.UPLOAD));
         stream.pipeline().addLast(new HttpObjectAggregator(webConfig.uploadCeiling()));
         stream.pipeline().addLast(new HttpContentCompressor());
-        stream.pipeline().addLast(new WebHandler(domains, auth, pages, accounts, admin, self, mcp, attachments,
-            pwa, legal, challenges, accessLog, verbose));
+        WebHandler handler = new WebHandler(domains, auth, pages, accounts, admin, self, mcp,
+            attachments, pwa, legal, challenges, accessLog, verbose);
+        handler.alsoServes(inbox, calendar);
+        stream.pipeline().addLast(handler);
       }
     }));
   }
@@ -148,6 +166,9 @@ public class Initializer extends ChannelInitializer<SocketChannel> {
         io.hearth.attach.AttachmentRoutes.UPLOAD));
     pipeline.addLast(new HttpObjectAggregator(webConfig.uploadCeiling()));
     pipeline.addLast(new HttpContentCompressor());
-    pipeline.addLast(new WebHandler(domains, auth, pages, accounts, admin, self, mcp, attachments, pwa, legal, challenges, accessLog, verbose));
+    WebHandler handler = new WebHandler(domains, auth, pages, accounts, admin, self, mcp,
+        attachments, pwa, legal, challenges, accessLog, verbose);
+    handler.alsoServes(inbox, calendar);
+    pipeline.addLast(handler);
   }
 }

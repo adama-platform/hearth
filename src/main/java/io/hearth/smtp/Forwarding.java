@@ -62,6 +62,21 @@ public class Forwarding implements MailReceiver {
   private final Relay relay;
   private final MailReceiver fallback;
   private final Verbose verbose;
+  /**
+   * What keeps a message rather than sending it on, or null when this box stores no mail.
+   *
+   * Null is a real configuration: a machine that only forwards has no reason to hold anybody's
+   * mail, and a `deliver` rule on it is refused with a sentence rather than silently dropping the
+   * message.
+   */
+  private final io.hearth.inbox.Delivery inbox;
+  /**
+   * Which domains this server answers for, so a notification can link to the right one.
+   *
+   * The same tree the routing uses. A box serving three communities has three `/self` paths, and a
+   * notification tapped on a phone has to land on the one whose mail arrived.
+   */
+  private final io.hearth.vhost.DomainTree domains;
 
   /**
    * @param keys     the signing key, or null when none could be opened -- mail is still forwarded,
@@ -72,6 +87,14 @@ public class Forwarding implements MailReceiver {
    */
   public Forwarding(AuthSystem auth, ForwardConfig config, MailKeys keys, Relay relay,
                     MailReceiver fallback, Verbose verbose) {
+    this(auth, config, keys, relay, fallback, null, null, verbose);
+  }
+
+  public Forwarding(AuthSystem auth, ForwardConfig config, MailKeys keys, Relay relay,
+                    MailReceiver fallback, io.hearth.inbox.Delivery inbox,
+                    io.hearth.vhost.DomainTree domains, Verbose verbose) {
+    this.inbox = inbox;
+    this.domains = domains;
     this.auth = auth;
     this.config = config;
     this.keys = keys;
@@ -135,11 +158,12 @@ public class Forwarding implements MailReceiver {
     }
 
     List<String> handled = new ArrayList<>();
+    List<String> unrouted = new ArrayList<>();
     Outcome worst = null;
     for (String recipient : envelope.recipients()) {
-      Outcome one = deliverOne(accounts, envelope, recipient);
-      if (one == null) {
-        handled.add(recipient);
+      Handled one = deliverOne(accounts, envelope, recipient);
+      if (one.refusal() == null) {
+        (one.routed() ? handled : unrouted).add(recipient);
         continue;
       }
       // A refusal is the whole transaction's answer.
@@ -149,25 +173,49 @@ public class Forwarding implements MailReceiver {
       // does not lose mail: the sending server retries or bounces for everybody, and nobody is
       // quietly dropped. This is also why one message per recipient is the shape worth having, and
       // why the log has a row per recipient rather than per message.
-      worst = one;
+      worst = one.refusal();
     }
     if (worst != null) {
       return worst;
     }
-    if (handled.isEmpty()) {
-      return fallback.receive(envelope);
+    // A recipient no rule matched goes to the fallback, which prints it.
+    //
+    // This counted an unrouted recipient as handled and answered "forwarded" -- so on a box with
+    // no rules yet, every message was accepted, reported as forwarded, and went nowhere at all.
+    // The boot line says anything unrouted is printed here, and this is what makes that true.
+    if (!unrouted.isEmpty()) {
+      Outcome printed = fallback.receive(envelope);
+      if (handled.isEmpty()) {
+        return printed;
+      }
     }
-    return Outcome.accepted(handled.size() == 1 ? "forwarded" : "forwarded to " + handled.size());
+    return Outcome.accepted(handled.size() == 1 ? "handled"
+        : "handled " + handled.size() + " recipient(s)");
+  }
+
+  /**
+   * What one recipient came to.
+   *
+   * Three outcomes rather than two, because "a rule dealt with it" and "no rule matched" both
+   * produce no answer to the sending server and mean entirely different things afterwards.
+   */
+  private record Handled(Outcome refusal, boolean routed) {
+    static final Handled ROUTED = new Handled(null, true);
+    static final Handled UNROUTED = new Handled(null, false);
+
+    static Handled refused(Outcome outcome) {
+      return new Handled(outcome, false);
+    }
   }
 
   /**
    * One recipient.
    *
-   * Returns null when the message was dealt with, and an {@link Outcome} when the transaction as a
-   * whole has to be refused -- which reads backwards until you notice that the common case is
-   * "nothing to say" and the exceptional one is the answer to the sending server.
+   * The common case has nothing to say to the sending server; the exceptional one is the answer to
+   * the whole transaction. The third case -- no rule matched -- also has nothing to say and is not
+   * the same as being dealt with, which is why {@link Handled} has three states and not two.
    */
-  private Outcome deliverOne(Accounts accounts, Envelope envelope, String recipient) {
+  private Handled deliverOne(Accounts accounts, Envelope envelope, String recipient) {
     String domain = envelope.domain();
     String local = localPartOf(recipient);
     MailLog.Draft draft = new MailLog.Draft()
@@ -191,7 +239,8 @@ public class Forwarding implements MailReceiver {
       if (Srs.looksLikeOurs(recipient, domain)) {
         record(accounts, draft.outcome(MailLog.Outcome.refused,
             "an SRS address this server did not write, or one that has expired"));
-        return Outcome.refused("that return path is not one this server issued");
+        return Handled.refused(
+            Outcome.refused("that return path is not one this server issued"));
       }
 
       Mailboxes.Rule rule = accounts.mailboxes.decide(domain, local, envelope.from(),
@@ -200,7 +249,10 @@ public class Forwarding implements MailReceiver {
       if (rule == null) {
         record(accounts, draft.outcome(MailLog.Outcome.unrouted,
             "no rule matched and no mailbox claimed it"));
-        return null;
+        return Handled.UNROUTED;
+      }
+      if (rule.action() == Mailboxes.Action.deliver) {
+        return keep(accounts, envelope, draft, box(accounts, domain, local));
       }
       if (rule.action() == Mailboxes.Action.drop) {
         // Accepted and let go, and the sender is told it arrived.
@@ -209,7 +261,7 @@ public class Forwarding implements MailReceiver {
         // their address is wrong when it is right and somebody simply does not want their mail.
         record(accounts, draft.outcome(MailLog.Outcome.dropped, "a rule said to drop it"));
         verbose.detail(() -> "mail: dropped " + recipient + " by rule " + rule.id());
-        return null;
+        return Handled.ROUTED;
       }
 
       byte[] outgoing = prepare(envelope, domain, recipient, rule.forwardTo(), draft);
@@ -221,20 +273,75 @@ public class Forwarding implements MailReceiver {
         record(accounts, draft.outcome(MailLog.Outcome.forwarded, null));
         verbose.detail(() -> "mail: " + recipient + " -> " + rule.forwardTo() + " ("
             + sent.tls() + ")");
-        return null;
+        return Handled.ROUTED;
       }
       // The far end's verdict is this server's verdict. See the class note: passing it straight
       // back is what removes the queue and the bounce generator in one stroke.
       if (sent.worthRetrying()) {
         record(accounts, draft.outcome(MailLog.Outcome.deferred, null));
-        return Outcome.tryLater("the destination for " + recipient + " said: " + sent.detail());
+        return Handled.refused(
+            Outcome.tryLater("the destination for " + recipient + " said: " + sent.detail()));
       }
       record(accounts, draft.outcome(MailLog.Outcome.failed, null));
-      return Outcome.refused("the destination for " + recipient + " said: " + sent.detail());
+      return Handled.refused(
+          Outcome.refused("the destination for " + recipient + " said: " + sent.detail()));
     } catch (java.sql.SQLException ex) {
       verbose.detail(() -> "mail: " + recipient + " could not be routed -- " + ex.getMessage());
-      return Outcome.tryLater("this server could not read its own routing rules");
+      return Handled.refused(
+          Outcome.tryLater("this server could not read its own routing rules"));
     }
+  }
+
+  /**
+   * Put the message in somebody's mailbox.
+   *
+   * A refusal here is permanent and says why: an address with a `deliver` rule and no owner is a
+   * configuration mistake somebody has to fix, and retrying it for four days fixes nothing while
+   * the sender waits.
+   */
+  private Handled keep(Accounts accounts, Envelope envelope, MailLog.Draft draft,
+                       Mailboxes.Box box) throws java.sql.SQLException {
+    if (inbox == null) {
+      record(accounts, draft.outcome(MailLog.Outcome.failed,
+          "a rule says to keep this, and this server is not configured to store mail"));
+      return Handled.refused(Outcome.refused("this server does not hold mail"));
+    }
+    if (box == null) {
+      record(accounts, draft.outcome(MailLog.Outcome.failed,
+          "a rule says to keep this, and there is no such address here"));
+      return Handled.refused(Outcome.refused("there is no such address here"));
+    }
+    io.hearth.inbox.Delivery.Stored stored =
+        inbox.deliver(accounts, envelope, box, selfUrlFor(box.domain()));
+    if (!stored.ok()) {
+      record(accounts, draft.outcome(MailLog.Outcome.failed, stored.problem()));
+      // Temporary when it is our fault and permanent when it is the configuration's.
+      //
+      // A database that would not write is worth retrying; an address nobody owns is not going to
+      // acquire an owner in the next four days.
+      return Handled.refused(stored.problem().startsWith("nobody owns")
+          ? Outcome.refused(stored.problem()) : Outcome.tryLater(stored.problem()));
+    }
+    record(accounts, draft.outcome(MailLog.Outcome.delivered,
+        "kept in " + box.address() + "'s mailbox"));
+    return Handled.ROUTED;
+  }
+
+  private static Mailboxes.Box box(Accounts accounts, String domain, String local)
+      throws java.sql.SQLException {
+    return accounts.mailboxes.box(domain, local);
+  }
+
+  /**
+   * Where this domain's own pages live, for the link in a notification.
+   *
+   * Taken from the domain rather than from a configured base URL, because a notification is tapped
+   * on a phone and has to land on the community the message arrived for -- and this server may be
+   * serving several.
+   */
+  private String selfUrlFor(String domain) {
+    io.hearth.vhost.DomainConfig config = domains == null ? null : domains.resolve(domain);
+    return config == null ? "/self" : config.urls.self;
   }
 
   /**
@@ -243,7 +350,7 @@ public class Forwarding implements MailReceiver {
    * The envelope sender of a bounce is empty and stays empty: rewriting it would produce a bounce
    * that can itself bounce, which is the loop the null sender exists to prevent.
    */
-  private Outcome relayBounce(Accounts accounts, Envelope envelope, MailLog.Draft draft,
+  private Handled relayBounce(Accounts accounts, Envelope envelope, MailLog.Draft draft,
                               String originalSender) throws java.sql.SQLException {
     draft.outcome(MailLog.Outcome.forwarded, "a bounce, returned to " + originalSender);
     byte[] outgoing = withHeaders(envelope, List.of(received(envelope, originalSender)));
@@ -251,16 +358,17 @@ public class Forwarding implements MailReceiver {
     draft.delivery(sent).attempts(1);
     if (sent.ok()) {
       record(accounts, draft);
-      return null;
+      return Handled.ROUTED;
     }
     if (sent.worthRetrying()) {
       record(accounts, draft.outcome(MailLog.Outcome.deferred, null));
-      return Outcome.tryLater("the bounce could not be returned: " + sent.detail());
+      return Handled.refused(
+          Outcome.tryLater("the bounce could not be returned: " + sent.detail()));
     }
     // A bounce that cannot be delivered is where mail stops, and it stops here rather than
     // generating a second failure report about the first one.
     record(accounts, draft.outcome(MailLog.Outcome.failed, null));
-    return null;
+    return Handled.ROUTED;
   }
 
   /**

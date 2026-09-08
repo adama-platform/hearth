@@ -1,0 +1,70 @@
+{{<layout}}{{$body}}
+<nav class="crumb"><a href="{{selfUrl}}">You</a> &middot; <a href="{{mailUrl}}">Mail{{#unread}} ({{.}}){{/unread}}</a></nav>
+<h1>Calendar</h1>
+
+{{#flash}}
+<p class="{{#bad}}problem{{/bad}}{{#good}}done{{/good}}">{{text}}</p>
+{{#secret}}
+<div class="card">
+  <p class="meta"><span class="dim">your subscription link &mdash; shown once</span></p>
+  <pre class="scroll mono">{{.}}</pre>
+  <p class="hint">Paste it into Apple Calendar, Google Calendar or anything else that subscribes to
+    a calendar. It is not shown again: this server keeps only a hash of it. Make a new one if you
+    lose it, which stops the old one working.</p>
+</div>
+{{/secret}}
+{{/flash}}
+
+{{#anyInvitations}}
+<div class="card">
+  <p class="meta"><span class="dim">waiting for an answer</span></p>
+  {{#invitations}}
+  <div class="invite">
+    <p><strong>{{summary}}</strong><br>
+      <span class="dim">{{when}}{{#location}} &middot; {{.}}{{/location}}{{#organizer}} &middot; from {{.}}{{/organizer}}</span></p>
+    <form method="post" action="{{calendarUrl}}" class="doing">
+      <input type="hidden" name="csrf" value="{{csrf}}">
+      <input type="hidden" name="action" value="answer">
+      <input type="hidden" name="uid" value="{{uid}}">
+      <button type="submit" name="partstat" value="ACCEPTED">Going</button>
+      <button type="submit" name="partstat" value="TENTATIVE" class="quiet">Maybe</button>
+      <button type="submit" name="partstat" value="DECLINED" class="quiet">Not going</button>
+    </form>
+  </div>
+  {{/invitations}}
+  {{^canReply}}<p class="hint">Your answer is recorded here, but the organizer will not be told:
+    this server cannot send mail.</p>{{/canReply}}
+</div>
+{{/anyInvitations}}
+
+<div class="doing">
+  <a class="btn" href="{{newUrl}}">New event</a>
+  <form method="post" action="{{calendarUrl}}">
+    <input type="hidden" name="csrf" value="{{csrf}}">
+    <button type="submit" name="action" value="feed" class="quiet">{{#hasFeed}}New subscription link{{/hasFeed}}{{^hasFeed}}Subscription link{{/hasFeed}}</button>
+    {{#hasFeed}}<button type="submit" name="action" value="revoke" class="quiet">Stop the current one</button>{{/hasFeed}}
+  </form>
+</div>
+
+{{^any}}<p class="hint">Nothing in the next {{horizon}} days.</p>{{/any}}
+{{#days}}
+<section class="day{{#today}} istoday{{/today}}">
+  <h2>{{label}}{{#today}} <span class="pill">today</span>{{/today}}{{#tomorrow}} <span class="pill dim">tomorrow</span>{{/tomorrow}}</h2>
+  <ul class="events">
+    {{#events}}
+    <li>
+      <span class="mono dim">{{time}}</span>
+      <a href="{{editUrl}}">{{summary}}</a>
+      {{#hasLocation}}<span class="dim">&middot; {{location}}</span>{{/hasLocation}}
+      {{#repeats}}<span class="pill dim">repeats</span>{{/repeats}}
+      {{#invited}}<span class="pill{{^answered}} warn{{/answered}} dim">{{answer}}</span>{{/invited}}
+    </li>
+    {{/events}}
+  </ul>
+</section>
+{{/days}}
+
+<p class="hint">{{total}} event(s) in all. A subscription link is read-only &mdash; your phone shows
+  what is here, and changes are made here. Two-way sync from a phone needs CalDAV, which this
+  server does not speak.</p>
+{{/body}}{{/layout}}

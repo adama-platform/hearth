@@ -55,6 +55,16 @@ public class TestServer implements AutoCloseable {
   public final io.hearth.attach.AttachmentStore attachmentFiles;
   /** the serving route, so a test can look at the cache */
   public final io.hearth.attach.AttachmentRoutes attachments;
+  /** where a delivered message's octets go, so a test can drive delivery and then read it back */
+  public final io.hearth.inbox.MessageFiles messageFiles;
+  /**
+   * How a test sends a reply, or null.
+   *
+   * Null by default and on purpose: a test server with a real relay would try to make outbound
+   * SMTP connections from a unit test. A test that wants to watch a reply go out builds one
+   * pointed at a stub exchanger and hands it over.
+   */
+  private static final io.hearth.inbox.Postman postman = null;
   private final WebServer server;
   private final Thread thread;
   private final File ownedStores;
@@ -84,6 +94,16 @@ public class TestServer implements AutoCloseable {
     attachmentRoutes.sharesFlashWith(adminRoutes.flash());
     adminRoutes.knowsAbout(attachmentRoutes);
     this.attachments = attachmentRoutes;
+    // The mail reader and the calendar, on every test server.
+    //
+    // They cost nothing when nothing has been delivered, and a testkit that left them out would
+    // mean the only way to test them was to build a second kind of server -- which is how a
+    // feature ends up tested against a shape that is not the one shipped.
+    this.messageFiles = new io.hearth.inbox.MessageFiles(
+        new File(ownedStores != null ? ownedStores : new File(System.getProperty("java.io.tmpdir")),
+            "mail-" + System.nanoTime()));
+    selfRoutes.knowsAbout(messageFiles);
+    adminRoutes.knowsAbout(messageFiles);
     this.server = new WebServer(config, tree, auth, new Pages(templates),
         new AccountRoutes(templates, mailer, verbose),
         // tests drive the inbound path directly, so invitations behave as they do on a box
@@ -94,7 +114,9 @@ public class TestServer implements AutoCloseable {
         attachmentRoutes,
         new io.hearth.web.PwaRoutes(templates, verbose),
         new io.hearth.legal.LegalRoutes(templates, verbose),
-        challenges, tls, accessLog, verbose);
+        challenges, tls, accessLog, verbose)
+        .alsoServing(new io.hearth.inbox.InboxRoutes(templates, messageFiles, postman, verbose),
+            new io.hearth.calendar.CalendarRoutes(templates, postman, verbose));
     auth.start();
     // the same step the real boot does: settings are read by auth.start(), and applying them
     // rebuilds each domain's config before anything serves. A testkit that skipped it would be a

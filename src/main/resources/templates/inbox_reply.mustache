@@ -1,0 +1,43 @@
+{{<layout}}{{$body}}
+<nav class="crumb"><a href="{{backUrl}}">&larr; Mail</a></nav>
+{{#flash}}<p class="{{#bad}}problem{{/bad}}{{#good}}done{{/good}}">{{text}}</p>{{/flash}}
+<h1>Re: {{subject}}</h1>
+
+{{^canSend}}<p class="problem">This server cannot send mail: forwarding is off in
+  <code>config.cfg</code>.</p>{{/canSend}}
+
+<form class="editor" method="post" action="{{action}}">
+  <input type="hidden" name="csrf" value="{{csrf}}">
+  <input type="hidden" name="action" value="reply">
+  <input type="hidden" name="id" value="{{id}}">
+  {{#replyAll}}<input type="hidden" name="all" value="1">{{/replyAll}}
+
+  <p class="dim mono small">
+    from <strong>{{replyFrom}}</strong><br>
+    to {{replyTo}}{{#anyCc}}<br>cc {{replyCc}}{{/anyCc}}
+  </p>
+  <p class="hint">It goes out from the address this arrived at, so the conversation continues from
+    the address they already know.
+    {{#replyAll}}Everybody on the original is included &mdash; <a href="{{otherUrl}}">reply to just
+      the sender</a> instead.{{/replyAll}}
+    {{^replyAll}}Only the sender is included &mdash; <a href="{{otherUrl}}">reply to everyone</a>
+      instead.{{/replyAll}}</p>
+
+  <div>
+    <label for="r-body">your reply</label>
+    <textarea id="r-body" name="body" rows="12" autofocus required></textarea>
+  </div>
+
+  <div class="doing">
+    <button type="submit"{{^canSend}} disabled{{/canSend}}>Send and be done with it</button>
+    <a class="quiet" href="{{backUrl}}">Never mind</a>
+  </div>
+  <p class="hint">Sending takes it out of the inbox. Plain text, always: it renders everywhere,
+    quotes cleanly, and cannot carry anything back to anybody.</p>
+</form>
+
+<div class="card">
+  <p class="meta"><span class="dim">what gets quoted underneath</span></p>
+  <pre class="scroll small">{{quoted}}</pre>
+</div>
+{{/body}}{{/layout}}

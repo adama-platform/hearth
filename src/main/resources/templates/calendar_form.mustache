@@ -1,0 +1,64 @@
+{{<layout}}{{$body}}
+<nav class="crumb"><a href="{{backUrl}}">&larr; Calendar</a></nav>
+<h1>{{heading}}</h1>
+{{#flash}}<p class="{{#bad}}problem{{/bad}}{{#good}}done{{/good}}">{{text}}</p>{{/flash}}
+
+{{#invited}}<p class="hint">This one came from {{organizer}}. Editing it changes only your copy
+  &mdash; the organizer is not told, and their next update will overwrite what you change.</p>{{/invited}}
+
+<form class="editor" method="post" action="{{action}}">
+  <input type="hidden" name="csrf" value="{{csrf}}">
+  <input type="hidden" name="action" value="save">
+  {{#editing}}<input type="hidden" name="id" value="{{form_id}}">{{/editing}}
+
+  <div class="field">
+    <label for="e-summary">what it is</label>
+    <input id="e-summary" type="text" name="summary" value="{{form_summary}}" required autofocus>
+  </div>
+
+  <div class="field">
+    <label class="check"><input type="checkbox" name="allDay"{{#form_allDay}} checked{{/form_allDay}}> all day</label>
+  </div>
+
+  <div class="field">
+    <label for="e-starts">starts</label>
+    <input id="e-starts" type="datetime-local" name="starts" value="{{form_starts}}" required>
+  </div>
+
+  <div class="field">
+    <label for="e-ends">ends</label>
+    <input id="e-ends" type="datetime-local" name="ends" value="{{form_ends}}" required>
+    <p class="hint">Times are in {{zone}}, which is this community&rsquo;s clock rather than your
+      laptop&rsquo;s.</p>
+  </div>
+
+  <div class="field">
+    <label for="e-location">where</label>
+    <input id="e-location" type="text" name="location" value="{{form_location}}">
+  </div>
+
+  <div class="field">
+    <label for="e-rrule">repeats</label>
+    <input id="e-rrule" type="text" name="rrule" value="{{form_rrule}}" placeholder="FREQ=WEEKLY;BYDAY=TU">
+    <p class="hint">An iCalendar rule, or empty for a one-off. <code>FREQ=WEEKLY;BYDAY=TU</code> is
+      every Tuesday; <code>FREQ=MONTHLY;COUNT=6</code> is monthly, six times.</p>
+  </div>
+
+  <div>
+    <label for="e-description">notes</label>
+    <textarea id="e-description" name="description" rows="5">{{form_description}}</textarea>
+  </div>
+
+  <div class="doing"><button type="submit">Save</button>
+    <a class="quiet" href="{{backUrl}}">Never mind</a></div>
+</form>
+
+{{#editing}}
+<form method="post" action="{{action}}" class="danger">
+  <input type="hidden" name="csrf" value="{{csrf}}">
+  <input type="hidden" name="action" value="delete">
+  <input type="hidden" name="id" value="{{form_id}}">
+  <button type="submit">Delete this event</button>
+</form>
+{{/editing}}
+{{/body}}{{/layout}}

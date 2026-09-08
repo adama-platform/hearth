@@ -29,7 +29,7 @@ import java.util.List;
  */
 public class Schema {
   /** bumped whenever the tables below change; recorded in schema_meta for the boot audit */
-  public static final int VERSION = 48;
+  public static final int VERSION = 49;
 
   public static final String EMAILS = "emails";
   public static final String SESSIONS = "sessions";
@@ -58,6 +58,9 @@ public class Schema {
   public static final String MAILBOXES = "mailboxes";
   public static final String MAIL_RULES = "mail_rules";
   public static final String MAIL_LOG = "mail_log";
+  public static final String MAIL_MESSAGES = "mail_messages";
+  public static final String CALENDAR_EVENTS = "calendar_events";
+  public static final String CALENDAR_FEEDS = "calendar_feeds";
   public static final String META = "schema_meta";
 
   public static final Table EMAILS_TABLE = Table.named(EMAILS)
@@ -519,6 +522,122 @@ public class Schema {
       .index("idx_mail_log_received", "received_at")
       .build();
 
+  /**
+   * One delivered message, for one person.
+   *
+   * <b>The bodies are here and the raw message is on disk.</b> A row carries what a screen needs --
+   * the headers somebody reads, the plain text, the sanitized HTML and a manifest of the parts --
+   * and the `.eml` under the root carries the octets exactly as they arrived. That split is what
+   * makes "download the attachment" and "show me the original" answerable without keeping two
+   * copies of a photograph: the parts are re-read from the file when somebody asks for one.
+   *
+   * <b>`delivered_to` is the column the whole reply behaviour rests on.</b> A message that arrived
+   * at `receipts@` is replied to *from* `receipts@`, whatever else the person owns -- so the
+   * conversation continues from the address the other side already knows, and the signature and
+   * SPF align with it.
+   *
+   * Read and archived are timestamps rather than a state column: "when did I read this" is a
+   * question somebody asks and a state machine cannot answer.
+   */
+  public static final Table MAIL_MESSAGES_TABLE = Table.named(MAIL_MESSAGES)
+      .column(Column.id("id"))
+      .column(Column.of("user_id", "BIGINT").notNull())
+      .column(Column.of("mailbox_id", "BIGINT"))
+      .column(Column.of("domain", "VARCHAR(255)").notNull())
+      // the address it actually arrived at, which is what a reply goes out as
+      .column(Column.of("delivered_to", "VARCHAR(320)").notNull())
+      .column(Column.of("received_at", "TIMESTAMP").notNull().withDefault("CURRENT_TIMESTAMP"))
+      .column(Column.of("envelope_from", "VARCHAR(320)").notNull().withDefault("''"))
+      .column(Column.of("from_name", "VARCHAR(255)").notNull().withDefault("''"))
+      .column(Column.of("from_address", "VARCHAR(320)").notNull().withDefault("''"))
+      .column(Column.of("to_header", "VARCHAR(2048)").notNull().withDefault("''"))
+      .column(Column.of("cc_header", "VARCHAR(2048)").notNull().withDefault("''"))
+      .column(Column.of("reply_to", "VARCHAR(320)").notNull().withDefault("''"))
+      .column(Column.of("subject", "VARCHAR(1024)").notNull().withDefault("''"))
+      .column(Column.of("message_id", "VARCHAR(512)").notNull().withDefault("''"))
+      .column(Column.of("in_reply_to", "VARCHAR(512)").notNull().withDefault("''"))
+      // the whole chain, so a reply threads in everybody else's client
+      .column(Column.of("references_header", "VARCHAR(4096)").notNull().withDefault("''"))
+      .column(Column.of("spf", "VARCHAR(16)").notNull().withDefault("'none'"))
+      .column(Column.of("dkim", "VARCHAR(16)").notNull().withDefault("'none'"))
+      .column(Column.of("dmarc", "VARCHAR(16)").notNull().withDefault("'none'"))
+      .column(Column.of("size_bytes", "INTEGER").notNull().withDefault("0"))
+      .column(Column.of("text_body", "VARCHAR(524288)").notNull().withDefault("''"))
+      // already through the sanitizer; nothing renders what arrived
+      .column(Column.of("html_body", "VARCHAR(524288)").notNull().withDefault("''"))
+      // a JSON array of every part worth naming, allowed or refused, with the reason
+      .column(Column.of("parts", "VARCHAR(65536)").notNull().withDefault("'[]'"))
+      .column(Column.of("attachments", "INTEGER").notNull().withDefault("0"))
+      // a text/calendar part arrived with it, so the screen offers to put it in the calendar
+      .column(Column.of("has_calendar", "BOOLEAN").notNull().withDefault("FALSE"))
+      // whether the HTML asked for anything from somebody else's server, which is never fetched
+      .column(Column.of("blocked_remote", "INTEGER").notNull().withDefault("0"))
+      .column(Column.of("read_at", "TIMESTAMP"))
+      // out of the inbox. Zero inbox is the whole point, so this is the column the listing filters
+      .column(Column.of("archived_at", "TIMESTAMP"))
+      .column(Column.of("replied_at", "TIMESTAMP"))
+      .index("idx_mail_messages_user", "user_id")
+      .index("idx_mail_messages_archived", "archived_at")
+      .build();
+
+  /**
+   * One event in somebody's calendar.
+   *
+   * <b>Keyed by the iCalendar UID, not by our own id.</b> That is what makes an update an update:
+   * an organizer who moves a meeting sends the same UID with a higher SEQUENCE, and a calendar that
+   * matched on anything else would show the old time and the new one side by side. The pair
+   * (user, uid) is unique for exactly that reason.
+   *
+   * Unlike {@link #CALENDARS}, which holds busy windows scraped from somebody else's calendar and
+   * deliberately keeps no words, this is the person's own calendar and holds what they wrote.
+   */
+  public static final Table CALENDAR_EVENTS_TABLE = Table.named(CALENDAR_EVENTS)
+      .column(Column.id("id"))
+      .column(Column.of("user_id", "BIGINT").notNull())
+      .column(Column.of("uid", "VARCHAR(255)").notNull())
+      // an organizer's revision counter; a lower one arriving later is a stale copy and is ignored
+      .column(Column.of("sequence_number", "INTEGER").notNull().withDefault("0"))
+      .column(Column.of("summary", "VARCHAR(1024)").notNull().withDefault("''"))
+      .column(Column.of("description", "VARCHAR(65536)").notNull().withDefault("''"))
+      .column(Column.of("location", "VARCHAR(1024)").notNull().withDefault("''"))
+      .column(Column.of("starts_at", "TIMESTAMP").notNull())
+      .column(Column.of("ends_at", "TIMESTAMP").notNull())
+      .column(Column.of("all_day", "BOOLEAN").notNull().withDefault("FALSE"))
+      .column(Column.of("rrule", "VARCHAR(1024)").notNull().withDefault("''"))
+      // dates an occurrence of a repeat was taken out; kept verbatim so a round trip is lossless
+      .column(Column.of("exdates", "VARCHAR(8192)").notNull().withDefault("''"))
+      .column(Column.of("status", "VARCHAR(32)").notNull().withDefault("'CONFIRMED'"))
+      .column(Column.of("organizer", "VARCHAR(320)").notNull().withDefault("''"))
+      // a JSON array of {address, name, partstat, role}
+      .column(Column.of("attendees", "VARCHAR(16384)").notNull().withDefault("'[]'"))
+      // what this person said about it, which is what a REPLY carries back
+      .column(Column.of("my_answer", "VARCHAR(24)").notNull().withDefault("'NEEDS-ACTION'"))
+      // where it came from: typed here, or an invitation that arrived
+      .column(Column.of("source", "VARCHAR(24)").notNull().withDefault("'typed'"))
+      .column(Column.of("from_message", "BIGINT"))
+      .column(Column.of("created_at", "TIMESTAMP").notNull().withDefault("CURRENT_TIMESTAMP"))
+      .column(Column.of("updated_at", "TIMESTAMP").notNull().withDefault("CURRENT_TIMESTAMP"))
+      .unique("uq_calendar_events_uid", "user_id", "uid")
+      .index("idx_calendar_events_user", "user_id")
+      .index("idx_calendar_events_start", "starts_at")
+      .build();
+
+  /**
+   * The secret in a calendar subscription URL.
+   *
+   * <b>Hashed, like a session token</b>, for the reason invariant 19 gives: the URL is pasted into
+   * a phone and lives in its settings forever, so a stolen database file must not be a list of
+   * working calendar feeds. One per person, replaceable, and revoking it is a delete.
+   */
+  public static final Table CALENDAR_FEEDS_TABLE = Table.named(CALENDAR_FEEDS)
+      .column(Column.id("id"))
+      .column(Column.of("user_id", "BIGINT").notNull().unique())
+      .column(Column.of("token_hash", "VARCHAR(64)").notNull())
+      .column(Column.of("created_at", "TIMESTAMP").notNull().withDefault("CURRENT_TIMESTAMP"))
+      .column(Column.of("last_read_at", "TIMESTAMP"))
+      .index("idx_calendar_feeds_hash", "token_hash")
+      .build();
+
   public static final Table TEMPLATES_TABLE = Table.named(TEMPLATES)
       .column(Column.id("id"))
       .column(Column.of("name", "VARCHAR(64)").notNull().unique())
@@ -907,7 +1026,8 @@ public class Schema {
           CONFIG_TABLE, MUTATIONS_TABLE, USER_KEYS_TABLE,
           VOTES_TABLE, AVAILABILITY_TABLE,
           PROCESSES_TABLE, TASKS_TABLE, HABIT_MARKS_TABLE, CALENDARS_TABLE,
-          MAILBOXES_TABLE, MAIL_RULES_TABLE, MAIL_LOG_TABLE);
+          MAILBOXES_TABLE, MAIL_RULES_TABLE, MAIL_LOG_TABLE, MAIL_MESSAGES_TABLE,
+          CALENDAR_EVENTS_TABLE, CALENDAR_FEEDS_TABLE);
 
   private Schema() {
   }

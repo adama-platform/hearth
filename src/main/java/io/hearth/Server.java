@@ -279,6 +279,11 @@ public class Server {
     // per domain rather than per box.
     io.hearth.smtp.MailReceiver receiver = new io.hearth.smtp.TerminalMailReceiver();
     io.hearth.smtp.MailKeys mailKeys = null;
+    // Where a delivered message's octets live. Built whether or not forwarding is on, because the
+    // reader has to be able to hand back an original for mail that arrived before it was turned off.
+    io.hearth.inbox.MessageFiles messageFiles =
+        new io.hearth.inbox.MessageFiles(new java.io.File(root.dir(), "mail"));
+    io.hearth.inbox.Postman postman = null;
     if (settings.smtp.enabled && settings.smtp.forwarding.enabled) {
       java.io.File keyFile = new java.io.File(root.dir(), settings.smtp.forwarding.dkimKeyFile);
       try {
@@ -293,8 +298,11 @@ public class Server {
       io.hearth.smtp.Relay relay = new io.hearth.smtp.Relay(
           new io.hearth.smtp.SmtpDns.Jdk(settings.smtp.dnsTimeoutMillis), helo,
           settings.smtp.forwarding.requireTls, verbose);
+      postman = new io.hearth.inbox.Postman(relay, mailKeys, verbose);
+      io.hearth.inbox.Delivery delivery = new io.hearth.inbox.Delivery(messageFiles,
+          new io.hearth.inbox.PushOnArrival(verbose), verbose);
       receiver = new io.hearth.smtp.Forwarding(auth, settings.smtp.forwarding, mailKeys, relay,
-          receiver, verbose);
+          receiver, delivery, scan.tree, verbose);
     }
     io.hearth.smtp.SmtpServer smtp = new io.hearth.smtp.SmtpServer(settings.smtp, scan.tree,
         receiver, firstDomainOf(scan.tree), verbose);
@@ -321,7 +329,9 @@ public class Server {
     AdminRoutes adminRoutes =
         new AdminRoutes(templates, events, accessLog, aiLog, mailer, settings, verbose);
     adminRoutes.knowsAbout(mailKeys);
+    adminRoutes.knowsAbout(messageFiles);
     SelfRoutes selfRoutes = new SelfRoutes(templates, accessLog, verbose);
+    selfRoutes.knowsAbout(messageFiles);
     io.hearth.mcp.McpRoutes mcpRoutes =
         new io.hearth.mcp.McpRoutes(templates, aiLog, verbose).sending(mailer);
     // uploads: one directory under the root, one cache in front of it, and a ceiling taken from
@@ -395,7 +405,9 @@ public class Server {
 
     WebServer server = new WebServer(webConfig, scan.tree, auth, pages, accountRoutes, adminRoutes,
         selfRoutes, mcpRoutes, attachmentRoutes, pwaRoutes, legalRoutes,
-        challenges, tlsContexts, accessLog, verbose);
+        challenges, tlsContexts, accessLog, verbose)
+        .alsoServing(new io.hearth.inbox.InboxRoutes(templates, messageFiles, postman, verbose),
+            new io.hearth.calendar.CalendarRoutes(templates, postman, verbose));
     Runtime.getRuntime().addShutdownHook(new Thread(() -> {
       Boot.step("shutting down");
       if (certManager != null) {

@@ -69,7 +69,9 @@ public class Templates {
       "admin/mail", "admin/mail_form",
       "admin/mailboxes", "admin/mailboxes_form",
       "admin/maillog", "admin/maillog_panel", "admin/maillog_review",
-      "admin/mailsetup");
+      "admin/mailsetup",
+      "inbox", "inbox_message", "inbox_reply",
+      "calendar", "calendar_form");
 
   /**
    * Templates whose output is not HTML.

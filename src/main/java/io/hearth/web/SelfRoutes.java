@@ -77,6 +77,19 @@ public class SelfRoutes {
     this.verbose = verbose;
   }
 
+  /**
+   * Where delivered mail's octets live, so deleting your own account takes them with it.
+   *
+   * Null on a box that stores no mail. The privacy policy this software ships promises that
+   * deleting an account deletes what is attached to it, and a message file surviving the row that
+   * named it is exactly the residue that promise is about.
+   */
+  private io.hearth.inbox.MessageFiles messageFiles;
+
+  public void knowsAbout(io.hearth.inbox.MessageFiles files) {
+    this.messageFiles = files;
+  }
+
   public void handle(DomainConfig config, Accounts accounts, ChannelHandlerContext ctx,
                      FullHttpRequest req, WebHandler.Recorder recorder) {
     try {
@@ -268,7 +281,7 @@ public class SelfRoutes {
         return;
       }
       io.hearth.people.Erasure.Report report =
-          io.hearth.people.Erasure.erase(accounts, accessLog, me, me.id(), false);
+          io.hearth.people.Erasure.erase(accounts, accessLog, me, me.id(), false, messageFiles);
       verbose.say("self: " + report.email() + " deleted their own account (" + report.describe()
           + ")");
       recorder.status(303);

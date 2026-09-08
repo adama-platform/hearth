@@ -1,0 +1,69 @@
+{{<layout}}{{$body}}
+<nav class="crumb"><a href="{{backUrl}}">&larr; Mail</a></nav>
+{{#flash}}<p class="{{#bad}}problem{{/bad}}{{#good}}done{{/good}}">{{text}}</p>{{/flash}}
+
+<article class="readmail">
+  <h1>{{subject}}</h1>
+  <p class="mailfrom">
+    <strong>{{who}}</strong> <span class="dim mono">&lt;{{fromAddress}}&gt;</span>
+    <span class="dim">&middot; {{when}}</span>
+  </p>
+  <p class="dim mono small">to {{deliveredTo}}{{#hasCc}} &middot; cc {{ccHeader}}{{/hasCc}}</p>
+  <p>
+    {{#authenticated}}<span class="pill good" title="{{checks}}">vouched for by {{fromAddress}}</span>{{/authenticated}}
+    {{^authenticated}}<span class="pill warn" title="{{checks}}">nothing vouched for this</span>{{/authenticated}}
+    {{#anyBlocked}}<span class="pill dim">{{blockedRemote}} remote thing(s) not loaded</span>{{/anyBlocked}}
+  </p>
+
+  {{#anyBlocked}}
+  <p class="hint">This message asked to load {{blockedRemote}} thing(s) from somebody else&rsquo;s
+    server. They were not fetched and never will be: a remote image in an email tells the sender the
+    moment you opened it, from where, on what.</p>
+  {{/anyBlocked}}
+
+  <div class="mailbody">{{{body}}}</div>
+
+  {{#anyParts}}
+  <div class="card">
+    <p class="meta"><span class="dim">what came with it</span></p>
+    <ul class="parts">
+      {{#parts}}
+      <li>
+        {{#allowed}}<a href="{{url}}">{{name}}</a>{{/allowed}}
+        {{^allowed}}<span class="mono">{{name}}</span>{{/allowed}}
+        <span class="dim">{{size}}{{#dimensions}} &middot; {{.}}{{/dimensions}}</span>
+        {{^allowed}}<span class="pill warn">not handed back</span>
+          <div class="hint">{{reason}}</div>{{/allowed}}
+      </li>
+      {{/parts}}
+    </ul>
+    <p class="hint">An attachment is handed back only when its contents match its name. Anything
+      refused is still in the original.</p>
+  </div>
+  {{/anyParts}}
+
+  {{#invitations}}
+  <div class="card">
+    <p class="meta"><span class="dim">an invitation came with this</span></p>
+    <p><strong>{{summary}}</strong> &middot; {{when}}{{#location}} &middot; {{.}}{{/location}}</p>
+    <p class="hint">It is in <a href="{{calendarUrl}}">your calendar</a>, waiting for an answer.
+      Answering there tells the organizer.</p>
+  </div>
+  {{/invitations}}
+
+  <div class="doing">
+    <a class="btn" href="{{replyUrl}}">Reply to everyone</a>
+    <form method="post" action="{{action}}">
+      <input type="hidden" name="csrf" value="{{csrf}}">
+      <input type="hidden" name="id" value="{{id}}">
+      {{^archived}}<button type="submit" name="action" value="archive" class="quiet">Done with it</button>{{/archived}}
+      {{#archived}}<button type="submit" name="action" value="unarchive" class="quiet">Back to inbox</button>{{/archived}}
+      <button type="submit" name="action" value="delete" class="danger">Delete</button>
+    </form>
+  </div>
+  <p class="hint">Deleting is a delete: the message and the original both go, and there is no bin
+    they wait in.</p>
+  {{#hasOriginal}}<p class="hint"><a href="{{rawUrl}}">Download the original</a> exactly as it
+    arrived.</p>{{/hasOriginal}}
+</article>
+{{/body}}{{/layout}}

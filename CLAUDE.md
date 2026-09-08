@@ -182,6 +182,9 @@ src/main/java/io/hearth/
   auth/Tokens.java                session tokens, code generation, email normalization
   auth/UserRecord.java        one account, and what it is allowed to be
   auth/Users.java                 the emails table, including approval
+  calendar/CalendarRoutes.java    an agenda, an invitation to answer, and the URL a phone subscribes to
+  calendar/Events.java            one person's calendar, keyed on the UID an organizer sends
+  calendar/IcsFile.java           RFC 5545 both ways; round-tripping is the property that matters
   cache/CachePolicy.java          ttl + ceiling, configured as a catch-all
   cache/Caches.java               the per-domain policies
   cache/TtlCache.java             the cache; invalidateIf() is the cascade
@@ -221,6 +224,16 @@ src/main/java/io/hearth/
   events/MutationEvent.java   domain + table + key + kind; flat so it can leave the JVM later
   hevy/Hevy.java                  Hevy's API on somebody's behalf; one host, hard-coded
   hevy/UserKeys.java              keys held for a service somewhere else; one row per person per service
+  inbox/Delivery.java             a message that arrived, turned into one somebody can read
+  inbox/InboxRoutes.java          read, then reply or delete; there is nowhere else for it to go
+  inbox/MailHtml.java             the most hostile input here, and nothing remote is ever fetched
+  inbox/MessageFiles.java         the octets on disk, so an attachment can be re-read and refused
+  inbox/Messages.java             what is in the inbox, which is the only question the front screen asks
+  inbox/MimeTree.java             every part with its bytes; lenient in, strict out
+  inbox/Outgoing.java             a message this server wrote, plain text and base64 always
+  inbox/Postman.java              sending as somebody, with SPF, DKIM and DMARC all aligned
+  inbox/PushOnArrival.java        the first thing here that produces a notification
+  inbox/Safety.java               what may leave, and what a file has to be before it does
   js/JavaScript.java              V8: a fresh isolate per run, on its own threads, with a second to finish
   legal/LegalDoc.java             the two documents, and the text they ship with
   legal/LegalDocs.java            what a community said instead, if anything
@@ -924,61 +937,141 @@ justfile                   the primary interface; `just validate` is the gate
      the command for rather than showing a tick it would be guessing at.
 
 
+### Mailboxes
+
+182. **A mailbox is a place; an account is a person; a rule joins them.** An administrator can give
+     one person several addresses, and every message remembers which of them it arrived at --
+     because a reply goes out *from* that address, so a conversation continues from the address the
+     other side already knows and the signature aligns with it.
+183. **A `deliver` rule needs an owned address, and is refused at the form otherwise.** A message put
+     in a mailbox nobody owns sits in a table no screen lists, which is mail lost rather than
+     delivered. Caught while somebody is looking at the rule editor, not the first time real mail
+     arrives.
+184. **The inbox has no folders, no bin and no "later".** A message is in the list or it is not, and
+     the two ways out are to answer it or to be rid of it. Every mechanism for keeping something in
+     a list without deciding about it is the mechanism by which an inbox reaches four thousand.
+     Delete is a delete: the row and the file, together.
+185. **Reply-all is the default and every address of ours comes out of it.** The people on a thread
+     are on it deliberately; replying to yourself puts a copy in the inbox you are emptying.
+186. **Nothing in a message is ever fetched from anybody else's server.** A remote image is a
+     tracking pixel that tells the sender the moment you opened it, from where, on what. Every one
+     is removed and *counted*, so the screen can say how many -- a fact about the sender rather than
+     a silent decision. `cid:` images are parts of the same message and are rewritten to this
+     server.
+187. **The allow list is closed, and the bytes have to agree with the name.** A deny list of
+     dangerous extensions is wrong the day somebody finds the next one, and there have been dozens.
+     The extension read is the *last* one, because `invoice.pdf.exe` is an executable. An image is
+     opened far enough to know it is one: a sixty-thousand-pixel PNG is nine kilobytes on the wire
+     and fourteen gigabytes in a decoder.
+188. **A refused part is listed, never dropped.** With its name, its size and the sentence saying
+     why, and the original is still downloadable. Silently removing an attachment is how somebody
+     misses a contract and never learns there was one.
+189. **A part is served with the type this server chose, as a download, with `nosniff`.** A message
+     may claim anything about its own attachment, and a browser that believes it is the whole
+     attack. Only an image that passed the dimension check is ever shown inline.
+190. **The bodies are in the row and the octets are on disk.** One file per message: it is what an
+     attachment is re-read from and what "show me the original" hands back, and storing the parts
+     separately as well would double the disk a photograph occupies to save a click nobody makes
+     twice.
+191. **A push says who wrote and where to go, and never the subject.** Invariant 145 applied to the
+     thing it was always about: this crosses somebody else's push service and lands on a lock screen
+     anybody in the room can read. This is also the producer push never had.
+192. **Every read of a message carries the person's id in the query.** Not checked afterwards --
+     part of the lookup, so there is no path through the DAO that returns another person's mail.
+     Somebody else's message and one that never existed answer identically.
+
+### The calendar
+
+193. **An event is keyed on the organizer's UID, never on ours.** That is what makes an update an
+     update: a meeting that moves arrives with the same UID and a higher SEQUENCE, and matching on
+     anything else shows the old time and the new one side by side -- which is how people stop
+     trusting a calendar.
+194. **A lower sequence arriving later is a stale copy.** Mail is not ordered, and taking the most
+     recent delivery as the truth means a message delayed twenty minutes undoes a change everybody
+     has already seen.
+195. **An organizer's update never overwrites what this person said.** Their REQUEST names
+     everybody's PARTSTAT as they last heard it, which is out of date the moment it is sent; taking
+     it as truth silently un-accepts a meeting somebody accepted.
+196. **An invitation is imported, never applied.** It lands unanswered. A reader that accepts on
+     somebody's behalf fills their week with meetings they never agreed to.
+197. **A cancellation keeps the row and changes its status.** A meeting that vanishes from a morning
+     somebody planned around reads as "that never existed" rather than "that was called off", and
+     the second is the thing they need to know. It stays in the feed for that reason and is off the
+     agenda for the same one.
+198. **A REPLY carries one attendee: the person answering.** An organizer's software takes a REPLY
+     as authoritative, so sending the whole list back resets what everybody else had said.
+199. **The answer is recorded whether or not the message goes.** A calendar that refuses to remember
+     "I am not going" because a mail server was busy is lying to the person holding it. The screen
+     says which of the two happened.
+200. **The feed token is hashed at rest and shown once.** It goes into a phone's settings and stays
+     there for years, so a stolen database file must not be a list of working subscriptions. A wrong
+     token and a revoked one answer identically -- this is the one URL on the server anybody can
+     guess at.
+201. **A repeat is expanded over the window being drawn, not over its own first hundred and twenty
+     days.** A weekly standup set up two years ago has a start far behind today, and the other
+     reading makes it vanish from the calendar of everybody who has been attending it. The
+     iteration is capped separately from the results, or fast-forwarding a year runs out of budget
+     before it arrives.
+202. **A subscription is read-only, and that is said out loud.** Every calendar client on earth
+     reads an ICS URL and none of them writes back to one. Two-way sync needs CalDAV, which this
+     server does not speak.
+
+
 ### Appearance and the law
 
-182. **A palette is six hex strings or it is the default.** It is interpolated raw into a `<style>`
+203. **A palette is six hex strings or it is the default.** It is interpolated raw into a `<style>`
      block, so every value goes through `Theme.isColour` and a slot that fails keeps what it had.
-183. **Red means refused and green means it worked, and nobody may change that.**
-184. **Light unless somebody says otherwise, and it is their choice rather than their laptop's.**
+204. **Red means refused and green means it worked, and nobody may change that.**
+205. **Light unless somebody says otherwise, and it is their choice rather than their laptop's.**
      `/~theme.js` sets the attribute before first paint — a file rather than an inline script
      because inline needs a nonce, and not deferred because deferred is a white flash.
-185. **The two legal documents ship in the jar and are published from the first day.** A row exists
+206. **The two legal documents ship in the jar and are published from the first day.** A row exists
      only when a community has overridden one, so upgrading the software improves them.
-186. **`/legal` is open to everybody.** Every email links to the terms and most go to somebody with
+207. **`/legal` is open to everybody.** Every email links to the terms and most go to somebody with
      no account yet.
-187. **The cookie notice is a line in the footer, not a banner.** Two cookies, both strictly
+208. **The cookie notice is a line in the footer, not a banner.** Two cookies, both strictly
      necessary, which is the category that needs no consent.
-188. **The privacy policy this software ships is a specification.** Every promise in it is a thing
+209. **The privacy policy this software ships is a specification.** Every promise in it is a thing
      the code does: `DataExport` and `Erasure`, reachable by the member and by an administrator.
      Changing the policy is changing a requirement.
-189. **An erasure is checked by looking, not by remembering.** `RightsTests` walks *every column of
+210. **An erasure is checked by looking, not by remembering.** `RightsTests` walks *every column of
      every table* afterwards looking for the address, which is the only form of that test worth
      writing.
 
 ### Storage
 
-190. **The schema is code.** Add a column where it belongs, bump `VERSION`, restart. A column added
+211. **The schema is code.** Add a column where it belongs, bump `VERSION`, restart. A column added
      later must be nullable or carry a default — there is no correct value for existing rows.
-191. **A column whose name has stopped being true gets renamed.** `Column.renamedFrom` declares it
+212. **A column whose name has stopped being true gets renamed.** `Column.renamedFrom` declares it
      and the upgrader performs it, before it looks for anything missing.
-192. **The upgrader adds, never drops or retypes.** A column the code no longer declares is reported
+213. **The upgrader adds, never drops or retypes.** A column the code no longer declares is reported
      and left alone, which is what makes the reduction safe for an existing database.
-193. **A test that writes "hello" proves that "hello" fits.** Anything that stores what a person
+214. **A test that writes "hello" proves that "hello" fits.** Anything that stores what a person
      typed gets a test with a realistic amount of it in.
-194. **Boot never drops anything; a person does.** The other half of invariant 192. Leftover tables
+215. **Boot never drops anything; a person does.** The other half of invariant 213. Leftover tables
      are listed at `/admin/system/cleanup` with their row counts and dropped one at a time, by
      somebody holding `everything`. An operator who upgrades, hits a regression and rolls the jar
      back must still have their data, so the upgrader can never be the thing that deletes it.
-195. **The table name on that screen is untrusted.** `Leftovers.drop` re-derives the leftover list
+216. **The table name on that screen is untrusted.** `Leftovers.drop` re-derives the leftover list
      and refuses anything not on it, using the database's own spelling rather than the form's.
      Without that the most powerful button in the admin section is an arbitrary `DROP TABLE` with a
      text field in front of it.
-196. **A column nothing reads is not free.** It is a sentence in the privacy policy that has to stay
+217. **A column nothing reads is not free.** It is a sentence in the privacy policy that has to stay
      true and a column every erasure test keeps walking. The ten address and geo columns outlived
      their feature by a whole reduction, with a dead `SELECT` list in `PeopleStore` naming them.
 
 ### Installing
 
-197. **A walkthrough writes a file you could have written by hand, and says what it wrote.** They
+218. **A walkthrough writes a file you could have written by hand, and says what it wrote.** They
      refuse without a terminal, because each exists to make somebody think and a pipe cannot think.
-198. **A walkthrough run twice must not undo the first run.** Every question pre-fills from the file
+219. **A walkthrough run twice must not undo the first run.** Every question pre-fills from the file
      it is about to rewrite.
-199. **`--install` needs no root and starts nothing.** The half that needs root is written out as
+220. **`--install` needs no root and starts nothing.** The half that needs root is written out as
      `install.sh` to be read first.
-200. **A second `--install` stages a jar; it never overwrites the running one.** Overwriting leaves
+221. **A second `--install` stages a jar; it never overwrites the running one.** Overwriting leaves
      the file on disk and the software in memory disagreeing.
-201. **The unit asks for `CAP_NET_BIND_SERVICE` and bounds the set to it.**
-202. **16px on every field, 44px on everything you can press, a visible focus ring on everything.**
+222. **The unit asks for `CAP_NET_BIND_SERVICE` and bounds the set to it.**
+223. **16px on every field, 44px on everything you can press, a visible focus ring on everything.**
 ## The virtual hosting rules
 
 **Flat on disk, tree in memory.** `<root>/domains` is a flat directory of `<domain>.cfg` JSON files;
@@ -1120,6 +1213,24 @@ The one signing key lives at `<root>/mail/dkim.key`, 0600 and refused if anybody
 signs as whichever domain the message arrived for, so the same public record goes into DNS on each of
 them.
 
+**Delivered mail** is `smtp.forwarding` plus a `deliver` rule: the third action, beside `forward`
+and `drop`, and the one that needs the address to belong to somebody. `Delivery` parses the message
+once at arrival -- the MIME tree, both bodies, the sanitizer, every part through `Safety` -- and
+stores the result, so opening a message costs a query rather than a parse. The octets go to
+`<root>/mail/store/<id % 100>/<id>.eml` and are what an attachment is re-read from.
+
+`/self/mail` is the reader and it has no folders. A message is in the inbox or it is not; reply or
+delete are the two ways out, reply-all is the default, and delete removes the row and the file
+together. A reply goes out from `delivered_to` through `Postman`, signed as that domain with the
+envelope sender the same address -- no SRS, because the From header is already ours, which is the
+difference from forwarding. `PushOnArrival` is the first producer push has ever had.
+
+**The calendar** is `/self/calendar`: an agenda rather than a grid, invitations that arrive by mail
+and wait to be answered, and an ICS URL a phone subscribes to. `IcsFile` reads and writes RFC 5545
+both ways and `Events` keys on the organizer's UID so an update is an update. Answering sends an
+iTIP REPLY to the organizer. There is no CalDAV, so a subscription is read-only -- said on the
+screen rather than discovered.
+
 **Mail is its own top-level admin section** and takes its own permission, `mail_route`: the screens
 below can silently redirect somebody's post and show who has been writing to whom, which is not the
 same decision as being trusted with the community's colours. Four sections -- `mail` (the rules),
@@ -1178,8 +1289,6 @@ Different from a defect: nobody has proved these wrong, and nobody has proved th
 - **Nothing has been raced on purpose.** No test runs two writers at the same row. The caches are
   concurrent maps and the counters are atomic, and that is an argument rather than evidence.
 - **Nothing has been run against a real dataset.** Every query is written for a few hundred rows.
-- **Push has no producer.** Subscribing, the keypair, the worker and the self-test work; nothing in
-  the server generates a notification, because the board and the calendar were what did.
 - **No forwarded message has ever reached a real Google Workspace.** The whole outbound path -- SRS,
   the signature, the ARC seal, the relay, the verdict pass-through -- is tested against a stub
   exchanger on a socket that speaks SMTP and keeps what it was sent. That the message is unmodified,
@@ -1192,6 +1301,14 @@ Different from a defect: nobody has proved these wrong, and nobody has proved th
 - **The ARC chain has never been verified by anybody.** It is produced to the RFC and read by
   nothing here; whether Google accepts the seal is unproven, and a chain nobody validates is
   indistinguishable from a chain nobody produced.
+- **No real mail client has ever read a calendar this server wrote.** The ICS is round-tripped
+  through this repository's own parser, which proves the two halves agree and not that Apple
+  Calendar accepts it. The same caveat as the DKIM signer, for the same reason.
+- **No inbound message from a real mail system has ever been parsed.** `MimeTree` is tested against
+  messages this repository composed, including deliberately malformed ones. Real mail is stranger
+  than anything anybody makes up on purpose, and the first week of it will find something.
+- **Nothing has been tried with a large mailbox.** Every query is written for a person with a few
+  thousand messages and the listing caps at a hundred; nobody has run it against ten years of mail.
 - **Port 25 outbound is blocked by default at most hosting providers**, so the forwarder may not be
   able to connect at all until somebody asks them to open it. This is not a defect and it is the
   first thing to check.

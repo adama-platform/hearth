@@ -46,6 +46,8 @@ public class MailLog {
   public enum Outcome {
     /** handed to the destination's mail exchanger, which took responsibility for it */
     forwarded,
+    /** kept here, in the mailbox of whoever owns the address it was sent to */
+    delivered,
     /** a rule said to drop it, and it was accepted and let go */
     dropped,
     /** refused at the door, before it was accepted; the sender was told */

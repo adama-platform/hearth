@@ -161,6 +161,91 @@ public class MailAdminTests {
     assertEquals(0, boxes().countRules("example.org"));
   }
 
+  /**
+   * The whole path for a rule that keeps mail, from the form an administrator fills in.
+   *
+   * This is the one worth driving end to end: the action was added to the enum, the validator and
+   * the handler before it existed in the template, which made the entire mailbox feature
+   * unreachable from the screen that is meant to switch it on.
+   */
+  @Test
+  public void aRuleCanBeSetToKeepMailInSomebodysMailbox() throws Exception {
+    long owner = server.auth.forDomain("example.org").users
+        .create("jeff@example.com", null, true, null).id();
+    server.auth.forDomain("example.org").users.approve(owner, null);
+    boxes().saveBox(0, "example.org", "jeff", "mine", owner, true, null);
+
+    assertTrue("the option is on the form", admin.get("/admin/mail/new").contains("keep it here"));
+    admin.submitToAndFollow("/admin/mail", Map.of("action", "save", "name", "mine", "to", "jeff",
+        "from", "", "subject", "", "what", "deliver", "forwardTo", "", "position", "10",
+        "enabled", "on"));
+
+    Mailboxes.Rule rule = boxes().decide("example.org", "jeff", "anyone@example.com", "");
+    assertNotNull(rule);
+    assertEquals(Mailboxes.Action.deliver, rule.action());
+    assertTrue("and the listing says where it goes",
+        admin.get("/admin/mail").contains("kept here"));
+  }
+
+  /**
+   * Keeping mail for an address nobody owns is refused at the form.
+   *
+   * The message would land in a table no screen lists, which is mail lost rather than delivered --
+   * and the mistake is far cheaper to catch here than the first time real mail arrives.
+   */
+  @Test
+  public void aKeepRuleIsRefusedWhenNobodyOwnsTheAddress() throws Exception {
+    boxes().saveBox(0, "example.org", "orphan", "", null, true, null);
+    Browser.Page landed = admin.submitToAndFollow("/admin/mail", Map.of("action", "save",
+        "name", "", "to", "orphan", "from", "", "subject", "", "what", "deliver",
+        "forwardTo", "", "position", "10", "enabled", "on"));
+    assertTrue(landed.body(), landed.contains("Nobody owns"));
+    assertEquals(0, boxes().countRules("example.org"));
+  }
+
+  @Test
+  public void aKeepRuleForAnAddressThatDoesNotExistIsRefused() throws Exception {
+    Browser.Page landed = admin.submitToAndFollow("/admin/mail", Map.of("action", "save",
+        "name", "", "to", "nosuch", "from", "", "subject", "", "what", "deliver",
+        "forwardTo", "", "position", "10", "enabled", "on"));
+    assertTrue(landed.body(), landed.contains("not an address here yet"));
+    assertEquals(0, boxes().countRules("example.org"));
+  }
+
+  @Test
+  public void aCatchAllCannotBeKept() throws Exception {
+    // there is no one address to keep it in, so the rule would have nowhere to put anything
+    Browser.Page landed = admin.submitToAndFollow("/admin/mail", Map.of("action", "save",
+        "name", "", "to", Mailboxes.EVERYONE, "from", "", "subject", "", "what", "deliver",
+        "forwardTo", "", "position", "10", "enabled", "on"));
+    assertTrue(landed.body(), landed.contains("catch-all cannot be kept"));
+    assertEquals(0, boxes().countRules("example.org"));
+  }
+
+  /**
+   * One person, several addresses, and the screen says whose each one is.
+   *
+   * That is the shape the whole mailbox feature rests on: a reply goes out from the address a
+   * message arrived at, so having more than one of them is the point rather than an edge case.
+   */
+  @Test
+  public void onePersonCanBeGivenSeveralAddresses() throws Exception {
+    long owner = server.auth.forDomain("example.org").users
+        .create("jeff@example.com", null, true, null).id();
+    server.auth.forDomain("example.org").users.approve(owner, null);
+    admin.submitToAndFollow("/admin/mail/addresses", Map.of("action", "save",
+        "localPart", "jeff", "label", "mine", "owner", String.valueOf(owner), "enabled", "on"));
+    admin.submitToAndFollow("/admin/mail/addresses", Map.of("action", "save",
+        "localPart", "receipts", "label", "statements", "owner", String.valueOf(owner),
+        "enabled", "on"));
+
+    assertEquals(2, boxes().ownedBy(owner).size());
+    Browser.Page page = admin.get("/admin/mail/addresses");
+    assertTrue(page.body(), page.contains("jeff@example.org"));
+    assertTrue(page.body(), page.contains("receipts@example.org"));
+    assertTrue("and it says whose they are", page.contains("jeff@example.com"));
+  }
+
   // ---- addresses ---------------------------------------------------------------------------------
 
   @Test

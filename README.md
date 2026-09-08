@@ -178,6 +178,56 @@ SRS secret is a MAC anybody can compute and a default DKIM key is a private key 
 were on arrival, which rule matched, where it went and the far end's reply word for word. Metadata
 and a short preview — a forwarder that kept copies would be a mail store nobody agreed to run.
 
+## A mailbox, and a calendar
+
+**Forwarding was the half that lets somebody else stay put. This is the half where you leave.** An
+administrator gives a person one or more usernames at a domain — `jeff@`, `receipts@`, as many as
+you like — and a rule that *keeps* mail instead of sending it on. It lands in a mailbox they read
+here, and a notification arrives on their phone.
+
+### Built for zero, not for filing
+
+`/self/mail` has **no folders, no labels, no stars and no bin.** A message is in the inbox or it is
+not, and the two ways out are the two buttons under it: **reply**, or **delete**. Reply-all is the
+default, because the people on a thread are on it deliberately. Sending takes the message out of the
+inbox. Deleting is a delete — the row and the original both go, with no bin they wait in.
+
+**A reply goes out from the address it arrived at.** Somebody who wrote to `receipts@` gets an
+answer from `receipts@`: the address they already know, and the one SPF and DKIM both align with.
+It is signed as your domain with the envelope sender the same address, so it passes every check a
+receiver runs.
+
+### What it will and will not hand you
+
+| | |
+| --- | --- |
+| **Full MIME** | Nested multiparts, base64 and quoted-printable, RFC 2047 subjects, RFC 2231 filenames, charsets that do not exist. Lenient in — a message with an unterminated boundary still gives up its parts — and strict about everything it then does with them. |
+| **A closed allow list** | Documents, pictures, plain text, calendars, audio, video. Not archives, because nothing here can see inside one; not `.html` or `.svg`, because both carry script and arrive looking harmless. A refused part is **listed with its name, its size and the reason** — never silently dropped — and the original is always downloadable. |
+| **Bytes that match the name** | `invoice.pdf` beginning `MZ` is refused. The extension read is the *last* one, because `invoice.pdf.exe` is an executable. |
+| **Images opened, not decoded** | Dimensions come out of the header without touching a pixel — which catches both the file that is not a picture and the 60,000 × 60,000 PNG that is nine kilobytes on the wire and fourteen gigabytes in a decoder. |
+| **Served safely** | Always the type *this server* chose, never the sender's; always `nosniff`; always a download unless it is an image that passed its checks. |
+| **Nothing remote, ever** | A remote image in an email is a tracking pixel. Every external reference is removed and **counted**, so the message says "this wanted to load 6 things from elsewhere". Inline `cid:` images are parts of the same message and are rewritten to point here. No `<script>`, no `<iframe>`, and no `style` — a message that can position itself over the page can draw a sign-in form. |
+
+**The notification says who wrote and links to the message, and never the subject.** It crosses
+Google's or Mozilla's push service and lands on a lock screen anybody in the room can read. This is
+also the first thing in this server that has ever produced a push.
+
+### The calendar
+
+**An agenda, not a grid** — seven cells of a month view are empty on any given week, and the two
+questions actually being asked are "what is today" and "what is coming".
+
+Invitations that arrive by email land in it, **unanswered**: a reader that accepts on your behalf
+fills your week with meetings you never agreed to. Answering sends a proper iTIP reply to the
+organizer, so their calendar updates itself. An update from an organizer keeps what you already
+said; a cancellation stays visible with its status, because a meeting that silently vanishes from a
+morning you planned around reads as "that never existed" rather than "that was called off".
+
+**A subscription URL is what replaces the hosted calendar.** One long random token, hashed at rest,
+shown once, revocable — paste it into Apple Calendar or Google Calendar and your phone, laptop and
+watch all show the same events. It is **read-only**: writing back from a phone needs CalDAV, which
+this server does not speak.
+
 ## What else is in the jar
 
 | | |
@@ -189,6 +239,7 @@ and a short preview — a forwarder that kept copies would be a mail store nobod
 | **A model endpoint** | MCP with OAuth. Everything above is reachable by an agent acting as the person who connected it. |
 | **Files, mail, push, TLS** | Uploads, SES out and SMTP in with SPF/DKIM/DMARC, an installable app, and certificates it renews itself. |
 | **Mail routing** | Addresses, ordered rules, SRS, ARC and a signed relay — see above. |
+| **A mailbox and a calendar** | Per-person inboxes built for zero, full MIME with unsafe types refused, and an ICS feed a phone subscribes to. |
 
 Nothing on disk but the databases, the certificates and what you upload. No third-party request of
 any kind.
@@ -259,14 +310,15 @@ Workspace**. It takes its own permission: being trusted with the website is not 
 the post, and that screen can redirect somebody's mail and shows who has been writing to whom.
 
 Your own page at `/self` has **Today** (the sheet), **Profile**, **Connections** (your Hevy key and
-your availability) and **Your data**.
+your availability) and **Your data** — plus `/self/mail` and `/self/calendar` when this box is
+holding mail.
 
 A section you may not open is absent from the sidebar and answers 404 rather than 403 — a 403
 confirms what is behind the door.
 
 ## Where it is today
 
-**1275-odd tests**, mostly not unit tests: the testkit boots the whole server on an ephemeral port
+**1400-odd tests**, mostly not unit tests: the testkit boots the whole server on an ephemeral port
 with real databases and drives it over HTTP. `just validate` is the gate — it builds clean, runs
 everything, packages the jar, then makes real HTTP requests against that jar running as a server.
 
