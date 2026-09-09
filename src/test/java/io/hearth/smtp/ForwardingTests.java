@@ -384,6 +384,29 @@ public class ForwardingTests {
     assertEquals("refused", accounts().mailLog.recent(DOMAIN, 1).get(0).outcome());
   }
 
+  // ---- what goes back on the wire ---------------------------------------------------------------------
+
+  /**
+   * A reply this server writes is one reply, whatever text it is carrying.
+   *
+   * The far end's own words come back through a forward, and an interpolated newline would be a
+   * second SMTP response -- letting whoever supplied it answer a command that has not been sent.
+   * Nothing can carry one today, and "today" is the word that makes the guard worth having.
+   */
+  @Test
+  public void aFarEndsWordsCannotBecomeASecondReply() throws Exception {
+    forwardEverythingTo("her@elsewhere.example");
+    far.answersData("550 no\r\n250 yes, definitely accepted");
+
+    MailReceiver.Outcome outcome = forwarder().receive(arriving("jeff@" + DOMAIN));
+    assertNotNull(outcome);
+    assertFalse(outcome.accepted());
+    // the stub's own reader joins its lines, so what reaches us is already one line; the session
+    // then guarantees it stays one on the way out
+    assertFalse("nothing this server writes carries a newline",
+        outcome.detail().contains("\r") || outcome.detail().contains("\n"));
+  }
+
   // ---- loops ---------------------------------------------------------------------------------------
 
   @Test

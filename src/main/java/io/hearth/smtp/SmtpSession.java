@@ -46,6 +46,14 @@ public class SmtpSession extends SimpleChannelInboundHandler<String> {
   /** how many junk commands before we stop being polite */
   private static final int MAX_ERRORS = 12;
   private static final String CRLF = "\r\n";
+  /**
+   * How long one reply line may be.
+   *
+   * RFC 5321 puts the limit at 512 octets including the code and the terminator, and plenty of
+   * clients have a buffer exactly that size. A reply carrying a long message from somewhere else --
+   * a receiver's own refusal, passed back through a forward -- is the one that would overrun it.
+   */
+  private static final int MAX_REPLY_TEXT = 480;
 
   private final SmtpConfig config;
   private final SmtpRouting routing;
@@ -451,8 +459,37 @@ public class SmtpSession extends SimpleChannelInboundHandler<String> {
     }
   }
 
+  /**
+   * Every reply this server writes, and the one place that guarantees it is one reply.
+   *
+   * <b>A reply carries text this server did not write.</b> The far end's own words come back
+   * through a forward; a rule's name and an address reach a refusal. None of them can contain a
+   * newline today -- each is flattened where it is read -- and "today" is the word that makes this
+   * worth having: an interpolated CRLF is a second SMTP response, which lets whoever supplied it
+   * answer a command that has not been sent yet.
+   *
+   * The multi-line EHLO is the reason this splits rather than strips: those CRLFs are the protocol,
+   * and each segment is sanitized on its own.
+   */
   private void say(ChannelHandlerContext ctx, String line) {
-    ctx.writeAndFlush(line + CRLF);
+    StringBuilder out = new StringBuilder(line.length() + 2);
+    for (String segment : line.split("\r\n", -1)) {
+      if (out.length() > 0) {
+        out.append(CRLF);
+      }
+      out.append(oneLine(segment));
+    }
+    ctx.writeAndFlush(out + CRLF);
+  }
+
+  /** a reply line with anything that would end it early, or overrun a client's buffer, taken out */
+  private static String oneLine(String text) {
+    StringBuilder out = new StringBuilder(Math.min(text.length(), MAX_REPLY_TEXT));
+    for (int k = 0; k < text.length() && out.length() < MAX_REPLY_TEXT; k++) {
+      char ch = text.charAt(k);
+      out.append(ch == '\r' || ch == '\n' || ch < 0x20 ? ' ' : ch);
+    }
+    return out.toString();
   }
 
   private static String remote(ChannelHandlerContext ctx) {

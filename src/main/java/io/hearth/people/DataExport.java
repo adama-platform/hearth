@@ -121,6 +121,63 @@ public final class DataExport {
       row.put("uploaded", stamp(file.createdAt()));
     }
 
+    // Their mail, and the calendar that goes with it.
+    //
+    // <b>The single largest thing this server holds about a person, and it was missing from the
+    // file that is supposed to be everything.</b> A subject access request answered without it is
+    // an answer that is wrong, and invariant 177 says the policy is a specification -- so the day
+    // this server started keeping mail was the day this export became incomplete.
+    //
+    // The bodies are here because they are what a person is asking for; the attachments are named
+    // and sized rather than embedded, because a JSON file with a hundred megabytes of base64 in it
+    // is a file nobody can open. The original of any message is downloadable one at a time from the
+    // reader, which is where somebody who wants the octets should go.
+    ArrayNode mail = root.putArray("mail_kept_for_you");
+    for (io.hearth.inbox.Messages.Record message : accounts.inbox.all(person.id(), 500)) {
+      ObjectNode row = mail.addObject();
+      row.put("received", stamp(message.receivedAt()));
+      row.put("to", message.deliveredTo());
+      row.put("from", message.fromAddress());
+      row.put("from_name", message.fromName());
+      row.put("subject", message.subject());
+      row.put("message_id", message.messageId());
+      row.put("size", message.sizeBytes());
+      row.put("read", stamp(message.readAt()));
+      row.put("answered", stamp(message.repliedAt()));
+      row.put("text", message.textBody());
+      ArrayNode parts = row.putArray("attachments");
+      for (io.hearth.inbox.Messages.Attachment part : message.parts()) {
+        ObjectNode named = parts.addObject();
+        named.put("filename", part.filename());
+        named.put("size", part.size());
+        named.put("handed_back", part.allowed());
+      }
+    }
+
+    ArrayNode calendar = root.putArray("your_calendar");
+    for (io.hearth.calendar.Events.Record event
+        : accounts.events.between(person.id(), Long.MIN_VALUE / 4, Long.MAX_VALUE / 4)) {
+      ObjectNode row = calendar.addObject();
+      row.put("what", event.summary());
+      row.put("starts", stamp(event.startsAt()));
+      row.put("ends", stamp(event.endsAt()));
+      row.put("all_day", event.allDay());
+      row.put("where", event.location());
+      row.put("notes", event.description());
+      row.put("repeats", event.rrule());
+      row.put("invited_by", event.organizer());
+      row.put("you_said", event.myAnswer());
+    }
+
+    // The addresses that are theirs, which is a fact about them rather than about the domain.
+    ArrayNode addresses = root.putArray("addresses_that_are_yours");
+    for (io.hearth.smtp.Mailboxes.Box box : accounts.mailboxes.ownedBy(person.id())) {
+      ObjectNode row = addresses.addObject();
+      row.put("address", box.address());
+      row.put("what_it_is", box.label());
+      row.put("accepting", box.enabled());
+    }
+
     return root.toPrettyString().getBytes(java.nio.charset.StandardCharsets.UTF_8);
   }
 

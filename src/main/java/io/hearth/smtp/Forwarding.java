@@ -319,6 +319,9 @@ public class Forwarding implements MailReceiver {
       //
       // A database that would not write is worth retrying; an address nobody owns is not going to
       // acquire an owner in the next four days.
+      // Permanent when it is the configuration's fault and temporary when it is a state that
+      // changes: an address nobody owns will not acquire an owner while the message waits, and a
+      // full mailbox is exactly the thing somebody empties this afternoon.
       return Handled.refused(stored.problem().startsWith("nobody owns")
           ? Outcome.refused(stored.problem()) : Outcome.tryLater(stored.problem()));
     }

@@ -318,7 +318,7 @@ confirms what is behind the door.
 
 ## Where it is today
 
-**1400-odd tests**, mostly not unit tests: the testkit boots the whole server on an ephemeral port
+**1425-odd tests**, mostly not unit tests: the testkit boots the whole server on an ephemeral port
 with real databases and drives it over HTTP. `just validate` is the gate — it builds clean, runs
 everything, packages the jar, then makes real HTTP requests against that jar running as a server.
 
@@ -329,6 +329,8 @@ ever reached a real Google Workspace.
 ## The documents
 
 - **[MISSION.md](MISSION.md)** — why this exists and what it refuses to become.
+- **[SECURITY.md](SECURITY.md)** — what is defended and from whom, what is deliberately not, and the
+  checklist of things an operator has to do that the software cannot do for them.
 - **[CLAUDE.md](CLAUDE.md)** — every invariant, why it exists, and what broke when it did not hold.
 - **README.md** — this.
 

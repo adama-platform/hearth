@@ -73,6 +73,12 @@ public final class MailHtml {
    *                   pointing at nothing is a broken icon in the middle of somebody's message.
    */
   public static Cleaned clean(String html, Map<String, String> inlineUrls) {
+    return clean(html, inlineUrls, java.util.Set.copyOf(inlineUrls.values()));
+  }
+
+  /** as above, told exactly which URLs it is allowed to have produced */
+  private static Cleaned clean(String html, Map<String, String> inlineUrls,
+                               java.util.Set<String> ours) {
     if (html == null || html.isBlank()) {
       return new Cleaned("", 0);
     }
@@ -116,10 +122,14 @@ public final class MailHtml {
       link.attr("target", "_blank");
     }
     for (Element image : cleaned.select("img[src]")) {
-      // after cleaning, anything left has to be one of ours; belt and braces, because this is the
-      // one attribute where being wrong means a request leaving the machine
-      String source = image.attr("src");
-      if (!source.startsWith("/")) {
+      // After cleaning, an image has to be one this code wrote -- checked against the exact set,
+      // not against a prefix.
+      //
+      // "starts with a slash" reads like a same-origin test and is not one: `//evil.example/x.png`
+      // is protocol-relative, starts with a slash, and loads from somebody else's server. Nothing
+      // reaches here that was not rewritten above, so this cannot fire today; it is the check that
+      // stops a later change to the loop above from quietly becoming a tracking pixel.
+      if (!ours.contains(image.attr("src"))) {
         image.remove();
       }
     }
@@ -156,7 +166,10 @@ public final class MailHtml {
    */
   private static String linkify(String escaped) {
     java.util.regex.Matcher matcher =
-        java.util.regex.Pattern.compile("https?://[^\\s<>\"']+").matcher(escaped);
+        // `&` ends the match because the input is already escaped: `&quot;` and `&amp;` are how a
+        // quote and an ampersand arrive here, and swallowing them into an href produces a link
+        // nobody typed
+        java.util.regex.Pattern.compile("https?://[^\\s<>\"'&]+").matcher(escaped);
     StringBuilder out = new StringBuilder();
     while (matcher.find()) {
       String url = matcher.group();

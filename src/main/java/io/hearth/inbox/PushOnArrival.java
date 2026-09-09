@@ -34,6 +34,17 @@ public class PushOnArrival implements Delivery.Notifier {
   @Override
   public void arrived(Accounts accounts, long userId, long messageId, String from,
                       String selfUrl) {
+    arrived(accounts, userId, messageId, from, selfUrl, accounts.databaseDomain);
+  }
+
+  /**
+   * @param domain what the VAPID claim says this server is, which has to be somewhere a push
+   *               service could actually write back to. `localhost` was a placeholder and some
+   *               push services refuse a subject that is not a real address -- a notification that
+   *               silently never arrives is the worst shape this failure has.
+   */
+  public void arrived(Accounts accounts, long userId, long messageId, String from, String selfUrl,
+                      String domain) {
     try {
       java.util.List<PushSubs.Sub> subs = accounts.pushSubs.forUser(userId);
       if (subs.isEmpty()) {
@@ -49,7 +60,8 @@ public class PushOnArrival implements Delivery.Notifier {
           selfUrl + "/mail/" + messageId, "mail", userId);
       int sent = 0;
       for (PushSubs.Sub sub : subs) {
-        WebPush.Outcome outcome = new WebPush(verbose).send(sub, push, "mailto:no-reply@localhost");
+        WebPush.Outcome outcome = new WebPush(verbose).send(sub, push,
+            "mailto:no-reply@" + (domain == null || domain.isBlank() ? "localhost" : domain));
         if (outcome.delivered()) {
           accounts.pushSubs.recordSuccess(sub.id());
           sent++;

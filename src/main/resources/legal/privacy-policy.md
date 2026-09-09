@@ -34,6 +34,21 @@ The authors of the software have no access to any of it.
 - A short record of recent requests, held **in memory only** and lost when the server restarts: the
   page asked for, the time, the response, your IP address and your browser's user agent.
 
+**If this community keeps your mail here**
+
+Some installations of this software receive email and keep it, rather than passing it on. If yours
+does — you will know, because you have a mailbox at `/self/mail` — then it also holds:
+
+- **The messages sent to you.** Their headers, both halves of the body, and the original exactly as
+  it arrived, on the same machine as everything else. That includes whatever anybody chose to write
+  to you and whatever they attached.
+- **What was decided about each one**: which address it came to, which rule matched, whether it was
+  forwarded, kept or let go, and what the far end said back. Administrators of this domain can see
+  that record — the sender, the recipient, the subject and the first part of the message — because
+  it is the only way to answer "I never got your email".
+- **Your calendar**, if you use it: what each event is, when, where, your notes on it, who invited
+  you and what you answered.
+
 **What we do not hold**
 
 - Passwords in readable form. If this community uses them at all, they are stored scrambled in a way
@@ -70,6 +85,14 @@ If this community sends mail through a provider, your address and the message pa
 provider's systems in order to be delivered. Nothing else about you is sent to them. Our email
 contains no tracking of any kind — no pixels, no click counting.
 
+**Nothing in a message you read here is ever fetched from anybody else's server.** A remote image in
+an email tells whoever sent it the moment you opened it, from what address, on what device. Every
+one is removed before the message reaches your screen, and the message says how many there were.
+
+**If your mail is forwarded somewhere else**, it is delivered to that address's own mail servers.
+The message is not altered on the way, and no copy of it is kept here beyond the record described
+above.
+
 ## Notifications on your device
 
 If you turn on push notifications, your browser gives this site a key that lets it send a message to
@@ -101,8 +124,9 @@ something over if the law actually required it, and we would tell you unless we 
 
 ## Where it lives
 
-On the machine that serves this site, in a single database file. If that machine is outside the UK
-or the EEA, the transfer is a necessary part of providing the service you asked for.
+On the machine that serves this site, in a single database file — with two exceptions, both on the
+same machine: files people upload, and the original of any message kept for you. If that machine is
+outside the UK or the EEA, the transfer is a necessary part of providing the service you asked for.
 
 ## How long it is kept
 
@@ -111,6 +135,11 @@ or the EEA, the transfer is a necessary part of providing the service you asked 
   marking it dead.
 - **The request log**: in memory, a few thousand requests, gone on restart.
 - **The IP address you signed up from**: ninety days, then erased on its own.
+- **Mail kept for you**: until you delete it. Deleting a message deletes it — the record and the
+  original together, with no bin it waits in — and deleting your account deletes all of it.
+- **The record of what happened to each message**: the most recent few thousand for the domain, and
+  then the oldest are dropped as new ones arrive.
+- **Your calendar**: until you delete an event, or your account.
 - **If an administrator rejects an application**: everything is deleted. There is no reason to keep
   the data of somebody who is not joining.
 

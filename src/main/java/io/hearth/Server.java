@@ -323,6 +323,14 @@ public class Server {
 
     Boot.section("http");
     WebConfig webConfig = settings.web();
+    // Set once, before the socket opens, and never read from a request.
+    //
+    // It is a process-wide fact rather than a per-domain one: a browser applies HSTS to a host, and
+    // this server would be telling one host two different things if it were configurable per domain.
+    io.hearth.web.Responses.hsts(webConfig.hstsSeconds);
+    if (webConfig.hstsSeconds > 0) {
+      Boot.info("hsts", webConfig.hstsSeconds + "s, on https responses only");
+    }
     Pages pages = new Pages(templates);
     AccountRoutes accountRoutes = new AccountRoutes(templates, mailer, verbose);
     io.hearth.mcp.AiLog aiLog = new io.hearth.mcp.AiLog();

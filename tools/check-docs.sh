@@ -21,7 +21,7 @@ say() { printf '  %-6s %s\n' "$1" "$2"; }
 bad() { say "BAD" "$1"; fail=1; }
 ok()  { say "ok" "$1"; }
 
-DOCS=(README.md CLAUDE.md MISSION.md)
+DOCS=(README.md CLAUDE.md MISSION.md SECURITY.md)
 
 echo
 echo "  documents"
@@ -162,6 +162,30 @@ while IFS= read -r section; do
 done < <(sed -n '/public enum Section {/,/;$/p' src/main/java/io/hearth/web/AdminView.java \
          | grep -oE '^    [a-z]+\(' | tr -d ' (')
 [ $sectionmiss -eq 0 ] && ok "every admin section is described somewhere"
+
+# ---- 7b. every config key SECURITY.md tells somebody to set is one the server reads -------------
+# A hardening checklist is a list of instructions, and an instruction naming a setting that does not
+# exist is worse than no instruction: somebody sets it, believes they are protected, and is not.
+keymiss=0
+# What the server actually reads: every literal handed to a ConfigObject reader, plus the names of
+# the permissions, since the checklist names one of those too. Anything else that *looks* like a
+# setting and is in neither is an instruction that silently does nothing.
+known=$(mktemp)
+grep -rhoE '(strOf|boolOf|intOf|longOf|child|stringsOf|listOf|has|get)\("[a-z0-9._-]+"' \
+  src/main/java/io/hearth/ | sed -E 's/.*\("//; s/"$//' | sort -u > "$known"
+sed -n '/^public enum Permission {/,/^}/p' src/main/java/io/hearth/auth/Permission.java \
+  | grep -oE '^  [a-z_]+\(' | tr -d ' (' >> "$known"
+sort -u -o "$known" "$known"
+while IFS= read -r key; do
+  # a dotted key is a path into a block: smtp.forwarding.require-tls is read as require-tls inside
+  # the block its parents name, so the leaf is what the source contains
+  leaf="${key##*.}"
+  grep -qxF "$key" "$known" || grep -qxF "$leaf" "$known" \
+    || { bad "SECURITY.md names the setting '$key', which nothing reads"; keymiss=1; }
+done < <(grep -oE '`[a-z][a-z0-9]*([._-][a-z0-9]+)+`' SECURITY.md \
+         | tr -d '`' | grep -vE '\.(md|cfg|sh|java|jar|ics|eml|com|org|example)$' | sort -u)
+rm -f "$known"
+[ $keymiss -eq 0 ] && ok "every setting SECURITY.md names is one the server reads"
 
 # ---- 8. the schema version the docs quote is the one in the code -------------------------------
 VERSION=$(grep -oE 'VERSION = [0-9]+' src/main/java/io/hearth/store/Schema.java | grep -oE '[0-9]+')

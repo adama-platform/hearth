@@ -78,8 +78,10 @@ public class InboxRoutes {
 
   /** does this path belong here? */
   public static boolean owns(DomainConfig config, String path) {
+    // no query branch: this is handed a path with the query already stripped, and a condition that
+    // can never fire is one somebody later reads as protection that is not there
     String root = config.urls.self + "/mail";
-    return path.equals(root) || path.startsWith(root + "/") || path.startsWith(root + "?");
+    return path.equals(root) || path.startsWith(root + "/");
   }
 
   /** where the part route lives for a given domain, since `self` is configurable */

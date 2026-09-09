@@ -53,6 +53,14 @@ public class Relay {
   private static final int CONNECT_TIMEOUT_MILLIS = 20_000;
   /** how many exchangers to try before calling it a day */
   private static final int MAX_HOSTS = 3;
+  /**
+   * The longest reply line this will hold.
+   *
+   * A receiver is somebody else's machine and a hostile one can answer with a gigabyte and no
+   * newline in it. `readLine` on that is an out-of-memory error on the delivery thread, which takes
+   * the whole mail path down -- so the reader stops at a length no real SMTP reply approaches.
+   */
+  private static final int MAX_REPLY_LINE = 4096;
   private static final String CRLF = "\r\n";
 
   private final SmtpDns dns;
@@ -60,17 +68,41 @@ public class Relay {
   private final String helo;
   private final boolean requireTls;
   private final int port;
+  /**
+   * May this deliver to an address inside the network?
+   *
+   * <b>False everywhere except a test, and that is a real defence rather than tidiness.</b> Who a
+   * message is delivered to is not always chosen by an administrator: a reply-all is addressed from
+   * the To and Cc headers of a message a stranger sent, so a stranger picks a domain, and that
+   * domain's MX record is a name they also control. Pointing it at `127.0.0.1` or `10.0.0.5` turns
+   * "reply to this" into a request to something behind the firewall -- which is invariant 150's
+   * argument arriving by a different door.
+   *
+   * A test needs the loopback, because the stub exchanger it talks to is bound on it.
+   */
+  private final boolean allowInside;
 
   public Relay(SmtpDns dns, String helo, boolean requireTls, Verbose verbose) {
-    this(dns, helo, requireTls, 25, verbose);
+    this(dns, helo, requireTls, 25, false, verbose);
   }
 
-  /** the port is a seam: a test needs a listener it can bind, and 25 needs root */
+  /**
+   * The seam a test uses: its own port, and permission to reach the loopback it bound on.
+   *
+   * Both halves are the test's, together, on purpose -- a production caller reaching for a custom
+   * port would otherwise silently acquire the right to deliver inside the network as well.
+   */
   public Relay(SmtpDns dns, String helo, boolean requireTls, int port, Verbose verbose) {
+    this(dns, helo, requireTls, port, true, verbose);
+  }
+
+  private Relay(SmtpDns dns, String helo, boolean requireTls, int port, boolean allowInside,
+                Verbose verbose) {
     this.dns = dns;
     this.helo = helo;
     this.requireTls = requireTls;
     this.port = port;
+    this.allowInside = allowInside;
     this.verbose = verbose;
   }
 
@@ -129,6 +161,21 @@ public class Relay {
    * true of half the message.
    */
   public Sent send(String envelopeFrom, String recipient, byte[] message) {
+    // Nothing reaches a command line without being an address first.
+    //
+    // `RCPT TO:<...>` is a line of a protocol, and a recipient that is not an address is at best a
+    // confusing refusal and at worst a second command. Recipients are not always an
+    // administrator's: a reply-all takes them from headers a stranger wrote. The same check the
+    // inbound side uses at RCPT, applied on the way out.
+    if (!SmtpRouting.looksLikeAddress(recipient)) {
+      return new Sent(Sent.Status.refused, "", "", "'" + recipient + "' is not an address");
+    }
+    if (envelopeFrom != null && !envelopeFrom.isEmpty()
+        && !SmtpRouting.looksLikeAddress(envelopeFrom)) {
+      // the empty sender is legal and is what a bounce uses; anything else has to be real
+      return new Sent(Sent.Status.refused, "", "",
+          "'" + envelopeFrom + "' is not an address to send from");
+    }
     String domain = SmtpRouting.domainOf(recipient);
     if (domain == null) {
       return new Sent(Sent.Status.refused, "", "", "'" + recipient + "' is not an address");
@@ -148,6 +195,15 @@ public class Relay {
 
   private Sent sendTo(String host, String envelopeFrom, String recipient, byte[] message) {
     verbose.detail(() -> "relay: " + recipient + " via " + host);
+    String inside = allowInside ? null : io.hearth.common.PublicAddress.refuse(host);
+    if (inside != null) {
+      // Resolved and refused, not read: a name under somebody else's control can point anywhere,
+      // and a check on the text would never notice. Permanent, because an exchanger inside this
+      // network is not going to move out of it while the message waits.
+      verbose.detail(() -> "relay: refused " + host + " -- " + inside);
+      return new Sent(Sent.Status.refused, host, "none",
+          host + " is not somewhere this server will deliver: " + inside);
+    }
     String tls = "none";
     try (Socket socket = new Socket()) {
       socket.connect(new InetSocketAddress(host, port), CONNECT_TIMEOUT_MILLIS);
@@ -276,7 +332,7 @@ public class Relay {
       ArrayList<String> lines = new ArrayList<>();
       String line;
       int code = 0;
-      while ((line = in.readLine()) != null) {
+      while ((line = readBounded()) != null) {
         lines.add(line);
         if (line.length() >= 3) {
           try {
@@ -297,6 +353,29 @@ public class Relay {
         throw new java.io.IOException("the connection closed without a reply");
       }
       return new Reply(code, String.join(" ", lines).trim(), lines);
+    }
+
+    /**
+     * One line, or as much of one as this will hold.
+     *
+     * `readLine` on a hostile receiver that answers with a gigabyte and no newline is an
+     * out-of-memory error on the delivery thread. Stopping at a length no real reply approaches
+     * turns that into a refusal.
+     */
+    private String readBounded() throws java.io.IOException {
+      StringBuilder out = new StringBuilder(128);
+      int ch;
+      while ((ch = in.read()) >= 0) {
+        if (ch == '\n') {
+          break;
+        }
+        // past the ceiling the characters are dropped and the loop keeps going to the newline,
+        // so the conversation stays in step rather than the next reply being read as this one
+        if (ch != '\r' && out.length() < MAX_REPLY_LINE) {
+          out.append((char) ch);
+        }
+      }
+      return ch < 0 && out.length() == 0 ? null : out.toString();
     }
 
     Reply say(String command) throws java.io.IOException {

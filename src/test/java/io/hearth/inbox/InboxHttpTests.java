@@ -380,6 +380,34 @@ public class InboxHttpTests {
         nobody.get("/calendar/" + token + ".ics").status());
   }
 
+  /**
+   * Turning an account off stops its calendar feed, which has no session to revoke.
+   *
+   * <b>The one credential a disabled person would otherwise keep.</b> Disabling revokes every
+   * session, and this URL has none -- so without a check on the account the feed they minted while
+   * they were a member goes on serving their calendar, from a phone, for years. It answers the same
+   * 404 a wrong token gets: whether an account is disabled is not something an unauthenticated
+   * request should be able to find out.
+   */
+  @Test
+  public void aDisabledAccountsCalendarFeedStopsWorking() throws Exception {
+    long future = System.currentTimeMillis() + 86_400_000L;
+    accounts().events.merge(myId, new io.hearth.calendar.IcsFile.Event("gym@x", 0, "Squats", "",
+        "", future, future + 3_600_000L, false, "", "", "CONFIRMED", "", List.of()), "typed",
+        null, null);
+    String token = accounts().events.mintFeedToken(myId);
+    Browser nobody = new Browser(server.port, DOMAIN);
+    assertEquals(200, nobody.get("/calendar/" + token + ".ics").status());
+
+    accounts().users.setDisabled(myId, true);
+    assertEquals("the same answer a made-up token gets", 404,
+        nobody.get("/calendar/" + token + ".ics").status());
+
+    accounts().users.setDisabled(myId, false);
+    assertEquals("and it comes back when they do", 200,
+        nobody.get("/calendar/" + token + ".ics").status());
+  }
+
   @Test
   public void anEventCanBeEditedAndDeleted() throws Exception {
     me.submitToAndFollow("/self/calendar", Map.of("action", "save", "summary", "Squats",

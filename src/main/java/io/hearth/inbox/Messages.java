@@ -34,6 +34,41 @@ import java.util.Locale;
  * not want, sitting on a machine in your house.
  */
 public class Messages {
+  /**
+   * How many parts one message lists.
+   *
+   * <b>A count rather than a byte ceiling, because the manifest is JSON.</b> Truncating it at a
+   * length produces a document that will not parse, and an unparseable manifest is a message whose
+   * attachments all vanish from the screen *and* become undownloadable -- the manifest is what the
+   * download path checks against. Two hundred and fifty parts with long names is comfortably past
+   * sixty-four kilobytes, so the cap is on the thing that can be counted honestly.
+   */
+  public static final int MAX_LISTED_PARTS = 60;
+
+  /**
+   * How many messages one person's mailbox holds before the oldest dealt-with ones are dropped.
+   *
+   * <b>Unbounded storage is how a mail server falls over, and it falls over at three in the
+   * morning.</b> An address that is on one mailing list receives for ever, and there is no point at
+   * which anybody notices except the one where the disk is full and the database will not write --
+   * which takes the website down with it, because they share a machine.
+   *
+   * <b>Only archived messages are ever dropped, oldest first.</b> Anything still in the inbox is
+   * something a person has not dealt with, and a mailbox that silently deletes unread mail to make
+   * room is worse than one that fills up. If somebody has fifty thousand unread messages the cap
+   * does nothing and the operator has a different problem, which is the honest outcome.
+   */
+  public static final int KEPT_PER_PERSON = 20_000;
+
+  /**
+   * And how many bytes, which is the ceiling that actually protects the disk.
+   *
+   * <b>A count is not a size.</b> Twenty thousand messages at the ten-megabyte ceiling is two
+   * hundred gigabytes, so a cap on the number alone protects nothing -- and the sender does not
+   * need an account, because anybody on the internet can write to an address a rule keeps.
+   */
+  public static final long KEPT_BYTES_PER_PERSON = 4L * 1024 * 1024 * 1024;
+
   private static final ObjectMapper JSON = new ObjectMapper();
 
   private final Store store;
@@ -205,6 +240,19 @@ public class Messages {
       ArrayNode array = JSON.createArrayNode();
       int count = 0;
       for (Attachment one : listed) {
+        if (count >= MAX_LISTED_PARTS) {
+          // Said out loud rather than silently cut: a message with more parts than this is not a
+          // message anybody sent by hand, and somebody looking at it should know the list stops.
+          ObjectNode more = array.addObject();
+          more.put("path", "");
+          more.put("name", (listed.size() - count) + " more part(s)");
+          more.put("type", "");
+          more.put("size", 0);
+          more.put("ok", false);
+          more.put("why", "this message has more parts than this server lists; the original has"
+              + " all of them");
+          break;
+        }
         ObjectNode node = array.addObject();
         node.put("path", one.path());
         node.put("name", one.filename());
@@ -220,7 +268,9 @@ public class Messages {
         }
         count++;
       }
-      this.partsJson = clip(array.toString(), 65_536);
+      // never clipped: see MAX_LISTED_PARTS. A manifest that will not parse is worse than a short
+      // one, because it takes every attachment with it.
+      this.partsJson = array.toString();
       this.attachments = count;
       this.hasCalendar = hasCalendar;
       return this;
@@ -293,6 +343,58 @@ public class Messages {
     }
     store.changed(Schema.MAIL_MESSAGES, id, MutationEvent.Kind.insert, draft.userId);
     return id;
+  }
+
+  /**
+   * The ids of anything past the ceiling, oldest dealt-with first.
+   *
+   * Ids rather than a delete, because the files on disk have to go with the rows and this class
+   * does not own them -- the caller deletes the files and then calls {@link #delete}. A sweep that
+   * dropped the rows itself would leave an original on disk that nothing names and no later sweep
+   * would find.
+   */
+  public List<Long> overflowing(long userId) throws SQLException {
+    ArrayList<Long> ids = new ArrayList<>();
+    Size size = sizeOf(userId);
+    if (!size.over()) {
+      return ids;
+    }
+    int droppingCount = Math.max(0, size.count() - KEPT_PER_PERSON);
+    long droppingBytes = Math.max(0, size.bytes() - KEPT_BYTES_PER_PERSON);
+    long freed = 0;
+    try (Connection connection = store.connection();
+         PreparedStatement statement = connection.prepareStatement(
+             "SELECT id, size_bytes FROM " + Schema.MAIL_MESSAGES + " WHERE user_id = ?"
+                 + " AND archived_at IS NOT NULL ORDER BY id "
+                 + store.dialect().limit(2000))) {
+      statement.setLong(1, userId);
+      try (ResultSet found = statement.executeQuery()) {
+        while (found.next() && (ids.size() < droppingCount || freed < droppingBytes)) {
+          ids.add(found.getLong("id"));
+          freed += found.getInt("size_bytes");
+        }
+      }
+    }
+    return ids;
+  }
+
+  /** how much of somebody's ceiling is used */
+  public record Size(int count, long bytes) {
+    public boolean over() {
+      return count > KEPT_PER_PERSON || bytes > KEPT_BYTES_PER_PERSON;
+    }
+  }
+
+  public Size sizeOf(long userId) throws SQLException {
+    try (Connection connection = store.connection();
+         PreparedStatement statement = connection.prepareStatement(
+             "SELECT COUNT(*) AS n, COALESCE(SUM(size_bytes), 0) AS b FROM "
+                 + Schema.MAIL_MESSAGES + " WHERE user_id = ?")) {
+      statement.setLong(1, userId);
+      try (ResultSet found = statement.executeQuery()) {
+        return found.next() ? new Size(found.getInt("n"), found.getLong("b")) : new Size(0, 0);
+      }
+    }
   }
 
   /**

@@ -21,14 +21,48 @@ public class Responses {
   public static final byte[] EMPTY = new byte[0];
 
   /**
-   * Headers on every response, no exceptions.
+   * How long a browser is told to insist on https, or zero for not at all.
    *
-   * Strict-Transport-Security is deliberately absent while we are HTTP-only for developers --
-   * sending HSTS over plaintext on localhost would pin a developer's browser to https for a port
-   * that has no TLS behind it. It gets added when the SSL listener lands.
+   * <b>Off unless an operator turns it on, and that is their decision rather than a default.</b>
+   * HSTS is the right answer for a domain that is https and intends to stay that way, and it is a
+   * one-way door: a browser that has seen the header refuses plaintext for the whole `max-age`,
+   * and there is no way to reach the people whose browsers already have it. An operator who loses
+   * their certificate has a site nobody can open rather than a site with a warning on it.
+   *
+   * Never sent on a plaintext response, whatever this is set to. Sending HSTS over http on
+   * localhost pins a developer's browser to https for a port that has no TLS behind it, and the
+   * only cure is clearing it by hand in the browser's settings.
    */
+  private static volatile long hstsSeconds;
+
+  /** set once at boot from `hsts-seconds`; a request never changes it */
+  public static void hsts(long seconds) {
+    hstsSeconds = Math.max(0, seconds);
+  }
+
+  public static long hstsSeconds() {
+    return hstsSeconds;
+  }
+
+  /** Headers on every response, no exceptions. */
   public static void addSecurityHeaders(HttpResponse res) {
-    addSecurityHeaders(res, null);
+    addSecurityHeaders(res, null, false);
+  }
+
+  public static void addSecurityHeaders(HttpResponse res, String scriptNonce) {
+    addSecurityHeaders(res, scriptNonce, false);
+  }
+
+  /**
+   * Did this request arrive over TLS?
+   *
+   * Read from the pipeline rather than from configuration, because the answer is about *this*
+   * connection: one listener terminates TLS and the other does not, and they run the same handlers.
+   * HSTS on a plaintext response is refused by the RFC and ignored by browsers, so sending it there
+   * would be noise that looks like protection.
+   */
+  public static boolean overTls(ChannelHandlerContext ctx) {
+    return ctx != null && ctx.pipeline().get(io.netty.handler.ssl.SslHandler.class) != null;
   }
 
   /**
@@ -37,8 +71,15 @@ public class Responses {
    *     injection managed to land could run too -- a nonce says "this one, that I minted for this
    *     response" and nothing else.
    */
-  public static void addSecurityHeaders(HttpResponse res, String scriptNonce) {
+  public static void addSecurityHeaders(HttpResponse res, String scriptNonce, boolean secure) {
     res.headers().set("X-Content-Type-Options", "nosniff");
+    if (hstsSeconds > 0 && secure) {
+      // `includeSubDomains` and not `preload`: the first is what makes the promise cover the
+      // subdomains this server also serves, and the second is a submission to a list baked into
+      // browsers that cannot be undone in any useful timeframe.
+      res.headers().set("Strict-Transport-Security",
+          "max-age=" + hstsSeconds + "; includeSubDomains");
+    }
     res.headers().set("Referrer-Policy", "no-referrer");
     res.headers().set("X-Frame-Options", "SAMEORIGIN");
     String contentType = res.headers().get(HttpHeaderNames.CONTENT_TYPE);
@@ -103,7 +144,7 @@ public class Responses {
         res.headers().set(extraHeaders[k], extraHeaders[k + 1]);
       }
     }
-    addSecurityHeaders(res, scriptNonce);
+    addSecurityHeaders(res, scriptNonce, overTls(ctx));
     // only a success keeps the connection; anything else means we don't trust what comes next
     boolean keepAlive = HttpUtil.isKeepAlive(req) && status.code() == 200;
     HttpUtil.setKeepAlive(res, keepAlive);
@@ -140,7 +181,7 @@ public class Responses {
     res.headers().set(HttpHeaderNames.CONTENT_ENCODING, "identity");
     res.headers().set("X-Accel-Buffering", "no");
     res.headers().set(HttpHeaderNames.ACCEPT_RANGES, "none");
-    addSecurityHeaders(res, null);
+    addSecurityHeaders(res, null, overTls(ctx));
     HttpUtil.setTransferEncodingChunked(res, true);
     ctx.writeAndFlush(res);
   }

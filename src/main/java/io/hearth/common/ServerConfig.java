@@ -44,6 +44,15 @@ public class ServerConfig {
   public final io.hearth.smtp.SmtpConfig smtp;
   /** negotiate HTTP/2 over TLS; HTTP/1.1 remains the fallback for anything that cannot */
   public final boolean http2;
+  /**
+   * How long a browser is told to insist on https, in seconds; 0 means the header is not sent.
+   *
+   * Off by default because HSTS is a one-way door: a browser that has seen it refuses plaintext
+   * for the whole window and there is no way to reach the people whose browsers already have it.
+   * An operator whose certificate lapses has a site nobody can open rather than one with a
+   * warning on it, so this is a decision they make rather than one this software makes for them.
+   */
+  public final long hstsSeconds;
   /** take the template's own whitespace out of every page on the way to the browser */
   public final boolean compactHtml;
   public final int maxRequestBytes;
@@ -64,6 +73,7 @@ public class ServerConfig {
     this.bouncePort = WebConfig.NO_PORT;
     this.smtp = io.hearth.smtp.SmtpConfig.off();
     this.http2 = true;
+    this.hstsSeconds = 0;
     this.compactHtml = true;
     this.maxRequestBytes = WebConfig.DEFAULT_MAX_CONTENT_LENGTH;
     this.idleSeconds = WebConfig.DEFAULT_IDLE_READ_SECONDS;
@@ -98,6 +108,7 @@ public class ServerConfig {
     this.bouncePort = bounce ? bouncePort : WebConfig.NO_PORT;
     this.smtp = new io.hearth.smtp.SmtpConfig(config.child("smtp"));
     this.http2 = config.boolOf("http2", true);
+    this.hstsSeconds = Math.max(0, config.intOf("hsts-seconds", 0));
     this.compactHtml = config.boolOf("compact-html", true);
     this.maxRequestBytes = positive(config, "max-request-bytes", WebConfig.DEFAULT_MAX_CONTENT_LENGTH);
     this.idleSeconds = positive(config, "idle-seconds", WebConfig.DEFAULT_IDLE_READ_SECONDS);
@@ -118,7 +129,7 @@ public class ServerConfig {
   public WebConfig web() {
     return new WebConfig(bind, httpPort, httpsEnabled ? httpsPort : WebConfig.NO_PORT, bouncePort,
         maxRequestBytes, 1, Math.max(2, Runtime.getRuntime().availableProcessors()), idleSeconds,
-        http2);
+        http2, hstsSeconds);
   }
 
   /** what an empty install should have written for it, with every default spelled out */
@@ -131,6 +142,7 @@ public class ServerConfig {
     node.put("enable-http-bounce", false);
     node.put("http-bounce-port", WebConfig.DEFAULT_BOUNCE_PORT);
     node.put("http2", true);
+    node.put("hsts-seconds", 0);
     node.put("max-request-bytes", WebConfig.DEFAULT_MAX_CONTENT_LENGTH);
     node.put("idle-seconds", WebConfig.DEFAULT_IDLE_READ_SECONDS);
     node.put("verbose", false);

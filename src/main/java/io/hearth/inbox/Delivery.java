@@ -81,6 +81,18 @@ public class Delivery {
     if (box.userId() == null) {
       return new Stored(0, "nobody owns " + box.address() + ", so there is nowhere to put this");
     }
+    // A full mailbox is refused, never emptied to make room.
+    //
+    // <b>This is what stops an address a rule keeps being a way to fill somebody's disk.</b> The
+    // sender needs no account: anybody on the internet can write to it, and twenty thousand
+    // messages at the message ceiling is two hundred gigabytes. Refusing is also what every mail
+    // server on earth does when a mailbox is full, and it is temporary -- the sending server holds
+    // the message, retries, and eventually tells the person it could not be delivered, which is
+    // true and is far better than this server deleting mail nobody has read to make space.
+    String full = mailboxFull(accounts, box);
+    if (full != null) {
+      return new Stored(0, full);
+    }
     byte[] raw = envelope.data();
     try {
       MimeTree.Message parsed = MimeTree.parse(raw);
@@ -128,6 +140,7 @@ public class Delivery {
             cleaned.html().replace(ID_MARKER, String.valueOf(id)));
       }
       importCalendar(accounts, parsed, box.userId(), id);
+      sweep(accounts, box.userId());
       notifier.arrived(accounts, box.userId(), id, displayOr(parsed.header("from")), selfUrl);
       verbose.detail(() -> "inbox: " + box.address() + " <- " + envelope.from());
       return new Stored(id, null);
@@ -144,6 +157,55 @@ public class Delivery {
       // original on disk, which is worse than reading it properly and far better than a bounce.
       verbose.detail(() -> "inbox: a message would not parse -- " + ex);
       return storeUnparseable(accounts, envelope, box, raw);
+    }
+  }
+
+  /**
+   * Is there room, once anything droppable has been dropped?
+   *
+   * The sweep runs first, so a mailbox somebody keeps tidy never sees this. What is left over is a
+   * mailbox that is full of things nobody has dealt with, and that is a person's problem to solve
+   * rather than a reason for this server to start deleting.
+   */
+  private String mailboxFull(Accounts accounts, Mailboxes.Box box) {
+    try {
+      if (!accounts.inbox.sizeOf(box.userId()).over()) {
+        return null;
+      }
+      sweep(accounts, box.userId());
+      Messages.Size after = accounts.inbox.sizeOf(box.userId());
+      if (!after.over()) {
+        return null;
+      }
+      verbose.detail(() -> "inbox: " + box.address() + " is full (" + after.count()
+          + " messages, " + after.bytes() / (1024 * 1024) + "MB)");
+      return "the mailbox for " + box.address() + " is full";
+    } catch (java.sql.SQLException ex) {
+      // a database that will not answer the question is not a reason to refuse the message
+      return null;
+    }
+  }
+
+  /**
+   * Drop the oldest dealt-with messages once a mailbox is past its ceiling.
+   *
+   * <b>Here rather than on a timer</b>, for the same reason the mail log prunes on write: this is
+   * the only thing that makes the table grow, and a scheduled sweeper is a thread and a schedule to
+   * hold in your head for something one query at the moment of growth does exactly. It costs a
+   * count per delivery, which is an index lookup.
+   *
+   * A failure is narrated and swallowed. The message is already stored and readable; refusing a
+   * delivery because a tidy-up did not work would be trading a full disk in a year for lost mail
+   * today.
+   */
+  private void sweep(Accounts accounts, long userId) {
+    try {
+      for (Long id : accounts.inbox.overflowing(userId)) {
+        files.delete(id);
+        accounts.inbox.delete(id, userId);
+      }
+    } catch (java.sql.SQLException ex) {
+      verbose.detail(() -> "inbox: could not trim an oversized mailbox -- " + ex.getMessage());
     }
   }
 

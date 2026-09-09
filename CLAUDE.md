@@ -52,8 +52,14 @@ theirs rather than asking it to understand a platform.
   a test that fails before and passes after, and say in the comment what the wrong version did.
 - **What has never been verified is listed under [Not verified](#not-verified) below**, because that
   is different from a defect and gets a different kind of attention.
-- This repository is **Hearth**. There are three documents and they are kept true: `CLAUDE.md`,
-  `README.md` and `MISSION.md`. `just docs` checks the mechanical parts of all three. There is no
+- This repository is **Hearth**. There are four documents and they are kept true: `CLAUDE.md`,
+  `README.md`, `MISSION.md` and `SECURITY.md`. `just docs` checks the mechanical parts of all four.
+  **`SECURITY.md` is the security model, not a list of defects** -- what is defended, from whom, and
+  what an operator has to do that the software cannot do for them. A finding does not go in it; a
+  finding gets fixed, with the reasoning in the comment and the proof in the test, exactly like every
+  other kind of finding. The check that keeps it honest is that every setting it tells somebody to
+  set has to be one the server actually reads: a hardening checklist naming a key that does not exist
+  is worse than no checklist, because somebody sets it and believes they are protected. There is no
   manual and no API contract any more: the JSON API went with the reduction, and a second document
   describing the same screens as the README is a second place to go stale.
 - Java 21. Netty for HTTP, H2 for storage, Mustache for pages, Jackson for JSON, scrypt for
@@ -125,6 +131,9 @@ affected part of `MANUAL.md`:
 Reading means opening the document and asking "would somebody following this succeed?", not
 grepping for the word you changed. The three failures above would all have been caught by one
 person reading one page once.
+
+`SECURITY.md` rots in its own way: it makes claims about *behaviour under attack*, which is the kind
+of claim that stays plausible long after the code changed. Re-read it whenever a guard moves.
 
 `README.md` is the vision and the current state, and it is the one that rots fastest because it is
 the one that makes claims. Its status line, its road, and its feature descriptions are all

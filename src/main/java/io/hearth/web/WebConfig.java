@@ -67,6 +67,17 @@ public class WebConfig {
    * keep answering the certificate challenge in the simplest possible way.
    */
   public final boolean http2;
+  /**
+   * How long a browser is told to insist on https, in seconds; zero means the header is not sent.
+   *
+   * <b>Zero by default, and that is the operator's decision to change rather than this software's
+   * to make.</b> HSTS is right for a domain that is https and intends to stay that way, and it is a
+   * one-way door -- a browser that has seen it refuses plaintext for the whole window, and there is
+   * no way to reach the people whose browsers already have it. An operator who loses a certificate
+   * has a site nobody can open rather than one with a warning on it. `31536000` is a year, which is
+   * what a domain that is sure should use.
+   */
+  public final long hstsSeconds;
 
   public static final int DEFAULT_MAX_CONTENT_LENGTH = 1024 * 1024;
   public static final int DEFAULT_IDLE_READ_SECONDS = 60;
@@ -95,6 +106,14 @@ public class WebConfig {
 
   public WebConfig(String bind, int port, int httpsPort, int bouncePort, int maxContentLengthSize,
                    int bossThreads, int workerThreads, int idleReadSeconds, boolean http2) {
+    this(bind, port, httpsPort, bouncePort, maxContentLengthSize, bossThreads, workerThreads,
+        idleReadSeconds, http2, 0);
+  }
+
+  public WebConfig(String bind, int port, int httpsPort, int bouncePort, int maxContentLengthSize,
+                   int bossThreads, int workerThreads, int idleReadSeconds, boolean http2,
+                   long hstsSeconds) {
+    this.hstsSeconds = hstsSeconds;
     this.bind = bind;
     this.port = port;
     this.httpsPort = httpsPort;

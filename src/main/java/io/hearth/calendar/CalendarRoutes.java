@@ -62,6 +62,8 @@ public class CalendarRoutes {
   /** the public feed lives outside the account paths, because a phone has no session */
   public static final String FEED_PREFIX = "/calendar/";
   private static final String FEED_SUFFIX = ".ics";
+  /** 24 random bytes as url-safe base64 with no padding; see Events.mintFeedToken */
+  private static final int TOKEN_CHARS = 32;
   /** how far ahead the agenda looks */
   private static final int AGENDA_DAYS = 60;
   private static final DateTimeFormatter DAY_LABEL =
@@ -95,8 +97,17 @@ public class CalendarRoutes {
    * credential, which is why it is long, random, hashed at rest and revocable.
    */
   public static boolean isFeed(String path) {
-    return path.startsWith(FEED_PREFIX) && path.endsWith(FEED_SUFFIX)
-        && path.length() > FEED_PREFIX.length() + FEED_SUFFIX.length();
+    if (!path.startsWith(FEED_PREFIX) || !path.endsWith(FEED_SUFFIX)) {
+      return false;
+    }
+    // The segment has to look like a token this server minted, not merely sit at this address.
+    //
+    // Without the shape check, `/calendar/anything.ics` is claimed by this route and a community
+    // with a page at that address finds it answering 404 for ever, with nothing on any screen
+    // saying why. A token is 32 characters of url-safe base64, so requiring that costs nothing and
+    // hands every other spelling back to the site.
+    String token = path.substring(FEED_PREFIX.length(), path.length() - FEED_SUFFIX.length());
+    return token.length() == TOKEN_CHARS && token.matches("[A-Za-z0-9_-]+");
   }
 
   // ---- the feed ------------------------------------------------------------------------------
@@ -112,6 +123,20 @@ public class CalendarRoutes {
         //
         // This is the one URL on the server anybody on the internet can guess at, so it must not
         // confirm anything: not that a token nearly worked, not that somebody has a calendar.
+        recorder.status(404);
+        Responses.send(ctx, req, HttpResponseStatus.NOT_FOUND, "text/plain; charset=utf-8",
+            "no calendar here".getBytes(StandardCharsets.UTF_8));
+        return;
+      }
+      // The token says whose calendar; the account says whether they may still have one.
+      //
+      // <b>Turning an account off revokes its sessions, and this URL has no session.</b> Without
+      // this the one credential a disabled person keeps is the feed they minted while they were
+      // still a member -- and it goes on serving their calendar, from a phone, for years. The same
+      // 404 as a wrong token: whether an account is disabled is not something an unauthenticated
+      // request should be able to find out.
+      io.hearth.auth.UserRecord owner = accounts.users.byId(userId);
+      if (owner == null || !accounts.access.isApproved(owner) || owner.disabled()) {
         recorder.status(404);
         Responses.send(ctx, req, HttpResponseStatus.NOT_FOUND, "text/plain; charset=utf-8",
             "no calendar here".getBytes(StandardCharsets.UTF_8));
