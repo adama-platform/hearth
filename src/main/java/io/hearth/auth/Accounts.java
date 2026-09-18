@@ -38,6 +38,12 @@ public class Accounts {
   /** the static pages this database serves, and the caches in front of them */
   public final Site site;
 
+  /** addresses that answer with another address, and the proposals waiting on somebody */
+  public final io.hearth.content.Rewrites rewrites;
+
+  /** how often each has fired, counted in memory and written out on a timer */
+  public final io.hearth.content.RewriteHits rewriteHits = new io.hearth.content.RewriteHits();
+
   /** things to do and habits to keep, and the sheet that says what today looks like */
   public final io.hearth.tasks.Tasks tasks;
 
@@ -152,6 +158,7 @@ public class Accounts {
     this.bans = new Bans(store, databaseDomain);
     this.oauthClients = new io.hearth.mcp.OauthClients(store);
     this.site = new Site(databaseDomain, store, caches, events, verbose);
+    this.rewrites = this.site.store().rewrites();
     this.mutations = new io.hearth.content.Mutations(store);
     this.mailboxes = new io.hearth.smtp.Mailboxes(store);
     this.mailLog = new io.hearth.smtp.MailLog(store);

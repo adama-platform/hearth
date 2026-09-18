@@ -1,0 +1,18 @@
+{{<shell}}{{$content}}
+<h1>Rewrites{{#anyProposals}} <span class="pill warn">{{proposalCount}} waiting</span>{{/anyProposals}}</h1>
+<p class="hint">An address that answers with another address. A published address is a promise
+  &mdash; somebody bookmarked it, somebody linked to it, a search engine holds it with whatever
+  standing the page earned &mdash; and moving the page without one of these throws all of that away
+  silently.</p>
+
+<div class="doing">
+  <a class="btn" href="{{newUrl}}">New rewrite</a>
+  <a href="{{contentUrl}}">Content</a>
+</div>
+
+<div class="scroll panel" data-panel="{{panelUrl}}">{{{panel}}}</div>
+
+<p class="hint">A rewrite is consulted <strong>after</strong> a real page and after a directory
+  listing, never before. That is what makes putting a page back at an old address simply work: the
+  page answers, and the rewrite sitting behind it does nothing.</p>
+{{/content}}{{/shell}}

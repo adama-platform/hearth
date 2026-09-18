@@ -28,7 +28,7 @@ import java.util.List;
  * Calendars this server fetches, keeps for an hour, and reduces to busy windows.
  *
  * <b>Fetching somebody's calendar is a serious thing to do and every guard here is about that.</b>
- * The url is member-supplied, which is invariant 150 exactly: https only, resolved and refused if it
+ * The url is member-supplied, which is invariant 159 exactly: https only, resolved and refused if it
  * points anywhere private, no redirects, a timeout and a ceiling on the body. Relaxing any one of
  * those turns "paste your calendar link" into a way to make this server fetch things on the internal
  * network on somebody else's behalf.
@@ -113,7 +113,7 @@ public class Calendars {
   }
 
   /**
-   * One fetch, with every guard invariant 150 asks for.
+   * One fetch, with every guard invariant 159 asks for.
    *
    * The address is resolved and refused if it is private *after* resolution, because a name that
    * resolves to 10.x is the whole trick -- checking the string would catch nothing.

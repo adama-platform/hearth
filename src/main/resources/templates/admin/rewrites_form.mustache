@@ -1,0 +1,79 @@
+{{<shell}}{{$content}}
+<p class="crumb"><a href="{{backUrl}}">&larr; Rewrites</a></p>
+<h1>{{heading}}</h1>
+
+{{#proposal}}<p class="hint">This is a suggestion, not a redirect. Saving it here makes it live;
+  the list has a button that does the same thing and also re-points anything that was aimed at the
+  old address.</p>{{/proposal}}
+
+<form class="editor" method="post" action="{{backUrl}}">
+  <input type="hidden" name="csrf" value="{{csrf}}">
+  <input type="hidden" name="action" value="save">
+  {{#editing}}<input type="hidden" name="id" value="{{form_id}}">{{/editing}}
+
+  <div class="field">
+    <label for="w-from">address people ask for</label>
+    <input id="w-from" type="text" name="from" value="{{form_from}}" placeholder="/the-old-page" required>
+    <p class="hint">A path on this site. If a real page is at this address the page wins and this
+      never fires &mdash; which is deliberate, and is what lets you put a page back.</p>
+  </div>
+
+  <div class="field">
+    <label for="w-status">how it answers</label>
+    <select id="w-status" name="status">
+      {{#statuses}}<option value="{{code}}"{{#chosen}} selected{{/chosen}}>{{code}} &mdash; {{label}}</option>{{/statuses}}
+    </select>
+    <ul class="hint">
+      {{#statuses}}<li><strong>{{code}}</strong> {{explanation}}</li>{{/statuses}}
+    </ul>
+  </div>
+
+  <div class="field">
+    <label for="w-to">send them to</label>
+    <input id="w-to" type="text" name="to" value="{{form_to}}" placeholder="/the-new-page">
+    <p class="hint">A path on this site, or a whole <code>https://</code> address somewhere else.
+      Leave it empty for &ldquo;gone for good&rdquo;, which is the one answer with nowhere to
+      go.</p>
+  </div>
+
+  <div class="field">
+    <label for="w-note">why</label>
+    <input id="w-note" type="text" name="note" value="{{form_note}}" placeholder="renamed when the shop moved">
+    <p class="hint">A note to whoever reads this list in two years, which will be you.</p>
+  </div>
+
+  <div class="field">
+    <label class="check"><input type="checkbox" name="enabled"{{#form_enabled}} checked{{/form_enabled}}> this rewrite answers</label>
+    <p class="hint">Turning it off leaves the row and stops it firing, which is how you check
+      whether anything is still following it before deleting it.</p>
+  </div>
+
+  <div class="doing"><button type="submit">Save</button>
+    <a class="quiet" href="{{backUrl}}">Never mind</a></div>
+</form>
+
+{{#editing}}
+<form method="post" action="{{backUrl}}" class="danger">
+  <input type="hidden" name="csrf" value="{{csrf}}">
+  <input type="hidden" name="action" value="delete">
+  <input type="hidden" name="id" value="{{form_id}}">
+  <button type="submit">Delete this rewrite</button>
+</form>
+{{/editing}}
+
+<div class="card">
+  <p class="meta"><span class="dim">which one to choose</span></p>
+  <p class="hint"><strong>301</strong> unless you know otherwise. It is what every crawler, every
+    audit tool and every CDN has understood as &ldquo;this moved, move its standing with it&rdquo;
+    for twenty-five years.</p>
+  <p class="hint"><strong>302</strong> when the page is coming back. Nothing moves its standing,
+    which is the point &mdash; a temporary redirect left in place for a year is how a page loses
+    its ranking without anybody doing anything wrong.</p>
+  <p class="hint"><strong>410</strong> when there is nowhere honest to send anybody. A search
+    engine treats a 404 as possibly a mistake and comes back for months; it drops a 410 quickly.</p>
+  <p class="hint">Accepting a proposal from the list also re-points anything that was aimed at the
+    old address, so <code>/a &rarr; /b &rarr; /c</code> becomes two redirects that both land on
+    <code>/c</code>. A chain costs a round trip at every hop and bleeds a little ranking each
+    time.</p>
+</div>
+{{/content}}{{/shell}}

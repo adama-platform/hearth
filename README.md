@@ -228,6 +228,32 @@ shown once, revocable — paste it into Apple Calendar or Google Calendar and yo
 watch all show the same events. It is **read-only**: writing back from a phone needs CalDAV, which
 this server does not speak.
 
+## Addresses that outlive their pages
+
+**A published address is a promise.** Somebody bookmarked it, somebody linked to it, and a search
+engine holds it with whatever standing the page earned. Moving the page and leaving a 404 behind
+throws all of that away silently — the link still exists, it just stops working, and the only person
+who finds out is the one who followed it.
+
+So **moving a published page proposes a redirect**, and a person accepts it. Not automatic: the
+software cannot tell a page moving to a better home from somebody fixing a typo they made ten
+seconds ago, and a redirect nobody agreed to is one nobody remembers making. Deleting a published
+page proposes a **410** instead — a crawler treats a 404 as possibly a mistake and comes back for
+months, where it drops a 410 quickly.
+
+**301 is the default**, because every crawler, audit tool and CDN has understood it as "this moved,
+move its standing with it" for twenty-five years. 302 and 307 are there for a page that is coming
+back, 308 for the rare case something POSTs to the address, and 410 for nothing-here-any-more.
+
+**Accepting collapses the chain.** If `/a → /b` exists and `/b` then moves to `/c`, accepting
+re-points `/a` at `/c` as well, so both land in one hop. A chain costs a round trip and a little
+ranking at every hop, and a move that comes back to where it started deletes the loop rather than
+leaving half of it.
+
+**A real page always wins.** Rewrites are consulted after content and after a directory listing, so
+putting a page back at an old address simply works — the page answers and the redirect behind it
+stops mattering. The screen says which rows are in that state, and which have quietly become chains.
+
 ## What else is in the jar
 
 | | |
@@ -236,6 +262,7 @@ this server does not speak.
 | **A website** | Pages and templates in a database, versioned as whole documents, with directory indexes and a JSON bundle that merges back. |
 | **Dynamic pages** | A page body that is a program, run in V8 per request with a fresh isolate and a one-second ceiling. |
 | **Tables** | Declare fields and indexes; a page gets read-only functions for them. Mutations are how anything writes. |
+| **Rewrites** | One address answers with another. Moving a published page proposes the redirect; you accept it. |
 | **A model endpoint** | MCP with OAuth. Everything above is reachable by an agent acting as the person who connected it. |
 | **Files, mail, push, TLS** | Uploads, SES out and SMTP in with SPF/DKIM/DMARC, an installable app, and certificates it renews itself. |
 | **Mail routing** | Addresses, ordered rules, SRS, ARC and a signed relay — see above. |
@@ -300,8 +327,8 @@ box. It reports `MAIN`, and the commit is the identity.
 ## The admin section
 
 `/admin` — **Overview**, **People** (with **Bans**, **Roles**), **Content** (with **Templates**,
-**Tables**, **Mutations**, **Directories**, **Navigation**, **Files**, **Unused** files, and bundles
-for **Import & export**), **Settings** (with **Setup**), **Customization** (look) holding
+**Tables**, **Mutations**, **Rewrites**, **Directories**, **Navigation**, **Files**, **Unused**
+files, and bundles for **Import & export**), **Settings** (with **Setup**), **Customization** (look) holding
 **Appearance**, **Legal** and **Messages**, and **System** — **Machine**, **Settings**, **Events**,
 **Analytics**, **Caching**, **AI**, **Logs**, **Clean up**.
 
@@ -318,7 +345,7 @@ confirms what is behind the door.
 
 ## Where it is today
 
-**1425-odd tests**, mostly not unit tests: the testkit boots the whole server on an ephemeral port
+**1460-odd tests**, mostly not unit tests: the testkit boots the whole server on an ephemeral port
 with real databases and drives it over HTTP. `just validate` is the gate — it builds clean, runs
 everything, packages the jar, then makes real HTTP requests against that jar running as a server.
 

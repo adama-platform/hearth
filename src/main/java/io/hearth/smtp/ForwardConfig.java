@@ -6,7 +6,7 @@ import io.hearth.common.ConfigObject;
 /**
  * The `smtp.forwarding` block: whether this server sends mail on, and with what credentials.
  *
- * <b>Everything here is the operator's rather than the community's</b>, which is invariant 119
+ * <b>Everything here is the operator's rather than the community's</b>, which is invariant 128
  * doing its job. A signing key, a MAC secret and "may this machine make outbound connections on
  * port 25" are not decisions to expose in a browser; which addresses exist and where their mail
  * goes are, and those live in the database and are edited at `/admin/mail`.

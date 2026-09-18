@@ -1,0 +1,44 @@
+{{#anyProposals}}
+<div class="card">
+  <p class="meta"><span class="dim">these moved, and nothing is redirecting yet</span></p>
+  <p class="hint">A published page changed address, so this server noticed. Nothing happens until
+    you say so &mdash; it cannot tell a page moving to a better home from somebody fixing a typo
+    they made ten seconds ago.</p>
+  <table>
+    <thead><tr><th>address</th><th>would become</th><th>noticed</th><th></th></tr></thead>
+    <tbody>{{#proposals}}<tr>
+      <td class="mono">{{from}}</td>
+      <td>{{#gone}}<span class="pill dim">gone for good</span>{{/gone}}{{^gone}}<span class="mono">{{to}}</span>{{/gone}}</td>
+      <td class="dim mono">{{when}}</td>
+      <td class="actions">
+        <form method="post" action="{{action}}">
+          <input type="hidden" name="csrf" value="{{csrf}}">
+          <input type="hidden" name="id" value="{{id}}">
+          <button type="submit" name="action" value="accept">Redirect it</button>
+          <button type="submit" name="action" value="reject" class="quiet">No redirect</button>
+        </form>
+        <a href="{{editUrl}}">edit first</a>
+      </td>
+    </tr>{{/proposals}}</tbody>
+  </table>
+</div>
+{{/anyProposals}}
+
+{{^any}}<p class="hint">No rewrites yet.</p>{{/any}}
+{{#any}}
+<p class="count">{{count}} live</p>
+<table>
+  <thead><tr><th>address</th><th>answers with</th><th>how</th><th>followed</th><th></th></tr></thead>
+  <tbody>{{#rewrites}}<tr>
+    <td class="mono"><a href="{{editUrl}}">{{from}}</a>
+      {{^enabled}} <span class="pill dim">off</span>{{/enabled}}
+      {{#shadowed}}<div><span class="pill warn">a page is at this address, so this never fires</span></div>{{/shadowed}}</td>
+    <td>{{#gone}}<span class="dim">nowhere &mdash; it is gone</span>{{/gone}}{{^gone}}<span class="mono">{{to}}</span>
+      {{#chained}}<div><span class="pill warn">and that redirects again, to {{ends}}</span></div>{{/chained}}{{/gone}}</td>
+    <td><span class="mono">{{status}}</span> <span class="dim">{{statusLabel}}</span></td>
+    <td class="dim mono">{{hits}} &middot; {{used}}</td>
+    <td class="actions"><a href="{{editUrl}}">edit</a></td>
+  </tr>{{/rewrites}}</tbody>
+</table>
+{{/any}}
+{{#full}}<p class="warn">That is as many rewrites as one site gets.</p>{{/full}}

@@ -75,7 +75,7 @@ public class Relay {
    * message is delivered to is not always chosen by an administrator: a reply-all is addressed from
    * the To and Cc headers of a message a stranger sent, so a stranger picks a domain, and that
    * domain's MX record is a name they also control. Pointing it at `127.0.0.1` or `10.0.0.5` turns
-   * "reply to this" into a request to something behind the firewall -- which is invariant 150's
+   * "reply to this" into a request to something behind the firewall -- which is invariant 159's
    * argument arriving by a different door.
    *
    * A test needs the loopback, because the stub exchanger it talks to is bound on it.

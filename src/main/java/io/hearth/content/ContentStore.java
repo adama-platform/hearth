@@ -27,13 +27,30 @@ public class ContentStore {
       "id, name, parameters, body, directory, directory_path, directory_pattern, directory_body,"
           + " directory_page_size, directory_order, created_at, updated_at, updated_by";
 
+  private static final org.slf4j.Logger LOG =
+      org.slf4j.LoggerFactory.getLogger(ContentStore.class);
+
   private final Store store;
   /** every save is recorded; the history is a property of writing content, not of the admin UI */
   private final ContentVersions versions;
+  /**
+   * Where a proposal goes when a published page moves.
+   *
+   * Here rather than in the editor because there are three callers that move a page -- the editor,
+   * a bundle import and the model tools -- and a proposal raised by the handler is one the other
+   * two forget. Same reasoning as invariant 45: tied to the write actually landing.
+   */
+  private final Rewrites rewrites;
 
   public ContentStore(Store store) {
     this.store = store;
     this.versions = new ContentVersions(store);
+    this.rewrites = new Rewrites(store);
+  }
+
+  /** the redirects this site keeps, and the proposals waiting on somebody */
+  public Rewrites rewrites() {
+    return rewrites;
   }
 
   // ---- content -------------------------------------------------------------------------------
@@ -237,10 +254,40 @@ public class ContentStore {
     ContentRecord saved = byId(existing.id());
     store.changed(Schema.CONTENT, saved.id(), MutationEvent.Kind.update, actor);
     versions.record(saved, actor, actorEmail);
+    // The address changed on a page that was published, so the old one is a promise somebody made.
+    //
+    // Raised here rather than in the editor, for the same reason invariant 45 gives about events:
+    // a handler can forget, and there are three callers that move a page -- the editor, a bundle
+    // import and the model tools. Tied to the write actually landing, it cannot be one of them.
+    proposeIfMoved(existing, saved, actor);
     return saved;
   }
 
+  /**
+   * Suggest a redirect when a published page has changed address.
+   *
+   * <b>Never fails a save.</b> Same reasoning as recording a version: losing a proposal is a
+   * nuisance somebody can fix by making the rewrite by hand, and losing somebody's edit because the
+   * rewrites table had a problem is a different order of bad day.
+   */
+  private void proposeIfMoved(ContentRecord before, ContentRecord after, Long actor) {
+    if (rewrites == null || before == null || after == null) {
+      return;
+    }
+    if (before.uri().equals(after.uri()) || !before.published()) {
+      return;
+    }
+    try {
+      rewrites.proposeMove(after.id(), before.uri(), after.uri(), true, actor);
+    } catch (SQLException ex) {
+      LOG.warn("rewrite-proposal-failed from={} to={}", before.uri(), after.uri(), ex);
+    }
+  }
+
   public void deleteContent(long id, Long actor) throws SQLException {
+    // What was there, read before it is gone, so a published address can be told it is gone rather
+    // than quietly becoming a 404 that a crawler retries for months.
+    ContentRecord going = byId(id);
     // the history goes with the page: keeping versions of something that no longer exists means a
     // list nobody can reach and a uri that quietly comes back if the page is recreated
     versions.forget(id, actor);
@@ -251,6 +298,17 @@ public class ContentStore {
       statement.executeUpdate();
     }
     store.changed(Schema.CONTENT, id, MutationEvent.Kind.delete, actor);
+    // A published address that has been deleted gets a proposal to say so properly.
+    //
+    // 410 rather than a redirect, because there is nowhere honest to send anybody -- and a crawler
+    // treats a 404 as possibly a mistake and comes back for months, where it drops a 410 quickly.
+    if (rewrites != null && going != null && going.published()) {
+      try {
+        rewrites.proposeGone(id, going.uri(), true, actor);
+      } catch (SQLException ex) {
+        LOG.warn("rewrite-gone-proposal-failed uri={}", going.uri(), ex);
+      }
+    }
   }
 
   public long contentCount() throws SQLException {

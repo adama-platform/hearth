@@ -319,7 +319,8 @@ public class SchemaUpgraderTests {
       "mailboxes.domain", "mailboxes.local_part", "mail_rules.domain", "mail_log.domain",
       "mail_messages.user_id", "mail_messages.domain", "mail_messages.delivered_to",
       "calendar_events.user_id", "calendar_events.uid", "calendar_events.starts_at",
-      "calendar_events.ends_at", "calendar_feeds.user_id", "calendar_feeds.token_hash");
+      "calendar_events.ends_at", "calendar_feeds.user_id", "calendar_feeds.token_hash",
+      "rewrites.from_uri");
 
   @Test
   public void aVersionOneDatabaseUpgradesToVersionTwoInPlace() throws Exception {

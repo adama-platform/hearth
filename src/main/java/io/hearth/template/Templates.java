@@ -70,6 +70,7 @@ public class Templates {
       "admin/mailboxes", "admin/mailboxes_form",
       "admin/maillog", "admin/maillog_panel", "admin/maillog_review",
       "admin/mailsetup",
+      "admin/rewrites", "admin/rewrites_form", "admin/rewrites_panel",
       "inbox", "inbox_message", "inbox_reply",
       "calendar", "calendar_form");
 

@@ -40,6 +40,12 @@ public final class AdminView {
     navigation("navigation", "Navigation", "logs", content, Permission.content_write),
     tables("tables", "Tables", "logs", content, Permission.tables_write),
     mutations("mutations", "Mutations", "logs", content, Permission.tables_write),
+    // Under Content and behind content_publish, not content_write.
+    //
+    // A redirect decides what an address answers, which is the same kind of act as taking a page
+    // down -- somebody trusted to write a page is not automatically somebody trusted to point an
+    // address that has standing at somewhere else.
+    rewrites("rewrites", "Rewrites", "logs", content, Permission.content_publish),
     attachments("attachments", "Files", "content", content, Permission.content_write),
     bundles("content/bundles", "Import & export", "logs", content, Permission.content_write),
     unused("attachments/unused", "Unused files", "x", attachments, Permission.content_write),
@@ -162,7 +168,8 @@ public final class AdminView {
       Map.entry(Section.events, "stream"),
       Map.entry(Section.caching, "stats"),
       Map.entry(Section.logs, "results"),
-      Map.entry(Section.maillog, "list"));
+      Map.entry(Section.maillog, "list"),
+      Map.entry(Section.rewrites, "list"));
 
   private AdminView() {
   }

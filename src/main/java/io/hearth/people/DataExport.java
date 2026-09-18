@@ -125,7 +125,7 @@ public final class DataExport {
     //
     // <b>The single largest thing this server holds about a person, and it was missing from the
     // file that is supposed to be everything.</b> A subject access request answered without it is
-    // an answer that is wrong, and invariant 177 says the policy is a specification -- so the day
+    // an answer that is wrong, and invariant 186 says the policy is a specification -- so the day
     // this server started keeping mail was the day this export became incomplete.
     //
     // The bodies are here because they are what a person is asking for; the attachments are named

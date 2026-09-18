@@ -29,7 +29,7 @@ import java.sql.Timestamp;
  * <b>This server does not fetch the ICS.</b> It hands the url to the agent that asked. Fetching it
  * here would mean this server holding a copy of somebody's calendar -- exactly the thing the person
  * who chose the weekly shape was avoiding -- and it would be a member-supplied url turned into an
- * outbound request on a schedule, which invariant 150 is about. The agent already has network
+ * outbound request on a schedule, which invariant 159 is about. The agent already has network
  * access and a relationship with its person; this does not need one.
  */
 public class Availability {

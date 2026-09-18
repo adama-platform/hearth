@@ -290,7 +290,7 @@ public class Server {
         mailKeys = io.hearth.smtp.MailKeys.open(keyFile, settings.smtp.forwarding.dkimSelector);
       } catch (java.io.IOException ex) {
         // Loud, and not fatal. A key that cannot be opened means mail forwards unsigned, which is
-        // worse mail; refusing to start would mean no mail at all, and invariant 155 already
+        // worse mail; refusing to start would mean no mail at all, and invariant 164 already
         // settled that argument for certificates.
         Boot.warn("no signing key (" + ex.getMessage() + "); mail will forward unsigned");
       }
@@ -515,6 +515,26 @@ public class Server {
         }
       }
     }, 60, 15 * 60, java.util.concurrent.TimeUnit.SECONDS);
+
+    // How often each redirect has fired, out of memory and into the table.
+    //
+    // On the same thread as the docket rather than one of its own: both are "wake up occasionally
+    // and write something nobody is waiting for", and a second scheduled pool for a counter would
+    // be a thread to account for at every restart. A minute of counts lost in a crash is a number
+    // nobody was deciding anything on.
+    docketClock.scheduleWithFixedDelay(() -> {
+      for (Map.Entry<String, DomainConfig> entry : scan.tree.all().entrySet()) {
+        io.hearth.auth.Accounts accounts = auth.forDomain(entry.getValue().domain);
+        if (accounts == null || !accounts.rewriteHits.any()) {
+          continue;
+        }
+        try {
+          accounts.rewriteHits.flush(accounts.rewrites);
+        } catch (java.sql.SQLException ex) {
+          verbose.detail("rewrites: could not record what fired -- " + ex.getMessage());
+        }
+      }
+    }, 90, 60, java.util.concurrent.TimeUnit.SECONDS);
 
     if (certManager != null) {
       // Only now. HTTP-01 works by the authority fetching a path from this very server, so an

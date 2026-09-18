@@ -29,7 +29,7 @@ import java.util.List;
  */
 public class Schema {
   /** bumped whenever the tables below change; recorded in schema_meta for the boot audit */
-  public static final int VERSION = 49;
+  public static final int VERSION = 50;
 
   public static final String EMAILS = "emails";
   public static final String SESSIONS = "sessions";
@@ -55,6 +55,7 @@ public class Schema {
   public static final String SYSTEM_TEMPLATES = "system_templates";
   public static final String ATTACHMENTS = "attachments";
   public static final String CONFIG = "config";
+  public static final String REWRITES = "rewrites";
   public static final String MAILBOXES = "mailboxes";
   public static final String MAIL_RULES = "mail_rules";
   public static final String MAIL_LOG = "mail_log";
@@ -638,6 +639,52 @@ public class Schema {
       .index("idx_calendar_feeds_hash", "token_hash")
       .build();
 
+  /**
+   * One address that answers with another, and the proposals waiting to become one.
+   *
+   * <b>An address that has been published is a promise.</b> Somebody bookmarked it, somebody linked
+   * to it, and a search engine has it indexed with whatever standing the page earned. Moving the
+   * page and leaving a 404 behind throws all of that away silently -- the link still exists, it
+   * simply stops working, and nobody finds out except the person who followed it.
+   *
+   * <b>`state` is what makes this two features in one table.</b> A `proposed` row is a suggestion
+   * this server made when somebody moved a published page; an `active` row is a redirect that
+   * actually fires. They are the same shape and accepting is a flip, which is why there is no
+   * second table: a proposal is a rewrite that is not live yet, and pretending otherwise would mean
+   * two schemas, two screens and two chances to disagree about what a redirect is.
+   *
+   * `from_uri` is unique because an address answers one way. `to_uri` is empty exactly when the
+   * status is 410 -- a page that is deliberately gone rather than moved.
+   */
+  public static final Table REWRITES_TABLE = Table.named(REWRITES)
+      .column(Column.id("id"))
+      // the address somebody asks for; unique, because an address answers one way
+      .column(Column.of("from_uri", "VARCHAR(512)").notNull().unique())
+      // where they are sent, or empty for 410, where the answer is that there is nowhere
+      .column(Column.of("to_uri", "VARCHAR(512)").notNull().withDefault("''"))
+      // 301 unless somebody chose otherwise; see Rewrites.Status for why that is the default
+      .column(Column.of("status", "INTEGER").notNull().withDefault("301"))
+      // proposed (waiting for a person) or active (firing); see the class note
+      .column(Column.of("state", "VARCHAR(16)").notNull().withDefault("'active'"))
+      .column(Column.of("enabled", "BOOLEAN").notNull().withDefault("TRUE"))
+      // why this exists, in whatever words whoever made it used
+      .column(Column.of("note", "VARCHAR(512)").notNull().withDefault("''"))
+      // which page moved, when this was proposed rather than typed
+      .column(Column.of("content_id", "BIGINT"))
+      // How many times it has fired, and when it last did.
+      //
+      // The number that says whether a redirect is still earning its place. A rewrite nobody has
+      // followed in a year is one somebody can delete; one that fires every day is holding a link
+      // somewhere this server cannot see. Written from memory on a timer rather than per request --
+      // a redirect is a fast path and a write on it would be the slowest thing about it.
+      .column(Column.of("hits", "BIGINT").notNull().withDefault("0"))
+      .column(Column.of("last_used_at", "TIMESTAMP"))
+      .column(Column.of("created_at", "TIMESTAMP").notNull().withDefault("CURRENT_TIMESTAMP"))
+      .column(Column.of("updated_at", "TIMESTAMP").notNull().withDefault("CURRENT_TIMESTAMP"))
+      .column(Column.of("created_by", "BIGINT"))
+      .index("idx_rewrites_state", "state")
+      .build();
+
   public static final Table TEMPLATES_TABLE = Table.named(TEMPLATES)
       .column(Column.id("id"))
       .column(Column.of("name", "VARCHAR(64)").notNull().unique())
@@ -1026,6 +1073,7 @@ public class Schema {
           CONFIG_TABLE, MUTATIONS_TABLE, USER_KEYS_TABLE,
           VOTES_TABLE, AVAILABILITY_TABLE,
           PROCESSES_TABLE, TASKS_TABLE, HABIT_MARKS_TABLE, CALENDARS_TABLE,
+          REWRITES_TABLE,
           MAILBOXES_TABLE, MAIL_RULES_TABLE, MAIL_LOG_TABLE, MAIL_MESSAGES_TABLE,
           CALENDAR_EVENTS_TABLE, CALENDAR_FEEDS_TABLE);
 

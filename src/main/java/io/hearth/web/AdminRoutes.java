@@ -259,6 +259,7 @@ public class AdminRoutes {
         case cleanup -> actOnCleanup(accounts, form, me);
         case tables -> actOnTable(config, accounts, form, me);
         case mutations -> actOnMutation(config, accounts, form, me);
+        case rewrites -> actOnRewrite(config, accounts, form, me);
         case mail -> actOnMailRule(config, accounts, form, me);
         case mailboxes -> actOnMailbox(config, accounts, form, me);
         default -> Outcome.refused("That is not something this page can do.");
@@ -847,6 +848,7 @@ public class AdminRoutes {
       case caching -> cachingPanel(model, accounts);
       case logs -> logsPanel(model, config, req, accounts.zone());
       case maillog -> model.putAll(mailLogPanelModel(accounts, config, req));
+      case rewrites -> model.putAll(rewritesPanelModel(accounts, config));
       default -> {
       }
     }
@@ -990,6 +992,7 @@ public class AdminRoutes {
       case cleanup -> cleanup(model, accounts);
       case tables -> tablesSection(model, accounts, config, req);
       case mutations -> mutationsSection(model, accounts, config);
+      case rewrites -> rewritesSection(model, accounts, config);
       case mail -> mailRulesSection(model, accounts, config);
       case mailboxes -> mailAddressesSection(model, accounts, config);
       case maillog -> mailLogSection(model, accounts, config, req);
@@ -1857,6 +1860,183 @@ public class AdminRoutes {
     verbose.detail("admin: " + me.email() + " saved mutation " + uri);
     return Outcome.done(uri + " saved.",
         site -> AdminView.Section.mutations.path(site) + "/edit/" + saved);
+  }
+
+  // ---- rewrites --------------------------------------------------------------------------------
+
+  /**
+   * The redirects this site keeps, and the proposals waiting on somebody.
+   *
+   * Proposals first and counted in the heading, because they are the only thing on this screen that
+   * is *asking* for something. A list of settled redirects is a reference; a proposal is a decision
+   * somebody has not made yet, and burying it under a hundred rows is how it never gets made.
+   */
+  private void rewritesSection(Map<String, Object> model, Accounts accounts, DomainConfig config)
+      throws SQLException {
+    model.put("newUrl", AdminView.Section.rewrites.path(config) + "/new");
+    model.put("contentUrl", AdminView.Section.content.path(config));
+    model.putAll(rewritesPanelModel(accounts, config));
+  }
+
+  private Map<String, Object> rewritesPanelModel(Accounts accounts, DomainConfig config)
+      throws SQLException {
+    LinkedHashMap<String, Object> model = new LinkedHashMap<>();
+    String prefix = AdminView.Section.rewrites.path(config);
+
+    ArrayList<Map<String, Object>> proposals = new ArrayList<>();
+    for (io.hearth.content.Rewrites.Record one : accounts.rewrites.proposals()) {
+      LinkedHashMap<String, Object> row = new LinkedHashMap<>();
+      row.put("id", one.id());
+      row.put("from", one.fromUri());
+      row.put("to", one.toUri());
+      row.put("gone", one.isGone());
+      row.put("note", one.note());
+      row.put("when", stamp(one.createdAt(), accounts.zone()));
+      row.put("editUrl", prefix + "/edit/" + one.id());
+      proposals.add(row);
+    }
+    model.put("proposals", proposals);
+    model.put("anyProposals", !proposals.isEmpty());
+    model.put("proposalCount", proposals.size());
+
+    ArrayList<Map<String, Object>> rows = new ArrayList<>();
+    for (io.hearth.content.Rewrites.Record one : accounts.rewrites.active()) {
+      LinkedHashMap<String, Object> row = new LinkedHashMap<>();
+      row.put("id", one.id());
+      row.put("from", one.fromUri());
+      row.put("to", one.toUri());
+      row.put("gone", one.isGone());
+      row.put("status", one.status());
+      row.put("statusLabel", one.statusOr().label);
+      row.put("enabled", one.enabled());
+      row.put("hits", one.hits());
+      row.put("used", one.lastUsedAt() == null ? "never"
+          : stamp(one.lastUsedAt(), accounts.zone()));
+      row.put("editUrl", prefix + "/edit/" + one.id());
+      // Two things worth saying out loud about a row, both of which look fine in a list.
+      //
+      // A page at the address means the rewrite never fires -- content is consulted first, which is
+      // deliberate, and the row is simply dead. A destination that is itself a rewrite is a chain:
+      // accepting a proposal collapses those, but nothing stops somebody typing one by hand.
+      row.put("shadowed", accounts.site.store().byUri(one.fromUri()) != null);
+      String ends = one.isGone() ? one.toUri() : accounts.rewrites.endOf(one.toUri());
+      row.put("chained", !one.isGone() && !ends.equals(one.toUri()));
+      row.put("ends", ends);
+      rows.add(row);
+    }
+    model.put("rewrites", rows);
+    model.put("any", !rows.isEmpty());
+    model.put("count", rows.size());
+    model.put("full", accounts.rewrites.total() >= io.hearth.content.Rewrites.MAX);
+    model.put("panelUrl", AdminView.panelPath(AdminView.Section.rewrites, config));
+    return model;
+  }
+
+  /** the editor for one rewrite, or a blank one */
+  private void rewriteForm(Map<String, Object> model, Accounts accounts, DomainConfig config,
+                           String id) throws SQLException {
+    io.hearth.content.Rewrites.Record one = id == null ? null
+        : accounts.rewrites.byId(longOr(id));
+    model.put("editing", one != null);
+    model.put("heading", one == null ? "A new rewrite" : one.describe());
+    model.put("form_id", one == null ? "" : String.valueOf(one.id()));
+    model.put("form_from", one == null ? "" : one.fromUri());
+    model.put("form_to", one == null ? "" : one.toUri());
+    model.put("form_note", one == null ? "" : one.note());
+    model.put("form_enabled", one == null || one.enabled());
+    model.put("proposal", one != null
+        && one.state() == io.hearth.content.Rewrites.State.proposed);
+
+    ArrayList<Map<String, Object>> statuses = new ArrayList<>();
+    for (io.hearth.content.Rewrites.Status status
+        : io.hearth.content.Rewrites.Status.values()) {
+      LinkedHashMap<String, Object> row = new LinkedHashMap<>();
+      row.put("code", status.code);
+      row.put("label", status.label);
+      row.put("explanation", status.explanation);
+      row.put("chosen", one == null ? status == io.hearth.content.Rewrites.Status.moved
+          : one.status() == status.code);
+      statuses.add(row);
+    }
+    model.put("statuses", statuses);
+    model.put("backUrl", AdminView.Section.rewrites.path(config));
+  }
+
+  private Outcome actOnRewrite(DomainConfig config, Accounts accounts, Forms form, UserRecord me)
+      throws SQLException {
+    String action = String.valueOf(form.get("action"));
+    long id = longOr(form.get("id"));
+    Function<DomainConfig, String> toList = site -> AdminView.Section.rewrites.path(site);
+
+    switch (action) {
+      case "accept" -> {
+        io.hearth.content.Rewrites.Record proposal = id <= 0 ? null : accounts.rewrites.byId(id);
+        if (proposal == null
+            || proposal.state() != io.hearth.content.Rewrites.State.proposed) {
+          return Outcome.refused("That is not a proposal this server made.");
+        }
+        int collapsed = accounts.rewrites.accept(id, me.id());
+        verbose.detail("admin: " + me.email() + " accepted rewrite " + proposal.describe());
+        return Outcome.done(proposal.describe() + " is live."
+            + (collapsed > 0 ? " " + collapsed + " older redirect(s) now point straight there,"
+                + " rather than through it." : ""), toList);
+      }
+      case "reject" -> {
+        accounts.rewrites.reject(id, me.id());
+        return Outcome.done("That suggestion is gone. The page still moved; there is simply no"
+            + " redirect behind it.", toList);
+      }
+      case "delete" -> {
+        if (id <= 0 || accounts.rewrites.byId(id) == null) {
+          return Outcome.refused("That is not a rewrite this site has.");
+        }
+        accounts.rewrites.delete(id, me.id());
+        verbose.detail("admin: " + me.email() + " deleted rewrite " + id);
+        return Outcome.done("That rewrite is gone.", toList);
+      }
+      case "save" -> {
+        Outcome oversized = oversized(form);
+        if (oversized != null) {
+          return oversized;
+        }
+        io.hearth.content.Rewrites.Status status =
+            io.hearth.content.Rewrites.Status.of((int) longOr(form.get("status")));
+        if (status == null) {
+          return Outcome.refused("That is not a status this server answers with.");
+        }
+        String from = io.hearth.content.Rewrites.normalize(form.get("from"));
+        String to = io.hearth.content.Rewrites.normalize(form.get("to"));
+        String bad = io.hearth.content.Rewrites.check(from, to, status,
+            accounts.site.store().byUri(to) != null);
+        if (bad != null) {
+          return Outcome.refused(capitalize(bad) + ".");
+        }
+        io.hearth.content.Rewrites.Record clash = accounts.rewrites.byFrom(from);
+        if (clash != null && clash.id() != id) {
+          return Outcome.refused(from + " already answers with something else.");
+        }
+        if (id <= 0 && accounts.rewrites.total() >= io.hearth.content.Rewrites.MAX) {
+          return Outcome.refused("There are already "
+              + io.hearth.content.Rewrites.MAX + " rewrites here, which is as many as one site"
+              + " gets.");
+        }
+        io.hearth.content.Rewrites.Record existing = id <= 0 ? null : accounts.rewrites.byId(id);
+        long saved = accounts.rewrites.save(id, from, to, status,
+            io.hearth.content.Rewrites.State.active, form.get("enabled") != null,
+            orEmpty(form.get("note")), existing == null ? null : existing.contentId(), me.id());
+        verbose.detail("admin: " + me.email() + " saved rewrite " + from);
+        // A page already answers for this address, so the rewrite is dead on arrival -- said now
+        // rather than left to be noticed as a pill in a list.
+        String warning = accounts.site.store().byUri(from) != null
+            ? " There is a page at " + from + ", and a page always wins -- so this will not fire"
+                + " until that page moves or goes." : "";
+        return Outcome.done(from + " saved." + warning,
+            site -> AdminView.Section.rewrites.path(site) + "/edit/" + saved);
+      }
+      default -> {
+        return Outcome.refused("That is not something this page can do.");
+      }
+    }
   }
 
   // ---- mail ------------------------------------------------------------------------------------
@@ -3244,6 +3424,7 @@ public class AdminRoutes {
       case tables -> tableForm(model, accounts,
           accounts.tables == null ? null : accounts.tables.byName(id));
       case mutations -> mutationForm(model, accounts, id);
+      case rewrites -> rewriteForm(model, accounts, config, id);
       case mail -> mailRuleForm(model, accounts, config, id);
       case mailboxes -> mailboxForm(model, accounts, config, id);
       case legal -> {

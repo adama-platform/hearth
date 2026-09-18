@@ -424,6 +424,41 @@ public class WebHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
       }
     }
 
+    // Nothing this site serves answers, so an address that used to might.
+    //
+    // <b>After content and after a listing, never before.</b> A page at this address wins, which is
+    // what makes recreating a page at an old address simply work: the page answers, and the rewrite
+    // sitting there becomes dead weight rather than a redirect that now shadows something real. It
+    // is also why this costs nothing on any request that was going to succeed -- it only runs on
+    // the path to a 404.
+    if (accountsForDomain != null) {
+      io.hearth.content.Rewrites.Record rewrite = rewriteFor(accountsForDomain, path);
+      if (rewrite != null) {
+        accountsForDomain.rewriteHits.fired(rewrite.id(), System.currentTimeMillis());
+        if (rewrite.isGone()) {
+          // 410 rather than 404: a crawler treats a 404 as possibly a mistake and comes back for
+          // months, and drops a 410 quickly. Somebody said this was deliberate, so say so.
+          verbose.detail(() -> "rewrite " + path + " -> 410");
+          recorder.status(410);
+          Responses.send(ctx, req, HttpResponseStatus.GONE, "text/html; charset=utf-8",
+              accountsForDomain == null ? pages.notFound()
+                  : pages.missing(config, accountsForDomain, req));
+          return;
+        }
+        String target = rewrite.toUri();
+        verbose.detail(() -> "rewrite " + path + " -> " + rewrite.status() + " " + target);
+        recorder.status(rewrite.status());
+        Responses.send(ctx, req, HttpResponseStatus.valueOf(rewrite.status()), null,
+            Responses.EMPTY,
+            new String[]{HttpHeaderNames.LOCATION.toString(), target,
+                // a redirect that moved once should not be re-asked for ever, and one that is
+                // temporary must not be remembered at all
+                HttpHeaderNames.CACHE_CONTROL.toString(),
+                rewrite.statusOr().isPermanent() ? "public, max-age=3600" : "no-store"});
+        return;
+      }
+    }
+
     // Nothing answered, and only one address is allowed to fall through to the placeholder.
     //
     // Every other path used to be served the community's front page with a 200, which is a lie to
@@ -637,6 +672,22 @@ public class WebHandler extends SimpleChannelInboundHandler<FullHttpRequest> {
     } catch (java.sql.SQLException ex) {
       LOG.error("approval-check-failed", ex);
       return false;
+    }
+  }
+
+  /**
+   * The rewrite for this address, or null.
+   *
+   * A database that will not answer is not a reason to fail a request that was already on its way
+   * to a 404 -- the person gets the 404 they were going to get, and the narration says why.
+   */
+  private io.hearth.content.Rewrites.Record rewriteFor(
+      io.hearth.auth.Accounts accounts, String path) {
+    try {
+      return accounts.rewrites.forUri(path);
+    } catch (java.sql.SQLException ex) {
+      LOG.error("rewrite-lookup-failed path={}", path, ex);
+      return null;
     }
   }
 

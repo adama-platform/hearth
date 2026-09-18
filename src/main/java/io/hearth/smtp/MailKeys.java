@@ -28,7 +28,7 @@ import java.util.EnumSet;
  * A 4096-bit key has to be published as several quoted chunks, which every second DNS control panel
  * gets wrong, and the failure mode is a signature that verifies nowhere with no error anywhere.
  *
- * <b>It is a credential, so it lives in a file rather than the database</b> -- invariant 119, the
+ * <b>It is a credential, so it lives in a file rather than the database</b> -- invariant 128, the
  * same rule that keeps `admin_emails` out of the admin section. Written 0600, and this refuses to
  * use a key that anybody else on the box can read: a DKIM key another account can read is a key that
  * signs mail in your name.

@@ -115,7 +115,7 @@ public class HardeningTests {
   /**
    * A destination whose mail exchanger points inside the network is refused.
    *
-   * This is invariant 150 arriving by a different door. A reply-all is addressed from headers a
+   * This is invariant 159 arriving by a different door. A reply-all is addressed from headers a
    * stranger wrote, so a stranger picks the domain; that domain's MX is a record they also control,
    * and pointing it at `127.0.0.1` turns "reply to this" into a request to something behind the
    * firewall.
